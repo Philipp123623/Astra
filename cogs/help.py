@@ -121,7 +121,7 @@ class Dropdown(discord.ui.Select):
             await interaction.response.edit_message(embed=embed)
         elif self.values[0] == "Minigames":
             embed = discord.Embed(title=" ",
-                                  description="> <:Astra_info:1141303860556738620> Du suchst kleine Luste Spiele und hast Langeweile? Dann Schau doch mal hier nach :D.\n\n> **`👥` × User Befehle\n> Keine User Befehle.\n\n> **`👮‍♂` × Team Befehle:**\n> `/guessthenumber` - Verwalte das Minispiel 'Guess the number' auf deinem Server.\n> `/counting` - Richte den Zählkanal ein.\n> **Bald Mehr!**",
+                                  description="> <:Astra_info:1141303860556738620> Du suchst kleine Lustige Spiele und hast Langeweile? Dann Schau doch mal hier nach :D.\n\n> **`👥` × User Befehle\n> `/hangman`\n> `/snake`\n\n> **`👮‍♂` × Team Befehle:**\n> `/guessthenumber` - Verwalte das Minispiel 'Guess the number' auf deinem Server.\n> `/counting` - Richte den Zählkanal ein.\n> **Bald Mehr!**",
                                   colour=discord.Colour.blue())
             embed.set_author(name="Command Menü | Minispiele", icon_url=interaction.client.user.avatar)
             embed.set_footer(text="Astra Development ©2022 | Für mehr Informationen kontaktiere uns via Discord.", icon_url=interaction.guild.icon)
