@@ -281,7 +281,7 @@ class Astra(commands.Bot):
                                 print(f"❌ Giveaway-Fehler: {e}")
 
                     asyncio.create_task(starte_giveaway_tasks())
-                    print("✅ Tasks Registered")
+                    print("✅ Tasks Registered!")
 
     async def load_cogs(self):
         """Lädt alle Cogs"""
