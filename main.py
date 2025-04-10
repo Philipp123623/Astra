@@ -100,11 +100,11 @@ class Astra(commands.Bot):
     async def connect_db(self):
         """Stellt den DB-Pool her und speichert ihn in self.pool"""
         self.pool = await aiomysql.create_pool(
-            host='87.138.168.72',
+            host='host',
             port=3306,
-            user='u1202_Lc4jg4NbbO',
-            password='IofYmP!GL!MA1iP=C!DXvWkU',
-            db='s1202_AstraDB',
+            user='username',
+            password='password',
+            db='db_name',
             autocommit=True,
             pool_recycle=3600,
             connect_timeout=5,
