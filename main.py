@@ -22,6 +22,10 @@ intents.message_content = True
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+host = os.getenv('host')
+benutzer = os.getenv('benutzer')
+password_db = os.getenv('password_db')
+db_name = os.getenv('db_name')
 
 
 def convert(time):
@@ -100,11 +104,11 @@ class Astra(commands.Bot):
     async def connect_db(self):
         """Stellt den DB-Pool her und speichert ihn in self.pool"""
         self.pool = await aiomysql.create_pool(
-            host='host',
+            host=host,
             port=3306,
-            user='username',
-            password='password',
-            db='db_name',
+            user=benutzer,
+            password=password_db,
+            db=db_name,
             autocommit=True,
             pool_recycle=3600,
             connect_timeout=5,
