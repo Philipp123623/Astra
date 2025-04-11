@@ -75,7 +75,7 @@ class afk(commands.Cog):
                             return
 
     @app_commands.command(name="afk")
-    @app_commands.describe(grund="Grund des AFK gehens.")
+    @app_commands.describe(grund="Warum gehst du genau afk?")
     async def afk(self, interaction: discord.Interaction, grund: str = "AFK"):
         """Setze dich selbst auf AFK!"""
         async with self.bot.pool.acquire() as conn:
