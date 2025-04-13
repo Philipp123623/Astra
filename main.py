@@ -1,4 +1,6 @@
 import discord
+import requests
+import json
 import random
 from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError
@@ -324,7 +326,6 @@ bot = Astra()
 
 dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJib3QiOnRydWUsImlhdCI6MTcwNTU4ODgxNn0.aX0_b94xKLSPLaEweiWojdU2LCOOmbhXQfMH_-3gc_8'  # set this to your bot's Top.gg token
 
-
 @bot.event
 async def on_dbl_vote(data):
     """An event that is called whenever someone votes for the bot on Top.gg."""
@@ -470,6 +471,21 @@ async def on_dbl_test(data):
 
 @bot.event
 async def on_ready():
+    # Ersetze dies mit der tatsächlichen Webhook-URL deines Bots
+    webhook_url = "http://45.142.115.29:8081/dblwebhook"
+
+    # Daten, die du an den Webhook senden möchtest
+    data = {
+        "user": "1113403511045107773",  # Ersetze mit einer tatsächlichen Benutzer-ID
+        "type": "test"
+    }
+    response = requests.post(webhook_url, json=data)
+
+    # Überprüfe die Antwort des Webhooks
+    if response.status_code == 200:
+        print("Webhook wurde erfolgreich ausgelöst!")
+    else:
+        print(f"Fehler beim Auslösen des Webhooks: {response.status_code}")
     await bot.change_presence(
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
