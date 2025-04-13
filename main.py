@@ -474,7 +474,7 @@ async def on_dbl_test(data):
 @bot.event
 async def on_ready():
     # Ersetze dies mit der tatsächlichen Webhook-URL deines Bots
-    webhook_url = "http://45.142.115.29:8081/dblwebhook"
+    webhook_url = "http://45.142.115.29:8082/dblwebhook"
 
     # Daten, die du an den Webhook senden möchtest
     data = {
