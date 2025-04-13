@@ -6,6 +6,8 @@ from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError
 from discord import app_commands
 from discord.app_commands import Group
+from flask import Flask
+from topgg import WebhookManager
 import math
 import sys
 import traceback
@@ -491,7 +493,7 @@ async def on_ready():
         status=discord.Status.online)
     bot.add_view(gw_button())
     bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
-    await bot.topgg_webhook.run(8081)
+    bot.topgg_webhook.run(8082)
 
 
 async def funktion2(when: datetime.datetime):
