@@ -364,7 +364,7 @@ async def on_dbl_vote(data):
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
+                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
                           colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
@@ -388,7 +388,7 @@ async def on_dbl_vote(data):
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
+                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
                           colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
@@ -414,7 +414,7 @@ async def on_dbl_vote(data):
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
+                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
                           colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
@@ -439,7 +439,7 @@ async def on_dbl_vote(data):
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
+                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
                           colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
@@ -464,7 +464,7 @@ async def on_dbl_test(data):
     channel = guild.get_channel(1361006871753789532)
     astra = bot.get_user(int(data['bot']))
     embed = discord.Embed(title="Test Vote Erfolgreich",
-                          description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
+                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
                           colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
