@@ -194,7 +194,7 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_lsg(guildID BIGINT, lösung TEXT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS snake(userID BIGINT, highscore BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS topgg(userID BIGINT, count BIGINT")
+                await cur.execute("CREATE TABLE IF NOT EXISTS topgg(userID BIGINT, count BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS website_stats(servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
                 await cur.execute(
