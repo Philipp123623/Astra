@@ -477,21 +477,6 @@ async def on_dbl_test(data):
 
 @bot.event
 async def on_ready():
-    # Ersetze dies mit der tatsächlichen Webhook-URL deines Bots
-    webhook_url = "http://45.142.115.29:8082/dblwebhook"
-
-    # Daten, die du an den Webhook senden möchtest
-    data = {
-        "user": "1113403511045107773",  # Ersetze mit einer tatsächlichen Benutzer-ID
-        "type": "test"
-    }
-    response = requests.post(webhook_url, json=data)
-
-    # Überprüfe die Antwort des Webhooks
-    if response.status_code == 200:
-        print("Webhook wurde erfolgreich ausgelöst!")
-    else:
-        print(f"Fehler beim Auslösen des Webhooks: {response.status_code}")
     await bot.change_presence(
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
