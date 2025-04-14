@@ -492,8 +492,16 @@ async def on_ready():
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
     bot.add_view(gw_button())
-    bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
-    bot.topgg_webhook.run(8082)
+
+
+bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
+
+# Webhook Server starten (async)
+async def start_webhook():
+    await bot.topgg_webhook.run(8082)  # Achtung: das hier ist async
+
+# Task für Webhook Server direkt beim Start des Scripts
+bot.loop.create_task(start_webhook())
 
 
 async def funktion2(when: datetime.datetime):
