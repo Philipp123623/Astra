@@ -89,7 +89,7 @@ class Astra(commands.Bot):
 
     async def setup_hook(self):
         try:
-            bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "password")
+            bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
             await bot.topgg_webhook.run(8082)
             await self.connect_db()
             await self.init_tables()
