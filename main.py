@@ -53,6 +53,7 @@ class Astra(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="astra!", help_command=None, case_insensitive=True,
                          intents=discord.Intents.all())
+        self.topggpy = None
         self.task = False
         self.task2 = False
         self.task3 = False
@@ -88,6 +89,8 @@ class Astra(commands.Bot):
 
     async def setup_hook(self):
         try:
+            dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJib3QiOnRydWUsImlhdCI6MTcwNTU4ODgxNn0.aX0_b94xKLSPLaEweiWojdU2LCOOmbhXQfMH_-3gc_8'  # set this to your bot's Top.gg token
+            self.topggpy = topgg.DBLClient(self, dbl_token)
             bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
             await bot.topgg_webhook.run(8082)
             await self.connect_db()
@@ -320,8 +323,8 @@ class Astra(commands.Bot):
             embed = discord.Embed(title="Astra", url="https://discord.gg/vwh2raq2Xu", colour=discord.Colour.blue(),
                                   description=f"Hallo Discord!\nIch bin Astra. Ich wurde geboren am {botcreated}\nIch habe viele Verschiedene Systeme und Befehle, welche ein Level- und Ticketsystem beinhalten.\nAlle Befehle sind /-Befehle. Das bedeueter, dass du sie ganz einfach finden kannst.\nWenn du irgendwelche Fragen und Probleme hast, kannst du uns gerne über unseren **[Support Server ➚](https://discord.gg/vwh2raq2Xu)** kontaktieren.\nWenn ich nun dein Interesse geweckt habe, kannst du mich ganz einfach **[Einladen ➚](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)** und mich ausprobieren")
             embed.set_author(name=msg.author, icon_url=msg.author.avatar)
-            embed.set_footer(text="Astra Development ©2022 | Für mehr Informationen kontaktiere uns via Discord.",
-                             icon_url=interaction.guild.icon)
+            embed.set_footer(text="Astra Development ©2025 | Für mehr Informationen kontaktiere uns via Discord.",
+                             icon_url=msg.guild.icon)
             embed.set_thumbnail(url=msg.guild.icon)
             await msg.channel.send(embed=embed)
             await bot.process_commands(msg)
@@ -329,16 +332,12 @@ class Astra(commands.Bot):
 
 bot = Astra()
 
-
-dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJib3QiOnRydWUsImlhdCI6MTcwNTU4ODgxNn0.aX0_b94xKLSPLaEweiWojdU2LCOOmbhXQfMH_-3gc_8'  # set this to your bot's Top.gg token
-
 @bot.event
 async def on_dbl_vote(data):
     """An event that is called whenever someone votes for the bot on Top.gg."""
     member_votes_first = 0
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            bot.topggpy = topgg.DBLClient(bot, dbl_token)
             if data["type"] == "test":
                 return bot.dispatch('dbl_test', data)
             votedata = await bot.topggpy.get_bot_info()
@@ -457,7 +456,6 @@ async def on_dbl_vote(data):
 async def on_dbl_test(data):
     print(1)
     """An event that is called whenever someone tests the webhook system for your bot on Top.gg."""
-    bot.topggpy = topgg.DBLClient(bot, dbl_token)
     user = bot.get_user(int(data["user"]))
     guild = bot.get_guild(1141116981697859736)
     data2 = await bot.topggpy.get_bot_info()
@@ -477,6 +475,7 @@ async def on_dbl_test(data):
 
 @bot.event
 async def on_ready():
+    bot.topggpy = topgg.DBLClient(bot, dbl_token)
     await bot.change_presence(
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
