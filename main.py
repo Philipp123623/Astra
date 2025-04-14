@@ -89,6 +89,8 @@ class Astra(commands.Bot):
 
     async def setup_hook(self):
         try:
+            bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "password")
+            await bot.topgg_webhook.run(8082)
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
@@ -240,6 +242,8 @@ class Astra(commands.Bot):
                 # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
 
                 print("✅ Tables Erfolgreich geladen")
+
+
 
                 # Reminder-Tasks (gestaffelt laden)
                 if not self.task:
@@ -493,15 +497,6 @@ async def on_ready():
         status=discord.Status.online)
     bot.add_view(gw_button())
 
-
-bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
-
-# Webhook Server starten (async)
-async def start_webhook():
-    await bot.topgg_webhook.run(8082)  # Achtung: das hier ist async
-
-# Task für Webhook Server direkt beim Start des Scripts
-bot.loop.create_task(start_webhook())
 
 
 async def funktion2(when: datetime.datetime):
