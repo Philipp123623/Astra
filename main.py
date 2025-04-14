@@ -18,9 +18,9 @@ import jishaku
 import os
 from dotenv import load_dotenv
 import aiohttp
-from datetime import datetime
-from datetime import date
-import datetime
+from datetime import datetime  # Für utcnow()
+import datetime  # Das Modul für andere Funktionen oder Objekte
+import time  # Falls du auch Zeitfunktionen benötigst
 from typing import Literal
 
 intents = discord.Intents.default()
