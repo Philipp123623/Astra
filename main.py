@@ -475,7 +475,6 @@ async def on_dbl_test(data):
 
 @bot.event
 async def on_ready():
-    bot.topggpy = topgg.DBLClient(bot, dbl_token)
     await bot.change_presence(
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
