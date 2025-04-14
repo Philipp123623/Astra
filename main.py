@@ -365,7 +365,7 @@ async def on_dbl_vote(data):
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
                                           description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.utcnow())
+                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
                     embed.set_footer(text="Danke für deinen Support",
@@ -389,7 +389,7 @@ async def on_dbl_vote(data):
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
                                           description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.utcnow())
+                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
                     embed.set_footer(text="Danke für deinen Support",
@@ -415,7 +415,7 @@ async def on_dbl_vote(data):
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
                                           description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.utcnow())
+                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
                     embed.set_footer(text="Danke für deinen Support",
@@ -440,7 +440,7 @@ async def on_dbl_vote(data):
                     astra = bot.get_user(int(data['bot']))
                     embed = discord.Embed(title="Danke fürs Voten von Astra",
                                           description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.utcnow())
+                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
                     embed.set_thumbnail(
                         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
                     embed.set_footer(text="Thank you for your Support",
@@ -465,7 +465,7 @@ async def on_dbl_test(data):
     astra = bot.get_user(int(data['bot']))
     embed = discord.Embed(title="Test Vote Erfolgreich",
                           description=f"<:vote:901962581760159744> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.utcnow())
+                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
     embed.set_footer(text="Danke für deinen Support",
@@ -1309,7 +1309,7 @@ async def reminder_set(interaction: discord.Interaction, beschreibung: str, zeit
                 await interaction.response.send_message(embed=embed)
             if result:
                 time1 = convert(time)
-                print(datetime.datetime.utcnow())
+                print(datetime.datetime.now(datetime.UTC))
                 t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
                 t2 = datetime.datetime.fromtimestamp(int(t1))
                 t3 = datetime.datetime.fromtimestamp(t1)
