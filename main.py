@@ -131,6 +131,28 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS reactionrole_messages (
+                        message_id BIGINT PRIMARY KEY,
+                        guild_id BIGINT NOT NULL,
+                        channel_id BIGINT NOT NULL,
+                        style VARCHAR(10) NOT NULL, -- "Button" oder "Select"
+                        embed_title VARCHAR(256) NOT NULL,
+                        embed_description TEXT NOT NULL,
+                        embed_color INT NOT NULL
+                    )
+                """)
+                # reactionrole_entries Tabelle
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS reactionrole_entries (
+                        message_id BIGINT NOT NULL,
+                        role_id BIGINT NOT NULL,
+                        label VARCHAR(100) NOT NULL,
+                        emoji VARCHAR(100),
+                        FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE
+                    )
+                """)
+
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS emojiquiz_quizzez(question TEXT, answer VARCHAR(255), hint TEXT)")
                 await cur.execute("""
