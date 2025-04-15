@@ -71,6 +71,7 @@ class Astra(commands.Bot):
             "cogs.afk",
             "cogs.joinrole",
             "cogs.botrole",
+            "cogs.reactionrole",
             "cogs.welcome",
             "cogs.leave",
             "cogs.modlog",
