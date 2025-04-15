@@ -519,8 +519,8 @@ async def funktion2(when: datetime.datetime):
                     userID = eintrag[0]
                     user = bot.get_user(userID)
                     guild = bot.get_guild(1141116981697859736)
-                    role = guild.get_role(1141116981756575875)
-                embed = discord.Embed(title="<:Astra_time:1061392304608391229> You can vote again!",
+                    voterole = guild.get_role(1141116981756575875)
+                embed = discord.Embed(title="<:Astra_time:1061392304608391229> Du kannst wieder voten!",
                                       url="https://top.gg/de/bot/811733599509544962/vote",
                                       description=f"Der Cooldown von 12h ist vorbei. Es wäre schön wenn du wieder Votest.\nAls belohnung erhällst du eine Spezielle Rolle auf unserem [Support server](https://discord.gg/NH9DdSUJrE).",
                                       colour=discord.Colour.blue())
