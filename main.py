@@ -517,23 +517,32 @@ async def funktion2(when: datetime.datetime):
             if result:
                 for eintrag in result:
                     userID = eintrag[0]
-                    user = bot.get_user(userID)
                     guild = bot.get_guild(1141116981697859736)
-                    voterole = guild.get_role(1141116981756575875)
-                embed = discord.Embed(title="<:Astra_time:1061392304608391229> Du kannst wieder voten!",
-                                      url="https://top.gg/de/bot/811733599509544962/vote",
-                                      description=f"Der Cooldown von 12h ist vorbei. Es wäre schön wenn du wieder Votest.\nAls belohnung erhällst du eine Spezielle Rolle auf unserem [Support server](https://discord.gg/NH9DdSUJrE).",
-                                      colour=discord.Colour.blue())
-                try:
-                    await user.send(embed=embed)
-                except:
-                    pass
+                    member = guild.get_member(userID)
+                    if not member:
+                        try:
+                            member = await guild.fetch_member(userID)
+                        except:
+                            continue
 
-                try:
-                    await user.remove_roles(voterole)
-                except:
-                    pass
-                await cur.execute("DELETE FROM voterole WHERE userID = (%s)", (userID))
+                    voterole = guild.get_role(1141116981756575875)
+                    embed = discord.Embed(
+                        title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
+                        url="https://top.gg/de/bot/811733599509544962/vote",
+                        description="Der Cooldown von 12h ist vorbei. Es wäre schön wenn du wieder votest.\nAls Belohnung erhälst du eine spezielle Rolle auf unserem [Support-Server](https://discord.gg/NH9DdSUJrE).",
+                        colour=discord.Colour.blue()
+                    )
+                    try:
+                        await member.send(embed=embed)
+                    except:
+                        pass
+
+                    try:
+                        await member.remove_roles(voterole)
+                    except Exception as e:
+                        print(f"❌ Fehler beim Entfernen der Rolle von {userID}: {e}")
+
+                    await cur.execute("DELETE FROM voterole WHERE userID = (%s)", (userID,))
 
 
 async def gwtimes(when: datetime.datetime, messageid: int):

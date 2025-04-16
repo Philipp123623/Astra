@@ -4,46 +4,35 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-<<<<<<< HEAD
-    <list default="true" id="6f2e0204-953e-4f81-9c95-3288de270d6a" name="Changes" comment="Added emojiquizz and sql syntax" />
-=======
-    <list default="true" id="6f2e0204-953e-4f81-9c95-3288de270d6a" name="Changes" comment="" />
->>>>>>> 19ccdb239cddbee1e121cd3f6df50655bd6ae5c2
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Philipp123623"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Philipp123623&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/Philipp123623/Astra",
-    "accountId": "f7de60a3-4a7d-48ff-bff1-5eb7ac0a240e"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Philipp123623/Astra.git&quot;,
+    &quot;accountId&quot;: &quot;f7de60a3-4a7d-48ff-bff1-5eb7ac0a240e&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
-  <component name="ProjectId" id="2vXOG1ltNLzUMl6yBdNgiYTV341" />
-<<<<<<< HEAD
-  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
-=======
->>>>>>> 19ccdb239cddbee1e121cd3f6df50655bd6ae5c2
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 7
+}</component>
+  <component name="ProjectId" id="2voRGB6ry72FH3WrCXBAFI7weTN" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -51,93 +40,39 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "master",
+    "ignore.virus.scanning.warn.message": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-<<<<<<< HEAD
-    "settings.editor.selected.configurable": "preferences.pluginManager",
-=======
-    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
->>>>>>> 19ccdb239cddbee1e121cd3f6df50655bd6ae5c2
     "vue.rearranger.settings.migration": "true"
-  },
-  "keyToStringList": {
-    "DatabaseDriversLRU": [
-      "mysql"
-    ]
   }
 }]]></component>
-  <component name="RecentsManager">
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\psstu\PycharmProjects\Astra Repo\cogs" />
-      <recent name="C:\Users\psstu\PycharmProjects\Astra Repo" />
-    </key>
-  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-deb605915726-JavaScript-PY-243.22562.180" />
-        <option value="bundled-python-sdk-85c76a3b01b3-9a18a617cbe4-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.22562.180" />
+        <option value="bundled-js-predefined-d6986cc7102b-1632447f56bf-JavaScript-PY-243.26053.29" />
+        <option value="bundled-python-sdk-b1dbf8ef85a6-4df51de95216-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.26053.29" />
       </set>
     </attachedChunks>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="6f2e0204-953e-4f81-9c95-3288de270d6a" name="Changes" comment="" />
-      <created>1744287852512</created>
+      <changelist id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
+      <created>1744809344938</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1744287852512</updated>
-<<<<<<< HEAD
-      <workItem from="1744287853777" duration="8896000" />
+      <updated>1744809344938</updated>
+      <workItem from="1744809348008" duration="43000" />
+      <workItem from="1744809403274" duration="413000" />
     </task>
-    <task id="LOCAL-00001" summary="Added emojiquizz and sql syntax">
-      <option name="closed" value="true" />
-      <created>1744313865564</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1744313865564</updated>
-    </task>
-    <task id="LOCAL-00002" summary="Added emojiquizz and sql syntax">
-      <option name="closed" value="true" />
-      <created>1744313879897</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1744313879897</updated>
-    </task>
-    <task id="LOCAL-00003" summary="Added emojiquizz and sql syntax">
-      <option name="closed" value="true" />
-      <created>1744313980221</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1744313980221</updated>
-    </task>
-    <option name="localTasksCounter" value="4" />
-=======
-      <workItem from="1744287853777" duration="4269000" />
-    </task>
->>>>>>> 19ccdb239cddbee1e121cd3f6df50655bd6ae5c2
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
-  <component name="UnknownFeatures">
-    <option featureType="com.intellij.fileTypeFactory" implementationName=".env" />
-  </component>
-<<<<<<< HEAD
-  <component name="VcsManagerConfiguration">
-    <MESSAGE value="Removed token and cleaned history" />
-    <MESSAGE value="Added emojiquizz and sql syntax" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added emojiquizz and sql syntax" />
-  </component>
-=======
->>>>>>> 19ccdb239cddbee1e121cd3f6df50655bd6ae5c2
 </project>
