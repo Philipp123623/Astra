@@ -326,18 +326,30 @@ class Astra(commands.Bot):
     async def load_cogs(self):
         """Lädt alle Cogs"""
         geladen, fehler = 0, 0
-        await bot.load_extension("jishaku")
+
+        # Optional: jishaku laden, aber Fehler ignorieren
+        try:
+            await self.load_extension("jishaku")
+            print("🧪 jishaku erfolgreich geladen")
+        except Exception as e:
+            print("⚠️  jishaku konnte nicht geladen werden:", e)
+
         for ext in self.initial_extensions:
-            print(ext)
+            print(f"🔄 Lade: {ext}")
             try:
                 await self.load_extension(ext)
                 geladen += 1
+                print(f"✅ Erfolgreich geladen: {ext}")
             except Exception:
                 fehler += 1
-                print(f'❌ {ext} konnte nicht geladen werden', file=sys.stderr)
+                print(f'❌ Fehler beim Laden von: {ext}', file=sys.stderr)
                 traceback.print_exc()
-                print('\n\n---------------------------------------------\n\n')
-            print(f"✅ {geladen}/{geladen + fehler} Cogs geladen")
+                print('---------------------------------------------')
+
+        gesamt = geladen + fehler
+        print(f"\n📦 Cogs geladen: {geladen}/{gesamt} erfolgreich ✅")
+        if fehler > 0:
+            print(f"❗ {fehler} Cog(s) konnten nicht geladen werden.")
 
     async def on_message(self, msg):
         if msg.author.bot:
