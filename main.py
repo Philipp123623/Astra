@@ -131,6 +131,7 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
+                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote_month INT DEFAULT 0;")
                 await cur.execute("""
                     CREATE TABLE IF NOT EXISTS reactionrole_messages (
                         message_id BIGINT PRIMARY KEY,
@@ -371,10 +372,10 @@ async def on_dbl_vote(data):
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
             print(user)
-            await cur.execute(f"SELECT count FROM topgg WHERE userID = (%s)", (int(data["user"])))
+            await cur.execute(f"SELECT count FROM topgg WHERE userID = (%s)", (int(data["user"]),))
             result = await cur.fetchone()
             if not result:
-                if datetime.date.today().weekday() == 4 or datetime.date.today().weekday() == 5 or datetime.date.today().weekday() == 6:
+                if datetime.date.today().weekday() in [4, 5, 6]:
                     time = "12h"
                     time1 = convert(time)
                     t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
@@ -386,13 +387,24 @@ async def on_dbl_vote(data):
                     await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
-                    embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
+                    embed = discord.Embed(
+                        title="Danke fürs Voten von Astra",
+                        description=(
+                            f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevoted.\n"
+                            f"Wir haben nun ``{votes}`` Votes diesen Monat.\n"
+                            f"Du hast diesen Monat bereits ``{member_votes_first2}`` Mal gevotet.\n\n"
+                            f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
+                        ),
+                        colour=discord.Colour.red(),
+                        timestamp=datetime.datetime.now(datetime.UTC)
+                    )
                     embed.set_thumbnail(
-                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    embed.set_footer(text="Danke für deinen Support",
-                                     icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
+                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                    )
+                    embed.set_footer(
+                        text="Danke für deinen Support",
+                        icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                    )
                     for member in guild.members:
                         if member.id == user.id:
                             await member.add_roles(voterole, reason="Voterole")
@@ -410,69 +422,69 @@ async def on_dbl_vote(data):
                     await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
                                       (int(data["user"]), t1))
                     astra = bot.get_user(int(data['bot']))
-                    embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
+                    embed = discord.Embed(
+                        title="Danke fürs Voten von Astra",
+                        description=(
+                            f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevoted.\n"
+                            f"Wir haben nun ``{votes}`` Votes diesen Monat.\n"
+                            f"Du hast diesen Monat bereits ``{member_votes_first2}`` Mal gevotet.\n\n"
+                            f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
+                        ),
+                        colour=discord.Colour.red(),
+                        timestamp=datetime.datetime.now(datetime.UTC)
+                    )
                     embed.set_thumbnail(
-                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    embed.set_footer(text="Danke für deinen Support",
-                                     icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
+                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                    )
+                    embed.set_footer(
+                        text="Danke für deinen Support",
+                        icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                    )
                     for member in guild.members:
                         if member.id == user.id:
                             await member.add_roles(voterole, reason="Voterole")
                     msg = await channel.send(embed=embed)
                     await msg.add_reaction(heart)
-            if result:
-                if datetime.date.today().weekday() == 4 or datetime.date.today().weekday() == 5 or datetime.date.today().weekday() == 6:
-                    time = "12h"
-                    time1 = convert(time)
-                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-                    t2 = datetime.datetime.fromtimestamp(int(t1))
-                    asyncio.create_task(funktion2(t2))
-                    votes_member = result[0]
+            else:
+                votes_member = result[0]
+                if datetime.date.today().weekday() in [4, 5, 6]:
                     member_votes = int(votes_member + 2)
-                    await cur.execute("UPDATE topgg SET count = (%s) WHERE userID = (%s)",
-                                      (member_votes, int(data["user"])))
-                    await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
-                                      (int(data["user"]), t1))
-                    astra = bot.get_user(int(data['bot']))
-                    embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
-                    embed.set_thumbnail(
-                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    embed.set_footer(text="Danke für deinen Support",
-                                     icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    for member in guild.members:
-                        if member.id == user.id:
-                            await member.add_roles(voterole, reason="Voterole")
-                    msg = await channel.send(embed=embed)
-                    await msg.add_reaction(heart)
                 else:
-                    time = "12h"
-                    time1 = convert(time)
-                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-                    t2 = datetime.datetime.fromtimestamp(int(t1))
-                    asyncio.create_task(funktion2(t2))
-                    votes_member = result[0]
-                    member_votes = int(votes_member + 2)
-                    await cur.execute("UPDATE topgg SET count = (%s) WHERE userID = (%s)",
-                                      (member_votes, int(data["user"])))
-                    await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
-                                      (int(data["user"]), t1))
-                    astra = bot.get_user(int(data['bot']))
-                    embed = discord.Embed(title="Danke fürs Voten von Astra",
-                                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
-                    embed.set_thumbnail(
-                        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    embed.set_footer(text="Thank you for your Support",
-                                     icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-                    for member in guild.members:
-                        if member.id == user.id:
-                            await member.add_roles(voterole, reason="Voterole")
-                    msg = await channel.send(embed=embed)
-                    await msg.add_reaction(heart)
+                    member_votes = int(votes_member + 1)
+                await cur.execute("UPDATE topgg SET count = (%s) WHERE userID = (%s)",
+                                  (member_votes, int(data["user"])))
+                time = "12h"
+                time1 = convert(time)
+                t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
+                t2 = datetime.datetime.fromtimestamp(int(t1))
+                asyncio.create_task(funktion2(t2))
+                await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
+                                  (int(data["user"]), t1))
+                astra = bot.get_user(int(data['bot']))
+                embed = discord.Embed(
+                    title="Danke fürs Voten von Astra",
+                    description=(
+                        f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevoted.\n"
+                        f"Wir haben nun ``{votes}`` Votes diesen Monat.\n"
+                        f"Du hast diesen Monat bereits ``{member_votes}`` Mal gevotet.\n\n"
+                        f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
+                    ),
+                    colour=discord.Colour.red(),
+                    timestamp=datetime.datetime.now(datetime.UTC)
+                )
+                embed.set_thumbnail(
+                    url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                )
+                embed.set_footer(
+                    text="Danke für deinen Support",
+                    icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+                )
+                for member in guild.members:
+                    if member.id == user.id:
+                        await member.add_roles(voterole, reason="Voterole")
+                msg = await channel.send(embed=embed)
+                await msg.add_reaction(heart)
+
 
 
 @bot.event
