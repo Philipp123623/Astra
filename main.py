@@ -328,6 +328,7 @@ class Astra(commands.Bot):
         geladen, fehler = 0, 0
         await bot.load_extension("jishaku")
         for ext in self.initial_extensions:
+            print(ext)
             try:
                 await self.load_extension(ext)
                 geladen += 1
@@ -1501,10 +1502,6 @@ async def on_command_error(ctx, error):
         embed.set_author(name=ctx.author, icon_url=ctx.author.avatar)
         await ctx.send(embed=embed)
 
-
-@bot.tree.command()
-async def test(interaction: discord.Interaction, number: int, string: str):
-    await interaction.response.send_message(f'{number=} {string=}', ephemeral=True)
 
 
 bot.run(TOKEN, reconnect=True)
