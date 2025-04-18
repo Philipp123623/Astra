@@ -147,7 +147,7 @@ class help(commands.Cog):
                               title="Help Menü",
                               description=f"<:Astra_info:1141303860556738620> **__Wichtige informationen:__** Hier findest du alle Commands,\nfalls du Hilfe benötigst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n**Ping**: {self.bot.latency * 1000:.0f} ms")
         embed.add_field(name="Letze Updates",
-                        value="> <:Coin:1359178077011181811> Neues Economy: siehe - `/job`, `/economy`\n> <:Astra_minigames:1141303876528648232> Neue Minigames: `/hangman`, `/snake`\n> <:Astra_gw1:1141303852889550928> Giveaway: `/giveaway start/end/reroll`\n> <:Astra_level:1141825043278598154> Levelsystem: `/levelsystem status`")
+                        value="> <:Coin:1359178077011181811> Neues Economy: `/job`, `/economy`\n> <:Astra_minigames:1141303876528648232> Neue Minigames: `/hangman`, `/snake`\n> <:Astra_gw1:1141303852889550928> Giveaway: `/giveaway start/end/reroll`\n> <:Astra_level:1141825043278598154> Levelsystem: `/levelsystem status`")
         embed.set_author(name="Astra", icon_url=interaction.client.user.avatar)
         embed.add_field(name="Links",
                         value="**[Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands) | [Support](https://discord.gg/NH9DdSUJrE) | [Voten](https://top.gg/bot/1113403511045107773/vote)**",
