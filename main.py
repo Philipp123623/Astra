@@ -1515,5 +1515,8 @@ async def on_command_error(ctx, error):
         await ctx.send(embed=embed)
 
 
+async def main():
+    async with bot:
+        await bot.start(TOKEN)
 
-bot.run(TOKEN, reconnect=True)
+asyncio.run(main())
