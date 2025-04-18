@@ -131,7 +131,6 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
-                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote_month INT DEFAULT 0;")
                 await cur.execute("""
                     CREATE TABLE IF NOT EXISTS reactionrole_messages (
                         message_id BIGINT PRIMARY KEY,
