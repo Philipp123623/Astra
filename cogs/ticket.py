@@ -183,7 +183,7 @@ class ticket_open(discord.ui.View):
                 memberid = interaction.user.id
                 member = interaction.user
                 await cur.execute("SELECT categoryID, thema, roleID FROM ticketsystem WHERE channelID = (%s)",
-                                  interaction.channel.id)
+                                  (interaction.channel.id))
                 result = await cur.fetchall()
                 for eintrag in result:
                     categoryID = eintrag[0]
@@ -191,7 +191,7 @@ class ticket_open(discord.ui.View):
                     roleID = eintrag[2]
                     suprole = guild.get_role(roleID)
                     category = discord.utils.get(guild.categories, id=categoryID)
-                    send2 = interaction.response.send_message
+                    send = interaction.response.send_message
                     overwrites = {
                         interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
                         interaction.user: discord.PermissionOverwrite(view_channel=True),
@@ -292,7 +292,7 @@ class ticket(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    f"SELECT channelID, thema FROM ticketsystem WHERE guildID = (%s)", (interaction.guild.id,))
+                    f"SELECT channelID, thema FROM ticketsystem WHERE guildID = {interaction.guild.id}")
                 result = await cursor.fetchall()
                 if not result:
                     await interaction.response.send_message("<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**", ephemeral=True)
@@ -321,10 +321,9 @@ class ticket(commands.Cog):
                         argument: Literal['Einschalten', 'Ausschalten'],
                         channel: discord.TextChannel):
         """Setup a Ticketlog for your Server!"""
-        print(1)
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                if argument == "Einschalten":
+                if argument == "Add":
                     await cursor.execute(f"SELECT channelID FROM ticketlog WHERE guildID = (%s)",
                                          (interaction.guild.id))
                     server2 = await cursor.fetchone()
@@ -356,8 +355,8 @@ class ticket(commands.Cog):
                     if result is None:
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**", ephemeral=True)
                     if result is not None:
-                        (channelID,) = result
-                        if channel.id == channelID:
+                        channelID = result
+                        if (channel.id,) == channelID:
                             await cursor.execute(
                                 f"DELETE FROM ticketlog WHERE channelID = (%s) AND guildID = (%s)",
                                 (channel.id, interaction.guild.id))
