@@ -323,7 +323,7 @@ class ticket(commands.Cog):
         """Setup a Ticketlog for your Server!"""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                if argument == "Add":
+                if argument == "Einschalten":
                     await cursor.execute(f"SELECT channelID FROM ticketlog WHERE guildID = (%s)",
                                          (interaction.guild.id))
                     server2 = await cursor.fetchone()
@@ -355,8 +355,8 @@ class ticket(commands.Cog):
                     if result is None:
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**", ephemeral=True)
                     if result is not None:
-                        channelID = result
-                        if (channel.id,) == channelID:
+                        (channelID,) = result
+                        if channel.id == channelID:
                             await cursor.execute(
                                 f"DELETE FROM ticketlog WHERE channelID = (%s) AND guildID = (%s)",
                                 (channel.id, interaction.guild.id))
