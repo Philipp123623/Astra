@@ -227,6 +227,7 @@ class SnakeBot(commands.Cog):
 
     @snake_game.command(name="start", description="Starte Snake!")
     async def snake(self, interaction: discord.Interaction):
+        """Spiele Snake."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Überprüfen, ob der Spieler bereits einen Highscore hat

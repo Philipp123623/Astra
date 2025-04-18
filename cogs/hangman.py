@@ -184,6 +184,7 @@ class hangman(commands.Cog):
         
     @app_commands.command(name="hangman", description="Starte ein Hangman-Spiel")
     async def hangman(self, interaction: discord.Interaction):
+        """Spiele Hangman."""
         if hangman_game["game"]:
             await interaction.response.send_message("Ein Spiel läuft bereits!", ephemeral=True)
             return

@@ -5,6 +5,7 @@ from discord.ui import Button, View
 from discord.ext import commands
 import aiomysql
 import asyncio
+from typing import Literal
 import random
 from datetime import datetime, timedelta
 
@@ -304,6 +305,7 @@ class Economy(commands.Cog):
 
     @eco.command(name="balance", description="Zeigt deinen aktuellen Kontostand an.")
     async def balance(self, interaction: discord.Interaction):
+        """Zeigt deinen aktuellen Kontostand an."""
         user_data = await self.get_user(interaction.user.id)
         wallet, bank = user_data[1], user_data[2]
 
@@ -315,6 +317,7 @@ class Economy(commands.Cog):
     @eco.command(name="deposit", description="Zahle Geld auf dein Bankkonto ein.")
     @app_commands.describe(betrag="Der Betrag, den du einzahlen möchtest.")
     async def deposit(self, interaction: discord.Interaction, betrag: int):
+        """Zahle Geld auf dein Bankkonto ein."""
         if betrag <= 0:
             await interaction.response.send_message("Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
@@ -330,6 +333,7 @@ class Economy(commands.Cog):
     @eco.command(name="withdraw", description="Hebe Geld von deinem Bankkonto ab.")
     @app_commands.describe(betrag="Der Betrag, den du abheben möchtest.")
     async def withdraw(self, interaction: discord.Interaction, betrag: int):
+        """Hebe Geld von deinem Bankkonto ab."""
         if betrag <= 0:
             await interaction.response.send_message("Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
@@ -347,6 +351,7 @@ class Economy(commands.Cog):
 
     @job.command(name="work", description="Arbeite in deinem aktuellen Job.")
     async def work(self, interaction: discord.Interaction):
+        """Arbeite in deinem aktuellen Job."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)
         job_name = user_data[3]
@@ -384,8 +389,9 @@ class Economy(commands.Cog):
         await interaction.response.send_message(
             f"🛠️ Du hast 1 Stunde als **{job_name}** gearbeitet und {earned} <:Coin:1359178077011181811> verdient!")
 
-    @job.command(name="list", description="Zeigt die Jobliste mit Seiten und Buttons.")
+    @job.command(name="list", description="Zeigt die Jobliste.")
     async def job_list(self, interaction: discord.Interaction):
+        """Erhalte eine Liste mit allen Jobs"""
         user_data = await self.get_user(interaction.user.id)
         user_hours = user_data[4]  # Stunden, die der User gearbeitet hat
 
@@ -396,6 +402,7 @@ class Economy(commands.Cog):
     @job.command(name="apply", description="Bewirb dich auf einen verfügbaren Job.")
     @app_commands.describe(name="Name des Jobs, den du annehmen möchtest.")
     async def job_apply(self, interaction: discord.Interaction, name: str):
+        """Bewirb dich auf einen verfügbaren Job."""
         user_data = await self.get_user(interaction.user.id)
         user_hours = user_data[4]
         job = next((j for j in JOBS if j["name"].lower() == name.lower()), None)
@@ -417,6 +424,7 @@ class Economy(commands.Cog):
 
     @job.command(name="quit", description="Kündige deinen aktuellen Job.")
     async def job_quit(self, interaction: discord.Interaction):
+        """Kündige deinen aktuellen Job."""
         user_data = await self.get_user(interaction.user.id)
         if not user_data[3]:
             await interaction.response.send_message("Du hast momentan keinen Job.", ephemeral=True)
@@ -430,6 +438,7 @@ class Economy(commands.Cog):
 
     @eco.command(name="beg", description="Bitte um ein kleines Trinkgeld.")
     async def beg(self, interaction: discord.Interaction):
+        """Bitte um ein kleines Trinkgeld."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)
         last_work = user_data[5]  # Wir verwenden last_work auch als letzte beg Zeit für Demo
@@ -450,9 +459,10 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(f"🙏 Du hast {amount} <:Coin:1359178077011181811> von einem freundlichen Fremden erhalten!")
 
-    @eco.command(name="slot", description="Spiele ein Slot-Spiel um <:Coin:1359178077011181811>  zu gewinnen oder zu verlieren.")
-    @app_commands.describe(einsatz="Wie viele <:Coin:1359178077011181811>  willst du setzen?")
+    @eco.command(name="slot", description="Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren.")
+    @app_commands.describe(einsatz="Wie viele <:Coin:1359178077011181811> willst du setzen?")
     async def slot(self, interaction: discord.Interaction, einsatz: int):
+        """Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)  # Holen der Benutzerdaten aus der Datenbank
 
@@ -522,6 +532,7 @@ class Economy(commands.Cog):
     @eco.command(name="rps", description="Spiele Schere, Stein, Papier gegen den Bot.")
     @app_commands.describe(choice="Wähle 'Schere', 'Stein' oder 'Papier'.")
     async def rps(self, interaction: discord.Interaction, choice: str):
+        """Spiele Schere, Stein, Papier gegen den Bot."""
         choice = choice.lower()
         if choice not in ["schere", "stein", "papier"]:
             await interaction.response.send_message("Bitte wähle entweder 'Schere', 'Stein' oder 'Papier'.",
@@ -552,6 +563,7 @@ class Economy(commands.Cog):
                           description="Lass die Münze entscheiden! Wähle 'Kopf' oder 'Zahl' und setze einen Einsatz.")
     @app_commands.describe(wahl="Deine Wahl: 'Kopf' oder 'Zahl'", betrag="Der Betrag, den du setzen möchtest.")
     async def coinflip(self, interaction: discord.Interaction, wahl: str, betrag: int):
+        """Lass die Münze entscheiden! Wähle 'Kopf' oder 'Zahl' und setze einen Einsatz."""
         # Überprüfen, ob die Eingabe gültig ist
         guess = wahl.lower()
         if guess not in ["kopf", "zahl"]:
@@ -596,6 +608,7 @@ class Economy(commands.Cog):
     @eco.command(name="rob", description="Versuche, einen anderen Nutzer auszurauben!")
     @app_commands.describe(ziel="Wen willst du ausrauben?")
     async def rob(self, interaction: discord.Interaction, ziel: discord.User):
+        """Versuche, einen anderen Nutzer auszurauben."""
         user_id = interaction.user.id
         target_id = ziel.id
 
@@ -634,41 +647,67 @@ class Economy(commands.Cog):
 
         await interaction.response.send_message(msg)
 
+
     @eco.command(name="leaderboard", description="Zeige die reichsten Spieler.")
-    async def rank(self, interaction: discord.Interaction):
+    @app_commands.describe(scope="Wähle, ob die globale oder serverbezogene Rangliste angezeigt wird.")
+    async def leaderboard(
+            self,
+            interaction: discord.Interaction,
+            scope: Literal["global", "server"]
+    ):
+        """Zeige die reichsten Spieler, entweder global oder serverbezogen."""
         try:
-            # Versuchen, die Datenbankabfrage auszuführen
+            # Datenbankverbindung aufbauen
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute("SELECT user_id, wallet + bank AS gesamt FROM economy_users ORDER BY gesamt DESC LIMIT 10")
+                    if scope == "global":
+                        await cur.execute("""
+                            SELECT user_id, wallet + bank AS gesamt 
+                            FROM economy_users 
+                            ORDER BY gesamt DESC 
+                            LIMIT 10
+                        """)
+                    elif scope == "server":
+                        await cur.execute("""
+                            SELECT user_id, wallet + bank AS gesamt 
+                            FROM economy_users 
+                            WHERE guild_id = %s 
+                            ORDER BY gesamt DESC 
+                            LIMIT 10
+                        """, (interaction.guild.id,))
+
                     top_users = await cur.fetchall()
 
-            # Wenn keine Benutzer zurückgegeben werden, eine Nachricht senden
             if not top_users:
-                await interaction.response.send_message("Es wurden keine Benutzer gefunden oder die Rangliste ist leer.")
+                await interaction.response.send_message(
+                    "Es wurden keine Benutzer gefunden oder die Rangliste ist leer.")
                 return
 
-            # Embed erstellen und die Top 10 Benutzer hinzufügen
-            embed = discord.Embed(title="🏆 Rangliste", color=discord.Color.gold())
-            for i, (user_id, gesamt) in enumerate(top_users, start=1):
-                user = self.bot.get_user(user_id)
-                # Wenn der Benutzer nicht gefunden wird, "Unbekannt" anzeigen
-                name = user.name if user else f"Unbekannt ({user_id})"
-                embed.add_field(name=f"{i}. {name}", value=f"{gesamt} <:Coin:1359178077011181811> ", inline=False)
+            # Embed erstellen
+            embed = discord.Embed(
+                title="🏆 Rangliste (Global)" if scope == "global" else f"🏆 Rangliste ({interaction.guild.name})",
+                color=discord.Color.gold()
+            )
 
-            # Sende das Embed mit der Rangliste
+            for i, (user_id, gesamt) in enumerate(top_users, start=1):
+                user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+                name = user.name if user else f"Unbekannt ({user_id})"
+                embed.add_field(
+                    name=f"{i}. {name}",
+                    value=f"{gesamt} <:Coin:1359178077011181811>",
+                    inline=False
+                )
+
             await interaction.response.send_message(embed=embed)
 
         except Exception as e:
-            # Fehlerbehandlung für eventuelle Probleme
             await interaction.response.send_message(f"Es gab einen Fehler beim Abrufen der Rangliste: {e}")
             print(f"Fehler beim Abrufen der Rangliste: {e}")
-
-        await interaction.response.send_message(embed=embed)
 
     @eco.command(name="blackjack", description="Spiele eine Runde Blackjack.")
     @app_commands.describe(einsatz="Der Betrag, den du setzen möchtest.")
     async def blackjack(self, interaction: discord.Interaction, einsatz: int):
+        """Spiele eine Runde Blackjack."""
         user_data = await self.get_user(interaction.user.id)
         wallet = user_data[1]
 
