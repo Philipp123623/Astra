@@ -120,7 +120,7 @@ class Dropdown(discord.ui.Select):
             await interaction.response.edit_message(embed=embed)
         elif self.values[0] == "Minigames":
             embed = discord.Embed(title=" ",
-                                  description="> <:Astra_info:1141303860556738620> Du suchst kleine Lustige Spiele und hast Langeweile? Dann Schau doch mal hier nach :D.\n\n> **`👥` × User Befehle\n> `/hangman` - Spiele Hangman.\n> `/snake` - Spiele Snake.\n\n> **`👮‍♂` × Team Befehle:**\n> `/guessthenumber` - Verwalte das Minispiel 'Guess the number' auf deinem Server.\n> `/counting` - Richte den Zählkanal ein.\n> **Bald Mehr!**",
+                                  description="> <:Astra_info:1141303860556738620> Du suchst kleine Lustige Spiele und hast Langeweile? Dann Schau doch mal hier nach :D.\n\n> **`👥` × User Befehle**\n> `/hangman` - Spiele Hangman.\n> `/snake` - Spiele Snake.\n\n> **`👮‍♂` × Team Befehle:**\n> `/guessthenumber` - Verwalte das Minispiel 'Guess the number' auf deinem Server.\n> `/counting` - Richte den Zählkanal ein.\n> **Bald Mehr!**",
                                   colour=discord.Colour.blue())
             embed.set_author(name="Command Menü | Minispiele", icon_url=interaction.client.user.avatar)
             embed.set_footer(text="Astra Development ©2025 | Für mehr Informationen kontaktiere uns via Discord.", icon_url=interaction.guild.icon)
@@ -147,7 +147,7 @@ class help(commands.Cog):
                               title="Help Menü",
                               description=f"<:Astra_info:1141303860556738620> **__Wichtige informationen:__** Hier findest du alle Commands,\nfalls du Hilfe benötigst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n**Ping**: {self.bot.latency * 1000:.0f} ms")
         embed.add_field(name="Letze Updates",
-                        value="> <:Astra_gw1:1141303852889550928> Giveaway: `/giveaway start/end/reroll`\n> <:Astra_level:1141825043278598154> Levelsystem: `/levelsystem status`\n> <:Astra_time:1141303932061233202> Erinnerungen: `/reminder`\n> <:Astra_ticket:1141833836204937347> Ticketsystem: `/ticket setup`")
+                        value="> <:Coin:1359178077011181811> Neues Economy: siehe - `/job`, `/economy`\n> <:Astra_minigames:1141303876528648232> Neue Minigames: `/hangman`, `/snake`\n> <:Astra_gw1:1141303852889550928> Giveaway: `/giveaway start/end/reroll`\n> <:Astra_level:1141825043278598154> Levelsystem: `/levelsystem status`")
         embed.set_author(name="Astra", icon_url=interaction.client.user.avatar)
         embed.add_field(name="Links",
                         value="**[Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands) | [Support](https://discord.gg/NH9DdSUJrE) | [Voten](https://top.gg/bot/1113403511045107773/vote)**",
