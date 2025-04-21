@@ -132,6 +132,23 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
                 await cur.execute("""
+                CREATE TABLE IF NOT EXISTS gc_users (
+                    user_id BIGINT PRIMARY KEY,
+                    lvl_points INT DEFAULT 0,
+                    team BOOLEAN DEFAULT FALSE,
+                    banned BOOLEAN DEFAULT FALSE
+                )
+                """)
+
+                await cur.execute("""
+                CREATE TABLE IF NOT EXISTS gc_servers (
+                    guild_id BIGINT PRIMARY KEY,
+                    channel_id BIGINT NOT NULL,
+                    invite TEXT
+                )
+                """)
+
+                await cur.execute("""
                     CREATE TABLE IF NOT EXISTS reactionrole_messages (
                         message_id BIGINT PRIMARY KEY,
                         guild_id BIGINT NOT NULL,
