@@ -360,7 +360,7 @@ class globalchat(commands.Cog):
                     await new_channel.send(embed=discord.Embed(
                         description='*Das ist der beginn dieses Globalchat...*\nSchreibe deine erste Nachricht!',
                         colour=0x36393F))
-                    print(4,file=sys.stdout)
+                    print(4444,file=sys.stdout)
                 else:
                     embed = discord.Embed(description="Du hast bereits einen Globalchat in deinem Server aktiv.\r\n",
                                           color=0xF44D4D)
