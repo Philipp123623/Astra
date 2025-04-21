@@ -375,7 +375,7 @@ class globalchat(commands.Cog):
                     await interaction.response.send_message(embed=embed)
                 else:
                     embed = discord.Embed(description="Du hast derzeit keinen Globalchat aktiv.\r\n"
-                                                      f"Richte ihn mit `/globalchat add` ein!",
+                                                      f"Richte ihn mit `/globalchat` ein!",
                                           color=0xF44D4D)
                     await interaction.response.send_message(embed=embed)
 
