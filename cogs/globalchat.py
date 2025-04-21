@@ -134,19 +134,19 @@ class GlobalChatCog(commands.Cog):
 
     def get_level_name(self, lvl):
         if lvl < 5:
-            return "Beginner"
+            return "Beginner 🌱"
         elif lvl < 25:
-            return "Advanced"
+            return "Advanced 🏃‍♂️"
         elif lvl < 40:
-            return "Amateur"
+            return "Amateur 🥉"
         elif lvl < 60:
-            return "Professional"
+            return "Professional 🏆"
         elif lvl < 80:
-            return "Master"
+            return "Master 🥇"
         else:
-            return "Legend"
+            return "Legend ⚡"
 
-    @commands.command(name="globalchat")
+    @app_commands.command(name="globalchat")
     async def globalchat(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten']):
         """Richte unseren Globalchat für deinen Server ein."""
         if argument == 'Einschalten':
@@ -197,6 +197,45 @@ class GlobalChatCog(commands.Cog):
                 await cur.execute("DELETE FROM gc_servers WHERE guildid = %s", (guild_id,))
                 await conn.commit()
 
+    @app_commands.command(name="removeteam")
+    async def remove_team(self, interaction: discord.Interaction, user: discord.User):
+        """Entferne ein Teammitglied."""
+        if interaction.user.guild_permissions.administrator:
+            # Hier implementierst du die Logik, um das Teammitglied zu entfernen
+            embed = discord.Embed(title="Teammitglied entfernt",
+                                  description=f"{user.name} wurde erfolgreich aus dem Team entfernt.",
+                                  color=0xF44D4D)
+            await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="addteam")
+    async def add_team(self, interaction: discord.Interaction, user: discord.User):
+        """Füge ein Teammitglied hinzu."""
+        if interaction.user.guild_permissions.administrator:
+            # Hier implementierst du die Logik, um das Teammitglied hinzuzufügen
+            embed = discord.Embed(title="Teammitglied hinzugefügt",
+                                  description=f"{user.name} wurde erfolgreich zum Team hinzugefügt.",
+                                  color=0x56F44D)
+            await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="banuser")
+    async def ban_user(self, interaction: discord.Interaction, user: discord.User):
+        """Banne einen Benutzer."""
+        if interaction.user.guild_permissions.administrator:
+            await interaction.guild.ban(user)
+            embed = discord.Embed(title="Benutzer gebannt",
+                                  description=f"{user.name} wurde erfolgreich gebannt.",
+                                  color=0xF44D4D)
+            await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="unbanuser")
+    async def unban_user(self, interaction: discord.Interaction, user: discord.User):
+        """Entbanne einen Benutzer."""
+        if interaction.user.guild_permissions.administrator:
+            await interaction.guild.unban(user)
+            embed = discord.Embed(title="Benutzer entbannt",
+                                  description=f"{user.name} wurde erfolgreich entbannt.",
+                                  color=0x56F44D)
+            await interaction.response.send_message(embed=embed)
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(GlobalChatCog(bot))
