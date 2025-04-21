@@ -3,7 +3,13 @@ from discord.ext import commands
 from discord import app_commands, Message, Guild, TextChannel, Permissions
 import pytz
 import asyncio
+import logging
 from typing import Literal
+
+# Logging konfigurieren, sodass es auch in die systemd Logs geht
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('discord')
+
 
 bad_words = ['arsch', 'arschloch', 'wixer', 'wixxer', 'nigger', 'niggah', 'nigga', 'moor', 'ficken', 'gefickt', 'nudes',
              'nude', 'titten', 'vagina', 'penis', 'wagina', 'fotze', 'stripclub', 'nutte', 'nutten', 'orgasmus',
@@ -18,31 +24,45 @@ class globalchat(commands.Cog):
         self.bot = bot
 
     async def get_user_data(self, user_id):
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT * FROM gc_users WHERE id = (%s)", (user_id,))
-                return await cur.fetchone()
+        try:
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT * FROM gc_users WHERE id = (%s)", (user_id,))
+                    return await cur.fetchone()
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen von Benutzerdaten: {e}")
+            return None
 
     async def init_user_data(self, user_id):
         data = await self.get_user_data(user_id)
         if not data:
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("INSERT INTO gc_users (id, lvl_points, team, banned) VALUES (%s, %s, %s, %s)",
-                                       (user_id, 0, False, False))
+            try:
+                async with self.bot.pool.acquire() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute("INSERT INTO gc_users (id, lvl_points, team, banned) VALUES (%s, %s, %s, %s)",
+                                           (user_id, 0, False, False))
+            except Exception as e:
+                logger.error(f"Fehler beim Initialisieren von Benutzerdaten: {e}")
 
     async def inc_lvl(self, user_id):
         await self.init_user_data(user_id)
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE gc_users SET lvl_points = lvl_points + 1 WHERE id=%s", (user_id,))
+        try:
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE gc_users SET lvl_points = lvl_points + 1 WHERE id=%s", (user_id,))
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren der Levelpunkte: {e}")
 
     async def get_lvl(self, user_id):
         await self.init_user_data(user_id)
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT lvl_points FROM gc_users WHERE id=%s", (user_id,))
-                points = (await cur.fetchone())[0]
+        try:
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT lvl_points FROM gc_users WHERE id=%s", (user_id,))
+                    points = (await cur.fetchone())[0]
+        except Exception as e:
+            logger.error(f"Fehler beim Abrufen der Levelpunkte: {e}")
+            points = 0
 
         lvl = 0
         step = 5
@@ -267,7 +287,7 @@ class globalchat(commands.Cog):
                         await interaction.response.send_message("❌ Globalchat wurde in diesem Kanal **deaktiviert**.",
                                                                 ephemeral=True)
         except Exception as e:
-            print(f"Fehler beim Deaktivieren/Aktivieren des Globalchats: {e}")
+            logger.error(f"Fehler beim Deaktivieren/Aktivieren des Globalchats: {e}")
             await interaction.response.send_message("Es gab ein Problem bei der Änderung des Globalchat-Status.",
                                                     ephemeral=True)
 
