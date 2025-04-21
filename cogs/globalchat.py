@@ -269,20 +269,20 @@ class globalchat(commands.Cog):
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     if option == "an":
-                        await cur.execute("SELECT * FROM gc_servers WHERE guildid = %s", (guild_id,))
+                        await cur.execute("SELECT * FROM gc_servers WHERE guild_id = %s", (guild_id,))
                         exists = await cur.fetchone()
                         if exists:
-                            await cur.execute("UPDATE gc_servers SET channelid = %s WHERE guildid = %s",
+                            await cur.execute("UPDATE gc_servers SET channel_id = %s WHERE guild_id = %s",
                                               (channel_id, guild_id))
                             await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
                                                                     ephemeral=True)
                         else:
-                            await cur.execute("INSERT INTO gc_servers (guildid, channelid) VALUES (%s, %s)",
+                            await cur.execute("INSERT INTO gc_servers (guild_id, channel_id) VALUES (%s, %s)",
                                               (guild_id, channel_id))
                             await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
                                                                     ephemeral=True)
                     else:
-                        await cur.execute("DELETE FROM gc_servers WHERE guildid = %s AND channelid = %s",
+                        await cur.execute("DELETE FROM gc_servers WHERE guild_id = %s AND channel_id = %s",
                                           (guild_id, channel_id))
                         await interaction.response.send_message("❌ Globalchat wurde in diesem Kanal **deaktiviert**.",
                                                                 ephemeral=True)
