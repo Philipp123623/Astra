@@ -233,6 +233,33 @@ class globalchat(commands.Cog):
         else:
             await ctx.message.delete()
 
+    @app_commands.command(name="globalchat", description="Aktiviere oder deaktiviere den Globalchat in diesem Kanal.")
+    @commands.has_permissions(administrator=True)
+    @app_commands.describe(option="Wähle, ob du den Globalchat aktivieren oder deaktivieren möchtest.")
+    async def globalchat_toggle(self, interaction: discord.Interaction, option: Literal["an", "aus"]):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Du benötigst Administratorrechte, um diesen Befehl zu verwenden.", ephemeral=True)
+            return
+
+        guild_id = interaction.guild.id
+        channel_id = interaction.channel.id
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                if option == "an":
+                    await cur.execute("SELECT * FROM gc_servers WHERE guildid = %s", (guild_id,))
+                    exists = await cur.fetchone()
+                    if exists:
+                        await cur.execute("UPDATE gc_servers SET channelid = %s WHERE guildid = %s", (channel_id, guild_id))
+                        await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.", ephemeral=True)
+                    else:
+                        await cur.execute("INSERT INTO gc_servers (guildid, channelid) VALUES (%s, %s)", (guild_id, channel_id))
+                        await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.", ephemeral=True)
+                else:
+                    await cur.execute("DELETE FROM gc_servers WHERE guildid = %s AND channelid = %s", (guild_id, channel_id))
+                    await interaction.response.send_message("❌ Globalchat wurde in diesem Kanal **deaktiviert**.", ephemeral=True)
+
+
 
 async def setup(bot):
     await bot.add_cog(globalchat(bot))
