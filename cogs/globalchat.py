@@ -7,7 +7,16 @@ import json
 import asyncio
 import os
 from typing import Literal
-import sys
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,  # Wir setzen den Log-Level auf INFO, damit wir nur wichtige Nachrichten sehen
+    format='%(asctime)s - %(message)s',  # Einfaches Format
+    handlers=[logging.StreamHandler()]  # Log-Ausgabe an die Konsole
+)
+
+# Logger für eine spezielle Nachricht
+logger = logging.getLogger()
 
 slowmode = []
 slow_dm = []
@@ -337,10 +346,10 @@ class globalchat(commands.Cog):
     async def globalchat(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten']):
         """Richte unseren Globalchat für deinen Server ein."""
         if argument == 'Einschalten':
-            print(1,file=sys.stdout)
+            logger.info(1)
             if interaction.user.guild_permissions.administrator:
                 if not guild_exists(interaction.guild.id):
-                    print(2, file=sys.stdout)
+                    logger.info(2)
                     new_channel = await interaction.guild.create_text_channel('global chat')
                     topic = f"__**Willkommen in diesem Globachat**__ <a:chatbox:1141318924475043971>\n<:Astra_moderation:1141303878541918250> Discord Guidelines\nhttps://discord.com/guidelines\n<:Astra_moderation:1141303878541918250> - Der Ton sollte **höflich und freundlich** sein\n<:Astra_moderation:1141303878541918250> - **Streitigkeiten, Beleidigungen** und **Spam** sind in unserem Globalchat verboten!\n<:Astra_moderation:1141303878541918250> - Den **Anweisungen** unseres Teams ist stets Folge zu leisten!\n<:Astra_moderation:1141303878541918250> - Die Sprache unseres Globalchat ist **Deutsch**\n\n__**Wichtige Commands**__ <:Astra_file1:1141303837181886494>\n<:Astra_wichtig:1141303951862534224> - /globalchat\n\n__**Worauf ist zu achten?**__ <:Astra_accept:1141303821176422460>\nAlle in unseren globalen Chats gesendeten Nachrichten werden an alle verbundenen Server unseres Globalchat weitergeleitet!\n**Unser Team** behält sich das Recht vor, diese Regeln **jederzeit** zu ändern!"
                     await new_channel.edit(slowmode_delay=5, topic=topic)
@@ -351,7 +360,7 @@ class globalchat(commands.Cog):
                     }
                     servers["servers"].append(server)
                     with open('./servers.json', 'w') as f:
-                        print(3, file=sys.stdout)
+                        logger.info(3)
                         json.dump(servers, f, indent=4)
                     embed = discord.Embed(title="**Globalchat Setup erfolgreich!**",
                                           description=f"Der Globalchat kann nun in <#{new_channel.id}> genutzt werden!",
@@ -360,7 +369,7 @@ class globalchat(commands.Cog):
                     await new_channel.send(embed=discord.Embed(
                         description='*Das ist der beginn dieses Globalchat...*\nSchreibe deine erste Nachricht!',
                         colour=0x36393F))
-                    print(4444,file=sys.stdout)
+                    logger.info(4)
                 else:
                     embed = discord.Embed(description="Du hast bereits einen Globalchat in deinem Server aktiv.\r\n",
                                           color=0xF44D4D)
