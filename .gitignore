@@ -4,3 +4,4 @@ venv/
 .env
 users.json
 servers.json
+.venv/
