@@ -7,6 +7,9 @@ import asyncio
 import aiomysql
 from typing import Literal
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 # Für slowmode und andere Interaktionen, die auf Nachrichtenteilen basieren
 slowmode = []
 slow_dm = []
@@ -33,18 +36,18 @@ class GlobalChatCog(commands.Cog):
                         if perms.embed_links and perms.attach_files and perms.external_emojis:
                             try:
                                 await channel.edit(slowmode_delay=5)
-                            except:
-                                pass
+                            except Exception as e:
+                                logging.error(f"Fehler beim Bearbeiten des Channels: {e}")
                             await channel.send(embed=embed)
                         else:
                             await channel.send(f'{author.name}: {content}')
                             await channel.send('Fehlende Rechte: `Nachrichten Senden`, `Links Einbetten`, `Dateien Anhängen`, `Externe Emojis verwenden`')
         try:
             await message.delete()
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Fehler beim Löschen der Nachricht: {e}")
 
-    async def sendAll(self, message: Message):
+    async def sendAll(self, message):
         users_data = await self.get_user_data()
         content = message.content
         author = message.author
@@ -86,8 +89,8 @@ class GlobalChatCog(commands.Cog):
                     await message.author.send(embed=discord.Embed(description='Du kannst nur eine Nachricht alle 5 Sekunden senden.', colour=0xFF0000))
                     await asyncio.sleep(2)
                     slow_dm.remove(message.author.id)
-            except:
-                pass
+            except Exception as e:
+                logging.error(f"Fehler beim Senden der DM: {e}")
         else:
             slowmode.append(message.author.id)
             await self.increment_user_level(message.author.id)
@@ -147,8 +150,9 @@ class GlobalChatCog(commands.Cog):
             return "Legend ⚡"
 
     @app_commands.command(name="globalchat")
-    async def globalchat(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten']):
+    async def globalchat(self, interaction: discord.Interaction, argument: str):
         """Richte unseren Globalchat für deinen Server ein."""
+        logging.debug(f"Argument für globalchat: {argument}")
         if argument == 'Einschalten':
             if interaction.user.guild_permissions.administrator:
                 if not await self.guild_exists(interaction.guild.id):
