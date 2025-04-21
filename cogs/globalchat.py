@@ -238,27 +238,38 @@ class globalchat(commands.Cog):
     @app_commands.describe(option="Wähle, ob du den Globalchat aktivieren oder deaktivieren möchtest.")
     async def globalchat_toggle(self, interaction: discord.Interaction, option: Literal["an", "aus"]):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("Du benötigst Administratorrechte, um diesen Befehl zu verwenden.", ephemeral=True)
+            await interaction.response.send_message("Du benötigst Administratorrechte, um diesen Befehl zu verwenden.",
+                                                    ephemeral=True)
             return
 
         guild_id = interaction.guild.id
         channel_id = interaction.channel.id
 
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                if option == "an":
-                    await cur.execute("SELECT * FROM gc_servers WHERE guildid = %s", (guild_id,))
-                    exists = await cur.fetchone()
-                    if exists:
-                        await cur.execute("UPDATE gc_servers SET channelid = %s WHERE guildid = %s", (channel_id, guild_id))
-                        await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.", ephemeral=True)
+        try:
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    if option == "an":
+                        await cur.execute("SELECT * FROM gc_servers WHERE guildid = %s", (guild_id,))
+                        exists = await cur.fetchone()
+                        if exists:
+                            await cur.execute("UPDATE gc_servers SET channelid = %s WHERE guildid = %s",
+                                              (channel_id, guild_id))
+                            await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
+                                                                    ephemeral=True)
+                        else:
+                            await cur.execute("INSERT INTO gc_servers (guildid, channelid) VALUES (%s, %s)",
+                                              (guild_id, channel_id))
+                            await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
+                                                                    ephemeral=True)
                     else:
-                        await cur.execute("INSERT INTO gc_servers (guildid, channelid) VALUES (%s, %s)", (guild_id, channel_id))
-                        await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.", ephemeral=True)
-                else:
-                    await cur.execute("DELETE FROM gc_servers WHERE guildid = %s AND channelid = %s", (guild_id, channel_id))
-                    await interaction.response.send_message("❌ Globalchat wurde in diesem Kanal **deaktiviert**.", ephemeral=True)
-
+                        await cur.execute("DELETE FROM gc_servers WHERE guildid = %s AND channelid = %s",
+                                          (guild_id, channel_id))
+                        await interaction.response.send_message("❌ Globalchat wurde in diesem Kanal **deaktiviert**.",
+                                                                ephemeral=True)
+        except Exception as e:
+            print(f"Fehler beim Deaktivieren/Aktivieren des Globalchats: {e}")
+            await interaction.response.send_message("Es gab ein Problem bei der Änderung des Globalchat-Status.",
+                                                    ephemeral=True)
 
 
 async def setup(bot):
