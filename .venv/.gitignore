@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-venv/
-.env
-users.json
-servers.json
