@@ -94,7 +94,7 @@ class globalchat(commands.Cog):
     async def send_all(self, embed, message):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT guildid, channelid FROM gc_servers")
+                await cur.execute("SELECT guild_id, channel_id FROM gc_servers")
                 rows = await cur.fetchall()
                 for guild_id, channel_id in rows:
                     guild = self.bot.get_guild(int(guild_id))
@@ -186,7 +186,7 @@ class globalchat(commands.Cog):
         if not msg.content.startswith("a!"):
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute("SELECT * FROM gc_servers WHERE guildid=%s AND channelid=%s", (msg.guild.id, msg.channel.id))
+                    await cur.execute("SELECT * FROM gc_servers WHERE guild_id=%s AND channel_id=%s", (msg.guild.id, msg.channel.id))
                     result = await cur.fetchone()
                     if result:
                         if not any(x in msg.content.casefold() for x in bad_words):
