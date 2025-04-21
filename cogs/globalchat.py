@@ -10,7 +10,6 @@ from typing import Literal
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('discord')
 
-
 bad_words = ['arsch', 'arschloch', 'wixer', 'wixxer', 'nigger', 'niggah', 'nigga', 'moor', 'ficken', 'gefickt', 'nudes',
              'nude', 'titten', 'vagina', 'penis', 'wagina', 'fotze', 'stripclub', 'nutte', 'nutten', 'orgasmus',
              'orgasm', 'sex toy', 'erotic', 'erotisch', 'dildo', 'doggie style', 'doggiestyle', 'doggy style',
@@ -269,18 +268,12 @@ class globalchat(commands.Cog):
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     if option == "an":
-                        await cur.execute("SELECT * FROM gc_servers WHERE guild_id = %s", (guild_id,))
-                        exists = await cur.fetchone()
-                        if exists:
-                            await cur.execute("UPDATE gc_servers SET channel_id = %s WHERE guild_id = %s",
-                                              (channel_id, guild_id))
-                            await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
-                                                                    ephemeral=True)
-                        else:
-                            await cur.execute("INSERT INTO gc_servers (guild_id, channel_id) VALUES (%s, %s)",
-                                              (guild_id, channel_id))
-                            await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
-                                                                    ephemeral=True)
+                        # Kanal erstellen und speichern
+                        new_channel = await interaction.guild.create_text_channel("globalchat")
+                        await cur.execute("INSERT INTO gc_servers (guild_id, channel_id) VALUES (%s, %s)",
+                                          (guild_id, new_channel.id))
+                        await interaction.response.send_message("✅ Globalchat wurde in diesem Kanal **aktiviert**.",
+                                                                ephemeral=True)
                     else:
                         await cur.execute("DELETE FROM gc_servers WHERE guild_id = %s AND channel_id = %s",
                                           (guild_id, channel_id))
@@ -290,7 +283,6 @@ class globalchat(commands.Cog):
             logger.error(f"Fehler beim Deaktivieren/Aktivieren des Globalchats: {e}")
             await interaction.response.send_message("Es gab ein Problem bei der Änderung des Globalchat-Status.",
                                                     ephemeral=True)
-
 
 async def setup(bot):
     await bot.add_cog(globalchat(bot))
