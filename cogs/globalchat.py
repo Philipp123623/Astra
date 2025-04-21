@@ -283,7 +283,7 @@ class globalchat(commands.Cog):
     async def globalban(ctx, member: discord.Member):
         users_data = await user_get_data()
         if await is_mod(ctx.author.id) or await is_owner(ctx.author.id):
-            if member.id != 679706007219339376 and member.id != ctx.author.id:
+            if member.id != 789555434201677824 and member.id != ctx.author.id:
                 await user_init_data(member.id)
                 users_data = await user_get_data()
                 users_data[str(member.id)]["banned"] = True
