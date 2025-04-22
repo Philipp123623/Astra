@@ -212,8 +212,8 @@ class globalchat(commands.Cog):
 
         links = f'<:Astra_user:1141303940365959241> [Invite](https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=1899359446&scope=bot%20applications.commands) ║ '
         globalchat = await get_globalChat(message.guild.id, self.bot.pool, message.channel.id)
-        if globalchat and len(globalchat[2]) > 0:
-            invite = globalchat[2] if 'discord.gg' in globalchat[2] else f'https://discord.gg/{globalchat[2]}'
+        if globalchat and globalchat[3]:  # Index 3 = invite
+            invite = globalchat[3] if 'discord.gg' in globalchat[3] else f'https://discord.gg/{globalchat[3]}'
             links += f'<:Astra_url:1141303937056657458>  [Server Invite]({invite})'
 
         embed.add_field(name='Links', value=links, inline=False)
@@ -243,7 +243,7 @@ class globalchat(commands.Cog):
         if msg.author.bot:
             return
 
-        if not msg.guild or msg.content.startswith("a!"):
+        if not msg.guild or msg.content.startswith("astra!"):
             return
 
         if await get_globalChat(msg.guild.id, self.bot.pool, msg.channel.id):
