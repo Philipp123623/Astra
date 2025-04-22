@@ -308,6 +308,61 @@ class globalchat(commands.Cog):
         await ctx.send(
             embed=discord.Embed(description=f'{member.mention} wurde zum Teammitglied ernannt!', colour=0x56F44D))
 
+    @commands.command(name="setlevel")
+    async def setlevel(self, ctx, member: discord.Member, level: int):
+        if not await is_owner(ctx.author.id):
+            await ctx.send(embed=discord.Embed(
+                description="Nur der Bot-Owner darf diesen Befehl verwenden.",
+                colour=0xF44D4D))
+            return
+
+        if level < 0:
+            await ctx.send(embed=discord.Embed(
+                description="Das Level muss positiv sein.",
+                colour=0xF44D4D))
+            return
+
+        await user_init_data(member.id, self.bot.pool)
+
+        # Punkte berechnen entsprechend deinem System
+        points = 0
+        step = 5
+        for l in range(1, level + 1):
+            if l <= 3:
+                step += 5
+            elif l <= 5:
+                step += 10
+            elif l <= 10:
+                step += 15
+            elif l <= 15:
+                step += 20
+            elif l <= 20:
+                step += 25
+            elif l <= 30:
+                step += 35
+            elif l <= 40:
+                step += 45
+            elif l <= 50:
+                step += 70
+            elif l <= 75:
+                step += 100
+            elif l <= 80:
+                step += 150
+            elif l <= 90:
+                step += 300
+            else:
+                step += 500
+            points = step
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("UPDATE gc_users SET lvl_points = %s WHERE id = %s", (points, member.id))
+                await conn.commit()
+
+        await ctx.send(embed=discord.Embed(
+            description=f'{member.mention} wurde auf Level {level} gesetzt!',
+            colour=0x56F44D))
+
     @commands.command(name="removestaff")
     async def removestaff(self, ctx, member: discord.Member):
         if not await is_owner(ctx.author.id):
