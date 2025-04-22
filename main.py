@@ -131,8 +131,6 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
-                await cur.execute("DROP TABLE IF EXISTS gc_users")
-                await cur.execute("DROP TABLE IF EXISTS gc_servers")
 
                 # Users-Tabelle erstellen
                 await cur.execute("""
