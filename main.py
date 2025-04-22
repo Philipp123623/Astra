@@ -154,15 +154,6 @@ class Astra(commands.Bot):
                 """)
 
 
-
-                await cur.execute("""
-                CREATE TABLE gc_servers (
-                guild_id BIGINT NOT NULL,
-                channel_id BIGINT NOT NULL,
-                PRIMARY KEY (guild_id, channel_id)
-            );
-                """)
-
                 await cur.execute("""
                     CREATE TABLE IF NOT EXISTS reactionrole_messages (
                         message_id BIGINT PRIMARY KEY,
