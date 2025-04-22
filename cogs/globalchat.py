@@ -199,17 +199,25 @@ class globalchat(commands.Cog):
                 embed.color = 0x1aecff
                 embed.set_author(name=f'💎 Legend - Level {author_lvl}', icon_url=icon)
 
-        if message.reference is not None and message.reference.cached_message:
-            replied = message.reference.cached_message
+        if message.reference and message.reference.cached_message:
+            replied_msg = message.reference.cached_message
 
-            author_name = replied.author.display_name
-            replied_text = replied.content or "*(Nachricht enthält nur Anhang oder Embed)*"
-            replied_text = replied_text[:80] + "..." if len(replied_text) > 80 else replied_text
-            replied_link = message.reference.jump_url
+            # Versuche, echte Nutzerdaten aus dem Embed zu holen
+            if replied_msg.embeds:
+                embed_ref = replied_msg.embeds[0]
+                replied_user = embed_ref.title or "Unbekannter Benutzer"
+                replied_text = embed_ref.description or "*(Kein Inhalt gefunden)*"
+            else:
+                # Fallback, falls kein Embed
+                replied_user = replied_msg.author.display_name
+                replied_text = replied_msg.content or "*(Nachricht enthält nur Anhang oder Embed)*"
+
+            if len(replied_text) > 100:
+                replied_text = replied_text[:100] + "..."
 
             embed.add_field(
-                name=f"🗨<:Astra_messages:1141303867850641488> Antwort auf {author_name}",
-                value=f"> {replied_text}\n[**⤷ Zur Originalnachricht**]({replied_link})",
+                name=f"<:Astra_messages:1141303867850641488> Antwort auf **{replied_user}**",
+                value=f"> {replied_text}\n[↪ Zur Originalnachricht]({message.reference.jump_url})",
                 inline=False
             )
 
