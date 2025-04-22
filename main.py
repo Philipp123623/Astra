@@ -143,6 +143,8 @@ class Astra(commands.Bot):
                 )
                 """)
 
+                await cur.execute("DROP TABLE gc_servers;")
+
                 # Servers-Tabelle erstellen
                 await cur.execute("""
                 CREATE TABLE IF NOT EXISTS gc_servers (
@@ -153,7 +155,6 @@ class Astra(commands.Bot):
                 )
                 """)
 
-                await cur.execute("DROP TABLE gc_servers;")
 
 
                 await cur.execute("""
