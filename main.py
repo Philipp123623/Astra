@@ -133,14 +133,24 @@ class Astra(commands.Bot):
                 # Tabellen erstellen
                 await cur.execute("DROP TABLE gc_users;")
 
+                # Users-Tabelle erstellen
                 await cur.execute("""
-                CREATE TABLE gc_users (
-                id BIGINT NOT NULL,
-                lvl_points INT DEFAULT 0,
-                team BOOLEAN DEFAULT FALSE,
-                banned BOOLEAN DEFAULT FALSE,
-                PRIMARY KEY (id)
-                );
+                CREATE TABLE IF NOT EXISTS gc_users (
+                    id BIGINT PRIMARY KEY,
+                    lvl_points INT NOT NULL DEFAULT 0,
+                    team BOOLEAN NOT NULL DEFAULT FALSE,
+                    banned BOOLEAN NOT NULL DEFAULT FALSE
+                )
+                """)
+
+                # Servers-Tabelle erstellen
+                await cur.execute("""
+                CREATE TABLE IF NOT EXISTS gc_servers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    guildid BIGINT NOT NULL,
+                    channelid BIGINT NOT NULL,
+                    invite VARCHAR(255)
+                )
                 """)
 
                 await cur.execute("DROP TABLE gc_servers;")
