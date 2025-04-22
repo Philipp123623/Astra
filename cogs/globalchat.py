@@ -199,11 +199,19 @@ class globalchat(commands.Cog):
                 embed.color = 0x1aecff
                 embed.set_author(name=f'💎 Legend - Level {author_lvl}', icon_url=icon)
 
-        if message.reference is not None:
+        if message.reference is not None and message.reference.cached_message:
+            replied = message.reference.cached_message
+
+            author_name = replied.author.display_name
+            replied_text = replied.content or "*(Nachricht enthält nur Anhang oder Embed)*"
+            replied_text = replied_text[:80] + "..." if len(replied_text) > 80 else replied_text
+            replied_link = message.reference.jump_url
+
             embed.add_field(
-                name=f'<:Astra_messages:1141303867850641488> Antwortete auf: ``{message.reference.cached_message.embeds[0].title}``',
-                value=f'> {message.reference.cached_message.embeds[0].description} - [**Nachricht**]({message.reference.jump_url}).',
-                inline=False)
+                name=f"🗨<:Astra_messages:1141303867850641488> Antwort auf {author_name}",
+                value=f"> {replied_text}\n[**⤷ Zur Originalnachricht**]({replied_link})",
+                inline=False
+            )
 
         icon_url = message.guild.icon.url if message.guild.icon else "https://cdn.icon-icons.com/icons2/2108/PNG/512/discord_icon_130958.png"
         embed.set_thumbnail(url=icon_url)
