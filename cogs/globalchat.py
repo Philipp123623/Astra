@@ -177,6 +177,7 @@ class globalchat(commands.Cog):
 
         if users_data[str(message.author.id)]["team"] == True:
             embed.set_author(name=f'🛠 Staff - Level {author_lvl}', icon_url=icon)
+            embed.color = 0x1ABC9C
         else:
             level = int(author_lvl)
             if 1 < level < 5:
