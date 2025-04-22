@@ -238,6 +238,42 @@ class globalchat(commands.Cog):
             await asyncio.sleep(5)
             slowmode.remove(author.id)
 
+    @commands.Cog.listener()
+    async def on_message(self, msg):
+        if msg.author.bot:
+            return
+
+        if not msg.guild or msg.content.startswith("a!"):
+            return
+
+        if await get_globalChat(msg.guild.id, self.bot.pool, msg.channel.id):
+            if not any(x in msg.content.casefold() for x in bad_words):
+                author_id = msg.author.id
+                await user_init_data(author_id, self.bot.pool)
+                if not await is_banned(author_id, self.bot.pool):
+                    await self.sendAll(msg)
+                    return
+                else:
+                    await msg.delete()
+                    if msg.author.id not in slow_dm:
+                        info_msg = discord.Embed(
+                            description=f'{msg.author.mention} du bist gebannt und kannst den Globalchat nicht mehr nutzen.\n--> [Support Server](https://discord.gg/vwh2raq2Xu)',
+                            colour=0xF44D4D)
+                        await msg.author.send(embed=info_msg)
+                        slow_dm.append(msg.author.id)
+                        await asyncio.sleep(2)
+                        slow_dm.remove(msg.author.id)
+            else:
+                try:
+                    await msg.delete()
+                except:
+                    pass
+                try:
+                    await msg.author.send(
+                        embed=discord.Embed(description='Bitte drücke dich ordentlich aus!', colour=0xF44D4D))
+                except:
+                    pass
+
     @commands.command(name="globalban")
     async def globalban(self, ctx, member: discord.Member):
         if not await is_mod(ctx.author.id, self.bot.pool):
