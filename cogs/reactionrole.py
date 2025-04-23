@@ -4,6 +4,7 @@ from discord import app_commands, ui, Interaction
 from typing import List, Literal
 import aiomysql
 import re
+from discord.ui import RoleSelect as NativeRoleSelect
 
 class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
     label_input = ui.TextInput(label="Anzeigename für die Rolle", required=True)
@@ -57,43 +58,38 @@ class RoleSelectView(ui.View):
         self.embed.set_footer(text="Reaction Roles Setup")
         self.style = style
         self.embed_data = None
-        self.select = RoleSelect(roles, self)
+
+        # ✨ Nutze natives RoleSelect-Menü
+        self.select = NativeRoleSelect(placeholder="Wähle eine Rolle aus", min_values=1, max_values=1, custom_id="native_role_select")
+        self.select.callback = self.select_callback
         self.add_item(self.select)
+
         self.add_item(SaveButton())
         self.add_item(CancelButton())
 
-class RoleSelect(ui.Select):
-    def __init__(self, roles: List[discord.Role], parent: RoleSelectView):
-        self.parent_view = parent
-        options = [
-            discord.SelectOption(label=role.name, value=str(role.id))
-            for role in roles if not role.managed and role.name != "@everyone"
-        ][:25]
-        super().__init__(placeholder="Wähle eine Rolle aus", options=options, min_values=1, max_values=1)
-
-    async def callback(self, interaction: Interaction):
-        role_id = int(self.values[0])
+    async def select_callback(self, interaction: Interaction):
+        role_id = int(interaction.data["values"][0])
         role = interaction.guild.get_role(role_id)
 
-        existing = next((r for r in self.parent_view.role_data if r["role_id"] == role_id), None)
+        existing = next((r for r in self.role_data if r["role_id"] == role_id), None)
         if existing:
-            self.parent_view.role_data.remove(existing)
-            self.parent_view.selected.remove(role_id)
+            self.role_data.remove(existing)
+            self.selected.remove(role_id)
         else:
             modal = RoleConfigModal(role)
             await interaction.response.send_modal(modal)
             await modal.wait()
-            self.parent_view.role_data.append(modal.result)
-            self.parent_view.selected.append(role_id)
+            self.role_data.append(modal.result)
+            self.selected.append(role_id)
 
-        self.parent_view.embed.clear_fields()
-        for r in self.parent_view.role_data:
-            self.parent_view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>", inline=False)
+        self.embed.clear_fields()
+        for r in self.role_data:
+            self.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>", inline=False)
 
-        if self.parent_view.embed_message is None:
-            self.parent_view.embed_message = await interaction.followup.send(embed=self.parent_view.embed, view=self.parent_view, ephemeral=True)
+        if self.embed_message is None:
+            self.embed_message = await interaction.followup.send(embed=self.embed, view=self, ephemeral=True)
         else:
-            await self.parent_view.embed_message.edit(embed=self.parent_view.embed, view=self.parent_view)
+            await self.embed_message.edit(embed=self.embed, view=self)
 
 class SaveButton(ui.Button):
     def __init__(self):
