@@ -1,154 +1,191 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui, Interaction
-from typing import List, Literal, Optional
+from typing import List, Optional, Literal
+import aiomysql
 
+class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
+    label_input = ui.TextInput(label="Anzeigename für die Rolle", required=True)
+    emoji_input = ui.TextInput(label="Emoji (Standard oder benutzerdefiniert)", required=False)
 
-class EmbedModal(ui.Modal, title="Embed Konfiguration"):
-    title_input = ui.TextInput(label="Titel", required=True, max_length=256)
-    description_input = ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph, required=True)
-    color_input = ui.TextInput(label="Farbe (Hex, z.B. #ff0000)", required=False)
-
-    def __init__(self):
+    def __init__(self, role: discord.Role):
         super().__init__()
+        self.role = role
 
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        self.embed_data = {
-            "title": self.title_input.value,
-            "description": self.description_input.value,
-            "color": self.color_input.value.lstrip("#") if self.color_input.value else "2F3136"
+    async def on_submit(self, interaction: Interaction):
+        self.result = {
+            "role_id": self.role.id,
+            "label": self.label_input.value,
+            "emoji": self.emoji_input.value or None
         }
+        await interaction.response.defer()
         self.stop()
 
+class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
+    title = ui.TextInput(label="Embed Titel", max_length=256, required=True)
+    description = ui.TextInput(label="Embed Beschreibung", style=discord.TextStyle.paragraph, required=True)
+    color = ui.TextInput(label="Farbe (Hex, optional)", required=False)
+    thumbnail = ui.TextInput(label="Thumbnail URL (optional)", required=False)
+    image = ui.TextInput(label="Image URL (optional)", required=False)
+
+    async def on_submit(self, interaction: Interaction):
+        self.embed_data = {
+            "title": self.title.value,
+            "description": self.description.value,
+            "color": int(self.color.value.lstrip('#'), 16) if self.color.value else 0x2F3136,
+            "thumbnail": self.thumbnail.value,
+            "image": self.image.value
+        }
+        await interaction.response.defer()
+        self.stop()
+
+class RoleSelectView(ui.View):
+    def __init__(self, ctx: discord.Interaction, roles: List[discord.Role]):
+        super().__init__(timeout=None)
+        self.ctx = ctx
+        self.roles = roles
+        self.selected = []
+        self.role_data = []
+        self.add_item(RoleSelect(roles))
 
 class RoleSelect(ui.Select):
     def __init__(self, roles: List[discord.Role]):
-        options = [discord.SelectOption(label=role.name, value=str(role.id)) for role in roles if not role.managed][:8]
-        super().__init__(placeholder="Wähle Rollen für die Reaction Role aus...", min_values=1, max_values=len(options), options=options)
+        options = [discord.SelectOption(label=role.name, value=str(role.id)) for role in roles if not role.managed and role.name != "@everyone"]
+        super().__init__(placeholder="Wähle eine Rolle aus", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: Interaction):
-        self.view.selected_roles = [int(value) for value in self.values]
-        await interaction.response.defer()
-        self.view.stop()
+        role_id = int(self.values[0])
+        role = interaction.guild.get_role(role_id)
+        modal = RoleConfigModal(role)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
 
+        self.view.role_data.append(modal.result)
+        self.view.selected.append(role_id)
 
-class RoleSelectView(ui.View):
-    def __init__(self, roles: List[discord.Role]):
-        super().__init__(timeout=60)
-        self.selected_roles = []
-        self.add_item(RoleSelect(roles))
-
-
-class ReactionViewButton(ui.View):
-    def __init__(self, bot: commands.Bot, role_data: List[tuple]):
-        super().__init__(timeout=None)
-        self.bot = bot
-        for role_id, label, emoji in role_data:
-            self.add_item(ReactionButton(role_id, label, emoji))
-
-
-class ReactionButton(ui.Button):
-    def __init__(self, role_id: int, label: str, emoji: Optional[str]):
-        super().__init__(label=label, emoji=emoji or None, style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{role_id}")
-        self.role_id = role_id
-
-    async def callback(self, interaction: discord.Interaction):
-        role = interaction.guild.get_role(self.role_id)
-        if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"Rolle {role.name} entfernt.", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"Rolle {role.name} vergeben.", ephemeral=True)
-
-
-class ReactionViewSelect(ui.View):
-    def __init__(self, bot: commands.Bot, role_data: List[tuple]):
-        super().__init__(timeout=None)
-        self.bot = bot
-        options = [discord.SelectOption(label=label, value=str(role_id), emoji=emoji or None) for role_id, label, emoji in role_data]
-        self.add_item(ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select"))
-
-    @ui.select(custom_id="reactionrole_select")
-    async def select_callback(self, select: ui.Select, interaction: discord.Interaction):
-        selected_id = int(select.values[0])
-        role = interaction.guild.get_role(selected_id)
-        if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"Rolle {role.name} entfernt.", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"Rolle {role.name} vergeben.", ephemeral=True)
-
+        content = "**Aktuelle Rollen:**\n" + "\n".join([f"{r['emoji'] or ''} {r['label']} (<@&{r['role_id']}>)" for r in self.view.role_data])
+        await interaction.edit_original_response(content=content, view=self.view)
 
 class ReactionRole(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="reactionrole")
-    @app_commands.checks.has_permissions(manage_roles=True)
-    async def reactionrole(
-        self,
-        interaction: discord.Interaction,
-        style: Literal["Button", "Select"]
-    ):
-        """Erstellt eine Reaction Role Nachricht."""
-        await interaction.response.send_modal(EmbedModal())
-        modal: EmbedModal = await interaction.client.wait_for("modal_submit", check=lambda i: i.user == interaction.user and i.custom_id == "Embed Konfiguration")
+    @app_commands.command(name="reactionrole", description="Erstellt eine Reaction Role Nachricht")
+    @app_commands.choices(style=[
+        app_commands.Choice(name="Buttons", value="buttons"),
+        app_commands.Choice(name="Select Menü", value="select")
+    ])
+    async def reactionrole(self, interaction: Interaction, style: app_commands.Choice[str]):
+        roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
+        view = RoleSelectView(interaction, roles)
+        await interaction.response.send_message(content="Wähle Rollen für deine Reaktionsrollen aus.", view=view, ephemeral=True)
+        await view.wait()
 
-        embed_data = modal.embed_data
-        color = int(embed_data["color"], 16)
-        embed = discord.Embed(title=embed_data["title"], description=embed_data["description"], color=color)
+        final_modal = FinalEmbedModal()
+        await interaction.followup.send_modal(final_modal)
+        await final_modal.wait()
 
-        # Rollen Auswahl
-        role_view = RoleSelectView(interaction.guild.roles)
-        await interaction.followup.send("Wähle bis zu 8 Rollen für die Reaction Role:", view=role_view, ephemeral=True)
-        await role_view.wait()
+        embed_data = final_modal.embed_data
+        embed = discord.Embed(title=embed_data['title'], description=embed_data['description'], color=embed_data['color'])
+        if embed_data['thumbnail']:
+            embed.set_thumbnail(url=embed_data['thumbnail'])
+        if embed_data['image']:
+            embed.set_image(url=embed_data['image'])
 
-        if not role_view.selected_roles:
-            return await interaction.followup.send("Keine Rollen ausgewählt.", ephemeral=True)
+        role_data = view.role_data
+        if style.value == "buttons":
+            view_final = ui.View(timeout=None)
+            for r in role_data:
+                btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{r['role_id']}")
+                async def callback(i: Interaction, rid=r['role_id']):
+                    role = i.guild.get_role(rid)
+                    if role in i.user.roles:
+                        await i.user.remove_roles(role)
+                        await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                    else:
+                        await i.user.add_roles(role)
+                        await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                btn.callback = callback
+                view_final.add_item(btn)
+        else:
+            options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
+            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
 
-        # Emoji Abfrage
-        role_data = []
-        for role_id in role_view.selected_roles:
-            role = interaction.guild.get_role(role_id)
-            await interaction.followup.send(f"Gib ein Emoji für **{role.name}** ein (oder `skip`):", ephemeral=True)
-            msg = await self.bot.wait_for("message", check=lambda m: m.author == interaction.user and m.channel == interaction.channel)
-            emoji = None if msg.content.lower() == "skip" else msg.content
-            role_data.append((role.id, role.name, emoji))
+            async def select_callback(i: Interaction):
+                rid = int(select.values[0])
+                role = i.guild.get_role(rid)
+                if role in i.user.roles:
+                    await i.user.remove_roles(role)
+                    await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                else:
+                    await i.user.add_roles(role)
+                    await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+            select.callback = select_callback
+            view_final = ui.View(timeout=None)
+            view_final.add_item(select)
 
-        # Nachricht senden
-        view = ReactionViewButton(self.bot, role_data) if style == "Button" else ReactionViewSelect(self.bot, role_data)
-        message = await interaction.channel.send(embed=embed, view=view)
+        final_message = await interaction.channel.send(embed=embed, view=view_final)
 
-        # In DB speichern
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "INSERT INTO reactionrole_messages (message_id, guild_id, channel_id, style, embed_title, embed_description, embed_color) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (message.id, interaction.guild.id, interaction.channel.id, style, embed.title, embed.description, embed.color.value)
-                )
-                for role_id, label, emoji in role_data:
-                    await cursor.execute(
-                        "INSERT INTO reactionrole_entries (message_id, role_id, label, emoji) VALUES (%s, %s, %s, %s)",
-                        (message.id, role_id, label, emoji)
-                    )
+                await cursor.execute("""
+                INSERT INTO reactionrole_messages (message_id, guild_id, channel_id, style, embed_title, embed_description, embed_color, embed_image, embed_thumbnail)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    final_message.id,
+                    interaction.guild.id,
+                    interaction.channel.id,
+                    style.value,
+                    embed.title,
+                    embed.description,
+                    hex(embed.color.value)[2:],
+                    embed_data['image'],
+                    embed_data['thumbnail']
+                ))
+                for r in role_data:
+                    await cursor.execute("""
+                    INSERT INTO reactionrole_entries (message_id, role_id, label, emoji)
+                    VALUES (%s, %s, %s, %s)
+                    """, (final_message.id, r['role_id'], r['label'], r['emoji']))
 
-    # Persistent Views beim Bot-Start laden
     @commands.Cog.listener()
     async def on_ready(self):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("SELECT message_id, style FROM reactionrole_messages")
-                messages = await cursor.fetchall()
-                for msg_id, style in messages:
+                for msg_id, style in await cursor.fetchall():
                     await cursor.execute("SELECT role_id, label, emoji FROM reactionrole_entries WHERE message_id = %s", (msg_id,))
                     role_data = await cursor.fetchall()
-                    view = ReactionViewButton(self.bot, role_data) if style == "Button" else ReactionViewSelect(self.bot, role_data)
+                    view = ui.View(timeout=None)
+                    if style == "buttons":
+                        for rid, label, emoji in role_data:
+                            btn = ui.Button(label=label, emoji=emoji, style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{rid}")
+                            async def callback(i: Interaction, rid=rid):
+                                role = i.guild.get_role(rid)
+                                if role in i.user.roles:
+                                    await i.user.remove_roles(role)
+                                    await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                                else:
+                                    await i.user.add_roles(role)
+                                    await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                            btn.callback = callback
+                            view.add_item(btn)
+                    else:
+                        options = [discord.SelectOption(label=label, emoji=emoji, value=str(rid)) for rid, label, emoji in role_data]
+                        select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
+
+                        async def select_callback(i: Interaction):
+                            rid = int(select.values[0])
+                            role = i.guild.get_role(rid)
+                            if role in i.user.roles:
+                                await i.user.remove_roles(role)
+                                await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                            else:
+                                await i.user.add_roles(role)
+                                await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                        select.callback = select_callback
+                        view.add_item(select)
                     self.bot.add_view(view, message_id=msg_id)
 
-
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(ReactionRole(bot))

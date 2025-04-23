@@ -132,6 +132,35 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
+                await cur.execute("DROP TABLE reactionrole;")
+
+                # Reaction Role Nachricht mit Bezug auf den Server (guild_id)
+                await cur.execute("""
+                CREATE TABLE IF NOT EXISTS reactionrole_messages (
+                    message_id BIGINT PRIMARY KEY,
+                    guild_id BIGINT NOT NULL,
+                    channel_id BIGINT NOT NULL,
+                    style VARCHAR(10) NOT NULL,
+                    embed_title VARCHAR(256) NOT NULL,
+                    embed_description TEXT NOT NULL,
+                    embed_color VARCHAR(6) NOT NULL,
+                    embed_image TEXT,
+                    embed_thumbnail TEXT
+                )
+                """)
+
+                # Einzelne Reaktionsrollen, pro Nachricht – keine Änderung nötig, aber hier zur Vollständigkeit:
+                await cur.execute("""
+                CREATE TABLE IF NOT EXISTS reactionrole_entries (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    message_id BIGINT NOT NULL,
+                    role_id BIGINT NOT NULL,
+                    label VARCHAR(100) NOT NULL,
+                    emoji VARCHAR(100),
+                    FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE
+                )
+                """)
+
                 # Users-Tabelle erstellen
                 await cur.execute("""
                 CREATE TABLE IF NOT EXISTS gc_users (
@@ -250,8 +279,6 @@ class Astra(commands.Bot):
                     "CREATE TABLE IF NOT EXISTS afk(guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS autoreact(guildID BIGINT, channelID BIGINT, emoji TEXT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS blacklist(serverID BIGINT, word TEXT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS reactionrole (guild_id BIGINT, emoji TEXT, msg_id BIGINT, role_id BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS botrole(roleID BIGINT, guildID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS joinrole(roleID BIGINT, guildID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS capslock(guildID BIGINT, percent BIGINT)")
