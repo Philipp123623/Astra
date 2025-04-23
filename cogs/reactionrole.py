@@ -91,7 +91,7 @@ class RoleSelect(ui.Select):
 
 class SaveButton(ui.Button):
     def __init__(self):
-        super().__init__(label="Fertig", style=discord.ButtonStyle.green, emoji="<:Astra_accept:1141303821176422460>")
+        super().__init__(label="Fertig", style=discord.ButtonStyle.green, emoji="<:Astra_accept:1141303821176422460>", custom_id="save_button")
 
     async def callback(self, interaction: Interaction):
         final_modal = FinalEmbedModal()
@@ -103,7 +103,7 @@ class SaveButton(ui.Button):
 
 class CancelButton(ui.Button):
     def __init__(self):
-        super().__init__(label="Abbrechen", style=discord.ButtonStyle.danger, emoji="<:Astra_x:1141303954555289600>")
+        super().__init__(label="Abbrechen", style=discord.ButtonStyle.danger, emoji="<:Astra_x:1141303954555289600>", custom_id="cancel_button")
 
     async def callback(self, interaction: Interaction):
         await interaction.response.send_message("<:Astra_x:1141303954555289600> Reaktionsrollen-Setup abgebrochen.", ephemeral=True)
@@ -127,14 +127,14 @@ class ReactionRole(commands.Cog):
                     await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
             return callback
 
-        if style == "buttons":
+        if style.lower() in ["buttons", "button"]:
             for r in role_data:
-                btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary)
+                btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"role_button_{r['role_id']}")
                 btn.callback = make_button_callback(r['role_id'])
                 view.add_item(btn)
         else:
             options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
-            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options)
+            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
 
             async def select_callback(i: Interaction):
                 selected = [int(v) for v in select.values]
