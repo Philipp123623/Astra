@@ -50,7 +50,10 @@ class RoleSelectView(ui.View):
 
 class RoleSelect(ui.Select):
     def __init__(self, roles: List[discord.Role]):
-        options = [discord.SelectOption(label=role.name, value=str(role.id)) for role in roles if not role.managed and role.name != "@everyone"]
+        options = [
+                      discord.SelectOption(label=role.name, value=str(role.id))
+                      for role in roles if not role.managed and role.name != "@everyone"
+                  ][:25]  # 🔧 HIER wird auf max. 25 Rollen begrenzt
         super().__init__(placeholder="Wähle eine Rolle aus", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: Interaction):
