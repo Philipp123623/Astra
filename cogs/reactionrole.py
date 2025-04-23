@@ -79,7 +79,7 @@ class RoleSelect(ui.Select):
 
         self.parent_view.embed.clear_fields()
         for r in self.parent_view.role_data:
-            self.parent_view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>\nID: `{r['role_id']}`", inline=False)
+            self.parent_view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>", inline=False)
 
         if self.parent_view.embed_message is None:
             self.parent_view.embed_message = await interaction.followup.send(embed=self.parent_view.embed, view=self.parent_view, ephemeral=True)
@@ -113,6 +113,7 @@ class ReactionRole(commands.Cog):
     async def reactionrole(self, interaction: Interaction, style: Literal["buttons", "select"]):
         roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
         view = RoleSelectView(interaction, roles)
+        view.style = style  # Speichert den Stil
         await interaction.response.send_message("Wähle Rollen für deine Reaktionsrollen aus.", view=view, ephemeral=True)
         await view.wait()
 
@@ -142,7 +143,7 @@ class ReactionRole(commands.Cog):
                         await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
                 btn.callback = callback
                 view_final.add_item(btn)
-        else:
+        elif style == "select":
             options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
             select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
             async def select_callback(i: Interaction):
