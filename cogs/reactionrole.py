@@ -131,19 +131,21 @@ class ReactionRole(commands.Cog):
         role_data = view.role_data
         view_final = ui.View(timeout=None)
 
+        def make_button_callback(rid):
+            async def callback(i: Interaction):
+                role = i.guild.get_role(rid)
+                if role in i.user.roles:
+                    await i.user.remove_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
+                else:
+                    await i.user.add_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
+            return callback
+
         if style == "buttons":
             for r in role_data:
                 btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{r['role_id']}")
-
-                async def callback(i: Interaction, rid=r['role_id']):
-                    role = i.guild.get_role(rid)
-                    if role in i.user.roles:
-                        await i.user.remove_roles(role)
-                        await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                    else:
-                        await i.user.add_roles(role)
-                        await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
-                btn.callback = callback
+                btn.callback = make_button_callback(r['role_id'])
                 view_final.add_item(btn)
 
         elif style == "select":
