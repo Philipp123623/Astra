@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands, ui, Interaction
 from typing import List, Literal
 import aiomysql
+import re
 
 class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
     label_input = ui.TextInput(label="Anzeigename für die Rolle", required=True)
@@ -20,6 +21,11 @@ class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
         }
         await interaction.response.defer()
         self.stop()
+
+def is_valid_emoji(emoji: str):
+    custom_emoji_pattern = re.compile(r'<a?:[a-zA-Z0-9_~]+:[0-9]+>')
+    standard_emoji_pattern = re.compile(r'^[#-9©® -㌀ἀ0-ᾟF]+$')
+    return custom_emoji_pattern.match(emoji) or standard_emoji_pattern.match(emoji)
 
 class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
     title_input = ui.TextInput(label="Embed Titel", max_length=256, required=True)
@@ -133,14 +139,18 @@ class ReactionRole(commands.Cog):
                 btn.callback = make_button_callback(r['role_id'])
                 view.add_item(btn)
         else:
-            options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
-            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
+            options = []
+            for r in role_data:
+                emoji = r['emoji'] if r['emoji'] and is_valid_emoji(r['emoji']) else None
+                options.append(discord.SelectOption(label=r['label'], value=str(r['role_id']), emoji=emoji))
+
+            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select", min_values=0, max_values=len(options))
 
             async def select_callback(i: Interaction):
                 selected = [int(v) for v in select.values]
                 added, removed = [], []
-                for opt in options:
-                    rid = int(opt.value)
+                for option in options:
+                    rid = int(option.value)
                     role = i.guild.get_role(rid)
                     if role in i.user.roles and rid not in selected:
                         await i.user.remove_roles(role)
