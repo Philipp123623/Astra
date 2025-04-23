@@ -113,6 +113,44 @@ class ReactionRole(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    async def setup_persistent_view(self, message_id, role_data, style):
+        view = ui.View(timeout=None)
+
+        def make_button_callback(rid):
+            async def callback(i: Interaction):
+                role = i.guild.get_role(rid)
+                if role in i.user.roles:
+                    await i.user.remove_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
+                else:
+                    await i.user.add_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
+            return callback
+
+        if style == "buttons":
+            for r in role_data:
+                btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary)
+                btn.callback = make_button_callback(r['role_id'])
+                view.add_item(btn)
+        else:
+            options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
+            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
+
+            async def select_callback(i: Interaction):
+                rid = int(select.values[0])
+                role = i.guild.get_role(rid)
+                if role in i.user.roles:
+                    await i.user.remove_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
+                else:
+                    await i.user.add_roles(role)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
+
+            select.callback = select_callback
+            view.add_item(select)
+
+        self.bot.add_view(view, message_id=message_id)
+
     @app_commands.command(name="reactionrole", description="Erstellt eine Reaction Role Nachricht")
     async def reactionrole(self, interaction: Interaction, style: Literal["buttons", "select"]):
         roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
@@ -131,55 +169,9 @@ class ReactionRole(commands.Cog):
             embed.set_image(url=embed_data['image'])
 
         role_data = view.role_data
-        view_final = ui.View(timeout=None)
+        msg = await interaction.channel.send(embed=embed)  # View wird gleich registriert
 
-        def make_button_callback(rid):
-            async def callback(i: Interaction):
-                role = i.guild.get_role(rid)
-                if role in i.user.roles:
-                    await i.user.remove_roles(role)
-                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                else:
-                    await i.user.add_roles(role)
-                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
-            return callback
-
-        if style == "buttons":
-            for r in role_data:
-                btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{r['role_id']}")
-                btn.callback = make_button_callback(r['role_id'])
-                view_final.add_item(btn)
-
-        elif style == "select":
-            options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
-            select = ui.Select(placeholder="Wähle deine Rollen aus...", options=options, custom_id="reactionrole_select", min_values=1, max_values=len(options))
-
-            async def select_callback(i: Interaction):
-                added = []
-                removed = []
-                current_roles = [int(v) for v in select.values]
-
-                for opt in options:
-                    rid = int(opt.value)
-                    role = i.guild.get_role(rid)
-                    if role in i.user.roles and rid not in current_roles:
-                        await i.user.remove_roles(role)
-                        removed.append(role.name)
-                    elif role not in i.user.roles and rid in current_roles:
-                        await i.user.add_roles(role)
-                        added.append(role.name)
-
-                msg = ""
-                if added:
-                    msg += f"<:Astra_accept:1141303821176422460> Rollen vergeben: {', '.join(added)}\n"
-                if removed:
-                    msg += f"<:Astra_x:1141303954555289600> Rollen entfernt: {', '.join(removed)}"
-                await i.response.send_message(msg, ephemeral=True)
-
-            select.callback = select_callback
-            view_final.add_item(select)
-
-        msg = await interaction.channel.send(embed=embed, view=view_final)
+        await self.setup_persistent_view(msg.id, role_data, style)
 
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cursor:
@@ -217,39 +209,11 @@ class ReactionRole(commands.Cog):
                 await cursor.execute("SELECT message_id, style FROM reactionrole_messages")
                 for msg_id, style in await cursor.fetchall():
                     await cursor.execute("SELECT role_id, label, emoji FROM reactionrole_entries WHERE message_id = %s", (msg_id,))
-                    role_data = await cursor.fetchall()
-                    view = ui.View(timeout=None)
-                    def make_button_callback(rid):
-                        async def callback(i: Interaction):
-                            role = i.guild.get_role(rid)
-                            if role in i.user.roles:
-                                await i.user.remove_roles(role)
-                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                            else:
-                                await i.user.add_roles(role)
-                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
-                        return callback
-
-                    if style == "buttons":
-                        for rid, label, emoji in role_data:
-                            btn = ui.Button(label=label, emoji=emoji, style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{rid}")
-                            btn.callback = make_button_callback(rid)
-                            view.add_item(btn)
-                    else:
-                        options = [discord.SelectOption(label=label, emoji=emoji, value=str(rid)) for rid, label, emoji in role_data]
-                        select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
-                        async def select_callback(i: Interaction):
-                            rid = int(select.values[0])
-                            role = i.guild.get_role(rid)
-                            if role in i.user.roles:
-                                await i.user.remove_roles(role)
-                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                            else:
-                                await i.user.add_roles(role)
-                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
-                        select.callback = select_callback
-                        view.add_item(select)
-                    self.bot.add_view(view, message_id=msg_id)
+                    role_data = [
+                        {"role_id": rid, "label": label, "emoji": emoji}
+                        for rid, label, emoji in await cursor.fetchall()
+                    ]
+                    await self.setup_persistent_view(msg_id, role_data, style)
 
 async def setup(bot):
     await bot.add_cog(ReactionRole(bot))
