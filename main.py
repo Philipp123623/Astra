@@ -132,8 +132,8 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
-                await cur.execute("DROP TABLE IF EXISTS reactionrole_messages;")
-                await cur.execute("DROP TABLE IF EXISTS reactionrole_entries;")
+                await cur.execute("DROP TABLE IF EXISTS reactionrole_entries")
+                await cur.execute("DROP TABLE IF EXISTS reactionrole_messages")
 
                 # Reaction Role Nachricht mit Bezug auf den Server (guild_id)
                 await cur.execute("""
