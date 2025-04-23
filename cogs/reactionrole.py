@@ -149,15 +149,17 @@ class ReactionRole(commands.Cog):
             async def select_callback(i: Interaction):
                 selected = [int(v) for v in select.values]
                 added, removed = [], []
+                user_roles = [r.id for r in i.user.roles]
+
                 for option in options:
                     rid = int(option.value)
                     role = i.guild.get_role(rid)
-                    if role in i.user.roles and rid not in selected:
-                        await i.user.remove_roles(role)
-                        removed.append(role.name)
-                    elif role not in i.user.roles and rid in selected:
+                    if rid in selected and rid not in user_roles:
                         await i.user.add_roles(role)
                         added.append(role.name)
+                    elif rid not in selected and rid in user_roles:
+                        await i.user.remove_roles(role)
+                        removed.append(role.name)
                 msg = []
                 if added:
                     msg.append(f"<:Astra_accept:1141303821176422460> Rollen vergeben: {', '.join(added)}")
