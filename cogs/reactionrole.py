@@ -1,8 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, ui, Interaction
-from typing import List, Optional, Literal
-import aiomysql
+from typing import List, Literal
 
 class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
     label_input = ui.TextInput(label="Anzeigename für die Rolle", required=True)
@@ -49,12 +48,14 @@ class RoleSelectView(ui.View):
         self.embed_message = None
         self.embed = discord.Embed(title="Reaktionsrollen Setup", description="Füge Rollen über das Select-Menü hinzu oder entferne sie durch erneute Auswahl.", color=discord.Color.blue())
         self.embed.set_footer(text="Reaction Roles Setup")
-        self.add_item(RoleSelect(roles))
+        self.select = RoleSelect(roles, self)
+        self.add_item(self.select)
         self.add_item(SaveButton())
         self.add_item(CancelButton())
 
 class RoleSelect(ui.Select):
-    def __init__(self, roles: List[discord.Role]):
+    def __init__(self, roles: List[discord.Role], parent: RoleSelectView):
+        self.parent_view = parent
         options = [
             discord.SelectOption(label=role.name, value=str(role.id))
             for role in roles if not role.managed and role.name != "@everyone"
@@ -65,25 +66,25 @@ class RoleSelect(ui.Select):
         role_id = int(self.values[0])
         role = interaction.guild.get_role(role_id)
 
-        existing = next((r for r in self.view.role_data if r["role_id"] == role_id), None)
+        existing = next((r for r in self.parent_view.role_data if r["role_id"] == role_id), None)
         if existing:
-            self.view.role_data.remove(existing)
-            self.view.selected.remove(role_id)
+            self.parent_view.role_data.remove(existing)
+            self.parent_view.selected.remove(role_id)
         else:
             modal = RoleConfigModal(role)
             await interaction.response.send_modal(modal)
             await modal.wait()
-            self.view.role_data.append(modal.result)
-            self.view.selected.append(role_id)
+            self.parent_view.role_data.append(modal.result)
+            self.parent_view.selected.append(role_id)
 
-        self.view.embed.clear_fields()
-        for r in self.view.role_data:
-            self.view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>\nID: `{r['role_id']}`", inline=False)
+        self.parent_view.embed.clear_fields()
+        for r in self.parent_view.role_data:
+            self.parent_view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>\nID: `{r['role_id']}`", inline=False)
 
-        if self.view.embed_message is None:
-            self.view.embed_message = await interaction.followup.send(embed=self.view.embed, view=self.view, ephemeral=True)
+        if self.parent_view.embed_message is None:
+            self.parent_view.embed_message = await interaction.followup.send(embed=self.parent_view.embed, view=self.parent_view, ephemeral=True)
         else:
-            await self.view.embed_message.edit(embed=self.view.embed, view=self.view)
+            await self.parent_view.embed_message.edit(embed=self.parent_view.embed, view=self.parent_view)
 
 class SaveButton(ui.Button):
     def __init__(self):
@@ -156,30 +157,8 @@ class ReactionRole(commands.Cog):
             select.callback = select_callback
             view_final.add_item(select)
 
-        final_message = await interaction.channel.send(embed=embed, view=view_final)
+        await interaction.channel.send(embed=embed, view=view_final)
 
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                embed_color = hex(embed.color.value)[2:] if isinstance(embed.color, discord.Colour) else "2F3136"
-                await cursor.execute("""
-                INSERT INTO reactionrole_messages (message_id, guild_id, channel_id, style, embed_title, embed_description, embed_color, embed_image, embed_thumbnail)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    final_message.id,
-                    interaction.guild.id,
-                    interaction.channel.id,
-                    style,
-                    embed.title,
-                    embed.description,
-                    embed_color,
-                    embed_data['image'],
-                    embed_data['thumbnail']
-                ))
-                for r in role_data:
-                    await cursor.execute("""
-                    INSERT INTO reactionrole_entries (message_id, role_id, label, emoji)
-                    VALUES (%s, %s, %s, %s)
-                    """, (final_message.id, r['role_id'], r['label'], r['emoji']))
 
     @commands.Cog.listener()
     async def on_ready(self):
