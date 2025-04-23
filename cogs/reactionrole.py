@@ -98,36 +98,13 @@ class SaveButton(ui.Button):
         await final_modal.wait()
         self.view.embed_data = final_modal.embed_data
 
-        data = self.view.embed_data
-
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("""
-                    INSERT INTO reactionrole_messages 
-                    (message_id, guild_id, channel_id, style, embed_title, embed_description, embed_color, embed_image, embed_thumbnail)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    interaction.message.id,
-                    interaction.guild.id,
-                    interaction.channel.id,
-                    self.view.style,
-                    data['title'],
-                    data['description'],
-                    f"{data['color']:06x}",
-                    data['image'],
-                    data['thumbnail']
-                ))
-
+                await cursor.execute("INSERT INTO reactionrole_messages (message_id, style) VALUES (%s, %s)",
+                                     (interaction.message.id, self.view.style))
                 for r in self.view.role_data:
-                    await cursor.execute("""
-                        INSERT INTO reactionrole_entries (message_id, role_id, label, emoji)
-                        VALUES (%s, %s, %s, %s)
-                    """, (
-                        interaction.message.id,
-                        r['role_id'],
-                        r['label'],
-                        r['emoji']
-                    ))
+                    await cursor.execute("INSERT INTO reactionrole_entries (message_id, role_id, label, emoji) VALUES (%s, %s, %s, %s)",
+                                         (interaction.message.id, r['role_id'], r['label'], r['emoji']))
 
         self.view.stop()
 
@@ -210,8 +187,21 @@ class ReactionRole(commands.Cog):
             view_final.add_item(select)
 
         msg = await interaction.channel.send(embed=embed, view=view_final)
+
+        # Persistente View hinzufügen
+        self.bot.add_view(view_final, message_id=msg.id)
+
+        # Persistente View hinzufügen
+        self.bot.add_view(view_final, message_id=msg.id)
+
+        # Datenbank aktualisieren
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cursor:
+                await cursor.execute("""
+                    UPDATE reactionrole_messages 
+                    SET message_id = %s 
+                    WHERE message_id = %s
+                """, (msg.id, interaction.message.id)) as cursor:
                 await cursor.execute("UPDATE reactionrole_messages SET message_id = %s WHERE message_id = %s", (msg.id, interaction.message.id))
 
     @commands.Cog.listener()
