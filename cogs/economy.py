@@ -107,8 +107,6 @@ def calculate_hand_value(hand):
         aces -= 1
     return value
 
-
-
 class BlackjackView(discord.ui.View):
     def __init__(self, bot, interaction, bet, economy):
         super().__init__(timeout=180)
@@ -143,7 +141,7 @@ class BlackjackView(discord.ui.View):
         dealer_value = calculate_hand_value(self.dealer_hand)
 
         player_cards = " ".join(self.player_hand)
-        dealer_cards_display = self.dealer_hand[0] + " ??" if not self.stand_called else " ".join(self.dealer_hand)
+        dealer_cards_display = self.dealer_hand[0] + " ❓" if not self.stand_called else " ".join(self.dealer_hand)
         dealer_value_display = "?" if not self.stand_called else str(dealer_value)
 
         embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.blurple())
@@ -192,6 +190,7 @@ class BlackjackView(discord.ui.View):
         await interaction.response.defer()
         if calculate_hand_value(self.player_hand) >= 21:
             return
+
         self.player_hand.append(self.deck.pop())
         await self.update_message()
 
@@ -199,11 +198,16 @@ class BlackjackView(discord.ui.View):
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self.stand_called = True
-        while calculate_hand_value(self.dealer_hand) < 17:
-            self.dealer_hand.append(self.deck.pop())
+
+        await self.animate_dealer_cards()
         await self.update_message()
 
-
+    async def animate_dealer_cards(self):
+        await asyncio.sleep(1)
+        while calculate_hand_value(self.dealer_hand) < 17:
+            self.dealer_hand.append(self.deck.pop())
+            await self.update_message()
+            await asyncio.sleep(1.2)
 
 
 
