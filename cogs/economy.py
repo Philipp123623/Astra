@@ -87,32 +87,35 @@ JOBS = [{"name": "Küchenhilfe", "req": 0,
 ]
 
 # Kartenwert berechnung
+CARD_VALUES = {
+    '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
+    '7': 7, '8': 8, '9': 9, '10': 10,
+    'J': 10, 'Q': 10, 'K': 10, 'A': 11
+}
+
 def calculate_hand_value(hand):
     value = 0
-    ace_count = 0
+    aces = 0
     for card in hand:
-        if card[0] in ['J', 'Q', 'K']:
-            value += 10
-        elif card[0] == 'A':
-            value += 11
-            ace_count += 1
-        else:
-            value += int(card[0])
-
-    # Aces count check: Wenn der Wert über 21 geht, zählen Asse als 1
-    while value > 21 and ace_count:
+        rank = card[:-1] if card[:-1] != '' else card[0]  # handle '10♠'
+        card_value = CARD_VALUES.get(rank, 0)
+        value += card_value
+        if rank == 'A':
+            aces += 1
+    while value > 21 and aces:
         value -= 10
-        ace_count -= 1
-
+        aces -= 1
     return value
 
-class BlackjackView(View):
+
+
+class BlackjackView(discord.ui.View):
     def __init__(self, bot, interaction, bet, economy):
         super().__init__(timeout=180)
         self.bot = bot
         self.interaction = interaction
         self.bet = bet
-        self.economy = economy  # Economy-Cog übergeben
+        self.economy = economy
         self.user_id = interaction.user.id
 
         self.player_hand = []
@@ -123,10 +126,6 @@ class BlackjackView(View):
         self.result_shown = False
 
         self.deal_initial_cards()
-
-    async def update_balance_on_start(self):
-        """Asynchrone Methode, um das Balance zu aktualisieren, sobald das Spiel beginnt."""
-        await self.economy.update_balance(self.user_id, wallet_change=-self.bet)
 
     def create_deck(self):
         suits = ['♠', '♥', '♦', '♣']
@@ -139,32 +138,20 @@ class BlackjackView(View):
         self.player_hand = [self.deck.pop(), self.deck.pop()]
         self.dealer_hand = [self.deck.pop(), self.deck.pop()]
 
-    def get_card_name(self, card):
-        return card
-
     async def update_message(self):
         player_value = calculate_hand_value(self.player_hand)
         dealer_value = calculate_hand_value(self.dealer_hand)
 
-        player_cards = " ".join([self.get_card_name(card) for card in self.player_hand])
-        dealer_cards = " ".join([self.get_card_name(card) for card in self.dealer_hand])
+        player_cards = " ".join(self.player_hand)
+        dealer_cards_display = self.dealer_hand[0] + " ??" if not self.stand_called else " ".join(self.dealer_hand)
+        dealer_value_display = "?" if not self.stand_called else str(dealer_value)
 
         embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.blurple())
         embed.set_footer(text="Blackjack • Astra Bot")
 
-        embed.add_field(
-            name="👤 Deine Karten:",
-            value=f"```{player_cards}```Wert: **{player_value}**",
-            inline=False
-        )
+        embed.add_field(name="👤 Deine Karten:", value=f"```{player_cards}```Wert: **{player_value}**", inline=False)
+        embed.add_field(name="🎲 Karten des Dealers:", value=f"```{dealer_cards_display}```Wert: **{dealer_value_display}**", inline=False)
 
-        embed.add_field(
-            name="🎲 Karten des Dealers:",
-            value=f"```{dealer_cards}```Wert: **{dealer_value}**",
-            inline=False
-        )
-
-        # Nur Ergebnis anzeigen, wenn Spiel vorbei ist
         game_over = False
         result_text = ""
 
@@ -185,18 +172,14 @@ class BlackjackView(View):
 
         if game_over:
             embed.add_field(name="📢 Ergebnis", value=result_text, inline=False)
-            # Buttons deaktivieren
             for child in self.children:
                 child.disabled = True
-
-            # Auszahlung: Wenn der Spieler gewinnt, bekommt er das Doppelte des Einsatzes
             if not self.result_shown:
                 self.result_shown = True
                 if player_value <= 21 and (player_value > dealer_value or dealer_value > 21):
-                    await self.economy.update_balance(self.user_id, wallet_change=self.bet * 2)  # Gewinn (Doppelte Auszahlung)
+                    await self.economy.update_balance(self.user_id, wallet_change=self.bet * 2)
                 elif player_value == dealer_value:
-                    await self.economy.update_balance(self.user_id, wallet_change=self.bet)  # Unentschieden (Einsatz zurück)
-                # Verlust wird nicht extra behandelt, da wir beim Einsatz abziehen, wenn das Spiel startet.
+                    await self.economy.update_balance(self.user_id, wallet_change=self.bet)
 
         if self.message is None:
             self.message = await self.interaction.original_response()
@@ -205,7 +188,7 @@ class BlackjackView(View):
             await self.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
-    async def hit(self, interaction: discord.Interaction, button: Button):
+    async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         if calculate_hand_value(self.player_hand) >= 21:
             return
@@ -213,7 +196,7 @@ class BlackjackView(View):
         await self.update_message()
 
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.red)
-    async def stand(self, interaction: discord.Interaction, button: Button):
+    async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self.stand_called = True
         while calculate_hand_value(self.dealer_hand) < 17:
