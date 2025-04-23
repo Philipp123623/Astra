@@ -39,7 +39,7 @@ class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
         self.stop()
 
 class RoleSelectView(ui.View):
-    def __init__(self, interaction: discord.Interaction, roles: List[discord.Role]):
+    def __init__(self, interaction: discord.Interaction, roles: List[discord.Role], style: str):
         super().__init__(timeout=None)
         self.interaction = interaction
         self.roles = roles
@@ -48,8 +48,10 @@ class RoleSelectView(ui.View):
         self.embed_message = None
         self.embed = discord.Embed(title="Reaktionsrollen Setup", description="Füge Rollen über das Select-Menü hinzu oder entferne sie durch erneute Auswahl.", color=discord.Color.blue())
         self.embed.set_footer(text="Reaction Roles Setup")
-        self.select = RoleSelect(roles, self)
-        self.add_item(self.select)
+        self.style = style
+        if style == "select":
+            self.select = RoleSelect(roles, self)
+            self.add_item(self.select)
         self.add_item(SaveButton())
         self.add_item(CancelButton())
 
@@ -112,8 +114,7 @@ class ReactionRole(commands.Cog):
     @app_commands.command(name="reactionrole", description="Erstellt eine Reaction Role Nachricht")
     async def reactionrole(self, interaction: Interaction, style: Literal["buttons", "select"]):
         roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
-        view = RoleSelectView(interaction, roles)
-        view.style = style  # Speichert den Stil
+        view = RoleSelectView(interaction, roles, style)
         await interaction.response.send_message("Wähle Rollen für deine Reaktionsrollen aus.", view=view, ephemeral=True)
         await view.wait()
 
@@ -133,6 +134,7 @@ class ReactionRole(commands.Cog):
         if style == "buttons":
             for r in role_data:
                 btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{r['role_id']}")
+
                 async def callback(i: Interaction, rid=r['role_id']):
                     role = i.guild.get_role(rid)
                     if role in i.user.roles:
@@ -143,18 +145,33 @@ class ReactionRole(commands.Cog):
                         await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
                 btn.callback = callback
                 view_final.add_item(btn)
+
         elif style == "select":
             options = [discord.SelectOption(label=r['label'], emoji=r['emoji'], value=str(r['role_id'])) for r in role_data]
-            select = ui.Select(placeholder="Wähle deine Rolle aus...", options=options, custom_id="reactionrole_select")
+            select = ui.Select(placeholder="Wähle deine Rollen aus...", options=options, custom_id="reactionrole_select", min_values=1, max_values=len(options))
+
             async def select_callback(i: Interaction):
-                rid = int(select.values[0])
-                role = i.guild.get_role(rid)
-                if role in i.user.roles:
-                    await i.user.remove_roles(role)
-                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                else:
-                    await i.user.add_roles(role)
-                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
+                added = []
+                removed = []
+                current_roles = [int(v) for v in select.values]
+
+                for opt in options:
+                    rid = int(opt.value)
+                    role = i.guild.get_role(rid)
+                    if role in i.user.roles and rid not in current_roles:
+                        await i.user.remove_roles(role)
+                        removed.append(role.name)
+                    elif role not in i.user.roles and rid in current_roles:
+                        await i.user.add_roles(role)
+                        added.append(role.name)
+
+                msg = ""
+                if added:
+                    msg += f"<:Astra_accept:1141303821176422460> Rollen vergeben: {', '.join(added)}\n"
+                if removed:
+                    msg += f"<:Astra_x:1141303954555289600> Rollen entfernt: {', '.join(removed)}"
+                await i.response.send_message(msg, ephemeral=True)
+
             select.callback = select_callback
             view_final.add_item(select)
 
