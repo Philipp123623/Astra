@@ -163,7 +163,10 @@ class ReactionRole(commands.Cog):
                     msg.append(f"<:Astra_accept:1141303821176422460> Rollen vergeben: {', '.join(added)}")
                 if removed:
                     msg.append(f"<:Astra_x:1141303954555289600> Rollen entfernt: {', '.join(removed)}")
-                await i.response.send_message('\n'.join(msg), ephemeral=True)
+                if msg:
+                    await i.response.send_message('\n'.join(msg), ephemeral=True)
+                else:
+                    await i.response.defer()
 
             select.callback = select_callback
             view.add_item(select)
