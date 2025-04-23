@@ -24,7 +24,7 @@ class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
 class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
     title = ui.TextInput(label="Embed Titel", max_length=256, required=True)
     description = ui.TextInput(label="Embed Beschreibung", style=discord.TextStyle.paragraph, required=True)
-    color = ui.TextInput(label="Farbe (Hex, optional)", required=False)
+    color_input = ui.TextInput(label="Farbe (Hex, optional)", required=False)
     thumbnail = ui.TextInput(label="Thumbnail URL (optional)", required=False)
     image = ui.TextInput(label="Image URL (optional)", required=False)
 
@@ -32,7 +32,7 @@ class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
         self.embed_data = {
             "title": self.title.value,
             "description": self.description.value,
-            "color": int(self.color.value.lstrip('#'), 16) if self.color.value else 0x2F3136,
+            "color": int(self.color_input.value.lstrip('#'), 16) if self.color_input.value else 0x2F3136,
             "thumbnail": self.thumbnail.value,
             "image": self.image.value
         }
@@ -71,11 +71,7 @@ class ReactionRole(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="reactionrole", description="Erstellt eine Reaction Role Nachricht")
-    @app_commands.choices(style=[
-        app_commands.Choice(name="Buttons", value="buttons"),
-        app_commands.Choice(name="Select Menü", value="select")
-    ])
-    async def reactionrole(self, interaction: Interaction, style: app_commands.Choice[str]):
+    async def reactionrole(self, interaction: Interaction, style: Literal["buttons", "select"]):
         roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
         view = RoleSelectView(interaction, roles)
         await interaction.response.send_message(content="Wähle Rollen für deine Reaktionsrollen aus.", view=view, ephemeral=True)
@@ -93,7 +89,7 @@ class ReactionRole(commands.Cog):
             embed.set_image(url=embed_data['image'])
 
         role_data = view.role_data
-        if style.value == "buttons":
+        if style == "buttons":
             view_final = ui.View(timeout=None)
             for r in role_data:
                 btn = ui.Button(label=r['label'], emoji=r['emoji'], style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{r['role_id']}")
@@ -128,6 +124,7 @@ class ReactionRole(commands.Cog):
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
+                embed_color = hex(embed_data['color'])[2:].zfill(6)
                 await cursor.execute("""
                 INSERT INTO reactionrole_messages (message_id, guild_id, channel_id, style, embed_title, embed_description, embed_color, embed_image, embed_thumbnail)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -135,10 +132,10 @@ class ReactionRole(commands.Cog):
                     final_message.id,
                     interaction.guild.id,
                     interaction.channel.id,
-                    style.value,
-                    embed.title,
-                    embed.description,
-                    hex(embed.color.value)[2:],
+                    style,
+                    embed_data['title'],
+                    embed_data['description'],
+                    embed_color,
                     embed_data['image'],
                     embed_data['thumbnail']
                 ))
