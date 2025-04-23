@@ -47,7 +47,7 @@ class RoleSelectView(ui.View):
         self.selected = []
         self.role_data = []
         self.embed_message = None
-        self.embed = discord.Embed(title="Reaktionsrollen Setup", description="Hier kannst du mithilfe von Buttons, Reaktionsrollen dem Select Menü hinzufügen.", color=discord.Color.orange())
+        self.embed = discord.Embed(title="Reaktionsrollen Setup", description="Füge Rollen über das Select-Menü hinzu oder entferne sie durch erneute Auswahl.", color=discord.Color.blue())
         self.embed.set_footer(text="Reaction Roles Setup")
         self.add_item(RoleSelect(roles))
         self.add_item(SaveButton())
@@ -56,24 +56,29 @@ class RoleSelectView(ui.View):
 class RoleSelect(ui.Select):
     def __init__(self, roles: List[discord.Role]):
         options = [
-                      discord.SelectOption(label=role.name, value=str(role.id))
-                      for role in roles if not role.managed and role.name != "@everyone"
-                  ][:25]  # 🔧 HIER wird auf max. 25 Rollen begrenz
+            discord.SelectOption(label=role.name, value=str(role.id))
+            for role in roles if not role.managed and role.name != "@everyone"
+        ][:25]
         super().__init__(placeholder="Wähle eine Rolle aus", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: Interaction):
         role_id = int(self.values[0])
         role = interaction.guild.get_role(role_id)
-        modal = RoleConfigModal(role)
-        await interaction.response.send_modal(modal)
-        await modal.wait()
 
-        self.view.role_data.append(modal.result)
-        self.view.selected.append(role_id)
+        existing = next((r for r in self.view.role_data if r["role_id"] == role_id), None)
+        if existing:
+            self.view.role_data.remove(existing)
+            self.view.selected.remove(role_id)
+        else:
+            modal = RoleConfigModal(role)
+            await interaction.response.send_modal(modal)
+            await modal.wait()
+            self.view.role_data.append(modal.result)
+            self.view.selected.append(role_id)
 
-        roles_info = "\n".join([f"{r['emoji'] or ''} {r['label']} (<@&{r['role_id']}>)" for r in self.view.role_data])
         self.view.embed.clear_fields()
-        self.view.embed.add_field(name="Ausgewählte Rollen", value=roles_info or "Keine", inline=False)
+        for r in self.view.role_data:
+            self.view.embed.add_field(name=r["label"], value=f"<@&{r['role_id']}>\nID: `{r['role_id']}`", inline=False)
 
         if self.view.embed_message is None:
             self.view.embed_message = await interaction.followup.send(embed=self.view.embed, view=self.view, ephemeral=True)
@@ -82,7 +87,7 @@ class RoleSelect(ui.Select):
 
 class SaveButton(ui.Button):
     def __init__(self):
-        super().__init__(label="Fertig", style=discord.ButtonStyle.success)
+        super().__init__(label="Fertig", style=discord.ButtonStyle.green, emoji="<:Astra_accept:1141303821176422460>")
 
     async def callback(self, interaction: Interaction):
         final_modal = FinalEmbedModal()
@@ -93,10 +98,10 @@ class SaveButton(ui.Button):
 
 class CancelButton(ui.Button):
     def __init__(self):
-        super().__init__(label="Abbrechen", style=discord.ButtonStyle.danger)
+        super().__init__(label="Abbrechen", style=discord.ButtonStyle.danger, emoji="<:Astra_x:1141303954555289600>")
 
     async def callback(self, interaction: Interaction):
-        await interaction.response.send_message("❌ Reaktionsrollen-Setup abgebrochen.", ephemeral=True)
+        await interaction.response.send_message("<:Astra_x:1141303954555289600> Reaktionsrollen-Setup abgebrochen.", ephemeral=True)
         self.view.stop()
 
 class ReactionRole(commands.Cog):
@@ -130,10 +135,10 @@ class ReactionRole(commands.Cog):
                     role = i.guild.get_role(rid)
                     if role in i.user.roles:
                         await i.user.remove_roles(role)
-                        await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                        await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
                     else:
                         await i.user.add_roles(role)
-                        await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                        await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
                 btn.callback = callback
                 view_final.add_item(btn)
         else:
@@ -144,10 +149,10 @@ class ReactionRole(commands.Cog):
                 role = i.guild.get_role(rid)
                 if role in i.user.roles:
                     await i.user.remove_roles(role)
-                    await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
                 else:
                     await i.user.add_roles(role)
-                    await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
             select.callback = select_callback
             view_final.add_item(select)
 
@@ -192,10 +197,10 @@ class ReactionRole(commands.Cog):
                                 role = i.guild.get_role(rid)
                                 if role in i.user.roles:
                                     await i.user.remove_roles(role)
-                                    await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
                                 else:
                                     await i.user.add_roles(role)
-                                    await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
                             btn.callback = callback
                             view.add_item(btn)
                     else:
@@ -206,10 +211,10 @@ class ReactionRole(commands.Cog):
                             role = i.guild.get_role(rid)
                             if role in i.user.roles:
                                 await i.user.remove_roles(role)
-                                await i.response.send_message(f"🔻 Rolle **{role.name}** entfernt.", ephemeral=True)
+                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
                             else:
                                 await i.user.add_roles(role)
-                                await i.response.send_message(f"✅ Rolle **{role.name}** vergeben.", ephemeral=True)
+                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
                         select.callback = select_callback
                         view.add_item(select)
                     self.bot.add_view(view, message_id=msg_id)
