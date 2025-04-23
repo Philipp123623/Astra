@@ -4,7 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/cogs/reactionrole.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/reactionrole.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -72,7 +75,7 @@
       <workItem from="1745274791291" duration="1276000" />
       <workItem from="1745338331098" duration="4030000" />
       <workItem from="1745357492476" duration="106000" />
-      <workItem from="1745436629463" duration="3068000" />
+      <workItem from="1745436629463" duration="3476000" />
     </task>
     <servers />
   </component>
