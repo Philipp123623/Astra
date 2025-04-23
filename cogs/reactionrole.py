@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands, ui, Interaction
 from typing import List, Literal
+import aiomysql
 
 class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
     label_input = ui.TextInput(label="Anzeigename für die Rolle", required=True)
@@ -49,9 +50,8 @@ class RoleSelectView(ui.View):
         self.embed = discord.Embed(title="Reaktionsrollen Setup", description="Füge Rollen über das Select-Menü hinzu oder entferne sie durch erneute Auswahl.", color=discord.Color.blue())
         self.embed.set_footer(text="Reaction Roles Setup")
         self.style = style
-        if style == "select":
-            self.select = RoleSelect(roles, self)
-            self.add_item(self.select)
+        self.select = RoleSelect(roles, self)
+        self.add_item(self.select)
         self.add_item(SaveButton())
         self.add_item(CancelButton())
 
@@ -97,6 +97,15 @@ class SaveButton(ui.Button):
         await interaction.response.send_modal(final_modal)
         await final_modal.wait()
         self.view.embed_data = final_modal.embed_data
+
+        async with interaction.client.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("INSERT INTO reactionrole_messages (message_id, style) VALUES (%s, %s)",
+                                     (interaction.message.id, self.view.style))
+                for r in self.view.role_data:
+                    await cursor.execute("INSERT INTO reactionrole_entries (message_id, role_id, label, emoji) VALUES (%s, %s, %s, %s)",
+                                         (interaction.message.id, r['role_id'], r['label'], r['emoji']))
+
         self.view.stop()
 
 class CancelButton(ui.Button):
@@ -177,8 +186,10 @@ class ReactionRole(commands.Cog):
             select.callback = select_callback
             view_final.add_item(select)
 
-        await interaction.channel.send(embed=embed, view=view_final)
-
+        msg = await interaction.channel.send(embed=embed, view=view_final)
+        async with interaction.client.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("UPDATE reactionrole_messages SET message_id = %s WHERE message_id = %s", (msg.id, interaction.message.id))
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -189,18 +200,21 @@ class ReactionRole(commands.Cog):
                     await cursor.execute("SELECT role_id, label, emoji FROM reactionrole_entries WHERE message_id = %s", (msg_id,))
                     role_data = await cursor.fetchall()
                     view = ui.View(timeout=None)
+                    def make_button_callback(rid):
+                        async def callback(i: Interaction):
+                            role = i.guild.get_role(rid)
+                            if role in i.user.roles:
+                                await i.user.remove_roles(role)
+                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
+                            else:
+                                await i.user.add_roles(role)
+                                await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
+                        return callback
+
                     if style == "buttons":
                         for rid, label, emoji in role_data:
                             btn = ui.Button(label=label, emoji=emoji, style=discord.ButtonStyle.secondary, custom_id=f"reactionrole:{rid}")
-                            async def callback(i: Interaction, rid=rid):
-                                role = i.guild.get_role(rid)
-                                if role in i.user.roles:
-                                    await i.user.remove_roles(role)
-                                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** entfernt.", ephemeral=True)
-                                else:
-                                    await i.user.add_roles(role)
-                                    await i.response.send_message(f"<:Astra_accept:1141303821176422460> Rolle **{role.name}** vergeben.", ephemeral=True)
-                            btn.callback = callback
+                            btn.callback = make_button_callback(rid)
                             view.add_item(btn)
                     else:
                         options = [discord.SelectOption(label=label, emoji=emoji, value=str(rid)) for rid, label, emoji in role_data]
