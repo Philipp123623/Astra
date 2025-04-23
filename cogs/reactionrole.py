@@ -22,19 +22,19 @@ class RoleConfigModal(ui.Modal, title="Rolle konfigurieren"):
         self.stop()
 
 class FinalEmbedModal(ui.Modal, title="Erstelle das endgültige Embed"):
-    title = ui.TextInput(label="Embed Titel", max_length=256, required=True)
-    description = ui.TextInput(label="Embed Beschreibung", style=discord.TextStyle.paragraph, required=True)
+    title_input = ui.TextInput(label="Embed Titel", max_length=256, required=True)
+    desc_input = ui.TextInput(label="Embed Beschreibung", style=discord.TextStyle.paragraph, required=True)
     color_input = ui.TextInput(label="Farbe (Hex, optional)", required=False)
-    thumbnail = ui.TextInput(label="Thumbnail URL (optional)", required=False)
-    image = ui.TextInput(label="Image URL (optional)", required=False)
+    thumbnail_input = ui.TextInput(label="Thumbnail URL (optional)", required=False)
+    image_input = ui.TextInput(label="Image URL (optional)", required=False)
 
     async def on_submit(self, interaction: Interaction):
         self.embed_data = {
-            "title": self.title.value,
-            "description": self.description.value,
+            "title": self.title_input.value,
+            "description": self.desc_input.value,
             "color": int(self.color_input.value.lstrip('#'), 16) if self.color_input.value else 0x2F3136,
-            "thumbnail": self.thumbnail.value,
-            "image": self.image.value
+            "thumbnail": self.thumbnail_input.value,
+            "image": self.image_input.value
         }
         await interaction.response.defer()
         self.stop()
