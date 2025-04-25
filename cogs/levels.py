@@ -346,7 +346,7 @@ class levelsystem(commands.Cog):
 
                 background = Editor("cogs/Levelcard_Astra.png")
                 avatar = await load_image_async(str(user.avatar))
-                avatar = Editor(avatar).resize((138, 138)).circle_image()  # größerer Ausschnitt
+                avatar = Editor(avatar).resize((138, 138)).circle_image()
                 background.paste(avatar.image, (63, 100))
                 background.ellipse((63, 100), 144, 144, outline="#ffffff", stroke_width=6)
 
@@ -361,36 +361,34 @@ class levelsystem(commands.Cog):
                 all_users = await cur.fetchall()
                 rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), None)
 
-                # Progressbar exakt ausgerichtet: 753px breit
+                # 💥 FINAL PROGRESS BAR FIX
                 if xp_start > 5:
                     xp_percentage = (xp_start / xp_end) * 100
                     background.bar(
-                        (246, 288),  # Y exakt auf Rahmen abgestimmt
-                        max_width=753,
+                        (246, 288),  # exakt im weißen Rahmen
+                        max_width=753,  # exakt von 246 bis 999
                         height=28,  # exakt wie Rahmen
                         percentage=xp_percentage,
                         fill="#54bbbd",
-                        radius=8,  # für weicheres Inneres
+                        radius=10  # für saubere Rundung innen
                     )
 
-                # LEVEL zentriert auf 120px Feld bei x=860-980 → Mitte = 920
+                # LEVEL zentriert bei x=920 (120px Breite)
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
                 level_x_center = 920 - level_text_width // 2
                 background.text((level_x_center, 92), level_text, font=poppins_middle, color="white")
 
-                # XP zentriert im gleichen Feld
+                # XP zentriert bei x=920
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 pil_font_xp = ImageFont.truetype(poppins_small.path, poppins_small.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
                 xp_x_center = 920 - xp_text_width // 2
                 background.text((xp_x_center, 205), xp_text, font=poppins_small, color="white")
 
-                # Name linksbündig (nicht mittig)
+                # Name & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
-
-                # Rang
                 background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
 
                 file = File(fp=background.image_bytes, filename="card.png")
