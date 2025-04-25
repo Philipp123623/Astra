@@ -16,10 +16,17 @@ import topgg
 import aiomysql
 import jishaku
 import os
+import logging
 from dotenv import load_dotenv
 import aiohttp
 import datetime
 from typing import Literal
+
+
+logging.basicConfig(
+    level=logging.INFO,  # oder DEBUG für mehr Details
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -97,12 +104,12 @@ class Astra(commands.Bot):
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
-            print("Astra ist online!")
+            logging.info("Astra ist online!")
             await asyncio.sleep(3)
-            print("[PANEL-INFO] Script started!")
+            logging.info("[PANEL-INFO] Script started!")
             self.keep_alive_task = self.loop.create_task(self.keep_db_alive())
         except Exception as e:
-            print(f"❌ Fehler beim Setup:\n{e}")
+            logging.error(f"❌ Fehler beim Setup:\n{e}")
 
     async def keep_db_alive(self):
         while True:
@@ -124,7 +131,7 @@ class Astra(commands.Bot):
             connect_timeout=5,
             maxsize=50
         )
-        print("✅ DB-Verbindung erfolgreich")
+        logging.info("✅ DB-Verbindung erfolgreich")
 
     async def init_tables(self):
         """Initialisiert Tabellen und startet Tasks"""
@@ -318,7 +325,7 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS voterole(userID BIGINT, time TEXT)")
                 # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
 
-                print("✅ Tables Erfolgreich geladen")
+                logging.info("✅ Tables Erfolgreich geladen")
 
 
 
@@ -335,7 +342,7 @@ class Astra(commands.Bot):
                                 asyncio.create_task(funktion(t2))
                                 await asyncio.sleep(0.5)
                             except Exception as e:
-                                print(f"❌ Reminder-Fehler: {e}")
+                                logging.error(f"❌ Reminder-Fehler: {e}")
 
                     asyncio.create_task(starte_reminder_tasks())
 
@@ -351,7 +358,7 @@ class Astra(commands.Bot):
                                 asyncio.create_task(funktion2(t4))
                                 await asyncio.sleep(0.5)
                             except Exception as e:
-                                print(f"❌ Voterole-Fehler: {e}")
+                                logging.error(f"❌ Voterole-Fehler: {e}")
 
                     asyncio.create_task(starte_voterole_tasks())
 
@@ -368,10 +375,10 @@ class Astra(commands.Bot):
                                 asyncio.create_task(gwtimes(t2, msg_id))
                                 await asyncio.sleep(0.5)
                             except Exception as e:
-                                print(f"❌ Giveaway-Fehler: {e}")
+                                logging.error(f"❌ Giveaway-Fehler: {e}")
 
                     asyncio.create_task(starte_giveaway_tasks())
-                    print("✅ Tasks Registered!")
+                    logging.info("✅ Tasks Registered!")
 
     async def load_cogs(self):
         """Lädt alle Cogs"""
@@ -380,26 +387,26 @@ class Astra(commands.Bot):
         # Optional: jishaku laden, aber Fehler ignorieren
         try:
             await self.load_extension("jishaku")
-            print("🧪 jishaku erfolgreich geladen")
+            logging.info("🧪 jishaku erfolgreich geladen")
         except Exception as e:
-            print("⚠️  jishaku konnte nicht geladen werden:", e)
+            logging.error("⚠️  jishaku konnte nicht geladen werden:", e)
 
         for ext in self.initial_extensions:
-            print(f"🔄 Lade: {ext}")
+            logging.info(f"🔄 Lade: {ext}")
             try:
                 await self.load_extension(ext)
                 geladen += 1
-                print(f"✅ Erfolgreich geladen: {ext}")
+                logging.info(f"✅ Erfolgreich geladen: {ext}")
             except Exception:
                 fehler += 1
-                print(f'❌ Fehler beim Laden von: {ext}', file=sys.stderr)
+                logging.error(f'❌ Fehler beim Laden von: {ext}', file=sys.stderr)
                 traceback.print_exc()
-                print('---------------------------------------------')
+                logging.info('---------------------------------------------')
 
         gesamt = geladen + fehler
-        print(f"\n📦 Cogs geladen: {geladen}/{gesamt} erfolgreich ✅")
+        logging.info(f"\n📦 Cogs geladen: {geladen}/{gesamt} erfolgreich ✅")
         if fehler > 0:
-            print(f"❗ {fehler} Cog(s) konnten nicht geladen werden.")
+            logging.error(f"❗ {fehler} Cog(s) konnten nicht geladen werden.")
 
     async def on_message(self, msg):
         if msg.author.bot:
