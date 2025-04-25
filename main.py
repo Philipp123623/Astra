@@ -441,7 +441,6 @@ async def on_dbl_vote(data):
             guild = bot.get_guild(1141116981697859736)
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
-            print(user)
             await cur.execute(f"SELECT count FROM topgg WHERE userID = (%s)", (int(data["user"]),))
             result = await cur.fetchone()
             if not result:
@@ -559,7 +558,6 @@ async def on_dbl_vote(data):
 
 @bot.event
 async def on_dbl_test(data):
-    print(1)
     """An event that is called whenever someone tests the webhook system for your bot on Top.gg."""
     user = bot.get_user(int(data["user"]))
     guild = bot.get_guild(1141116981697859736)
@@ -622,7 +620,7 @@ async def funktion2(when: datetime.datetime):
                     try:
                         await member.remove_roles(voterole)
                     except Exception as e:
-                        print(f"❌ Fehler beim Entfernen der Rolle von {userID}: {e}")
+                        logging.error(f"❌ Fehler beim Entfernen der Rolle von {userID}: {e}")
 
                     await cur.execute("DELETE FROM voterole WHERE userID = (%s)", (userID,))
 
@@ -1382,9 +1380,7 @@ async def funktion(when: datetime.datetime):
                 return
             if result:
                 for eintrag in result:
-                    print("test")
                     userID = eintrag[0]
-                    print(userID)
                     grund = eintrag[1]
                     user = bot.get_user(int(userID))
                     embed = discord.Embed(title="<:Astra_time:1141303932061233202> Erinnerung abgeschlossen.",
@@ -1422,7 +1418,6 @@ async def reminder_set(interaction: discord.Interaction, beschreibung: str, zeit
                 await interaction.response.send_message(embed=embed)
             if result:
                 time1 = convert(time)
-                print(datetime.datetime.now(datetime.UTC))
                 t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
                 t2 = datetime.datetime.fromtimestamp(int(t1))
                 t3 = datetime.datetime.fromtimestamp(t1)
@@ -1461,7 +1456,6 @@ async def reminder_list(interaction: discord.Interaction):
                     reason = eintrag[0]
                     warnID = eintrag[1]
                     time = eintrag[2]
-                    print(time)
                     embed.add_field(name=f"ID: {warnID}",
                                     value=f"<:Astra_arrow:1141303823600717885>: {reason}\n<:Astra_time:1141303932061233202> Endet: <t:{time}:F>",
                                     inline=True)
