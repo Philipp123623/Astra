@@ -352,51 +352,49 @@ class levelsystem(commands.Cog):
 
                 background = Editor("cogs/Levelcard_Astra.png")
 
-                # 🖼️ Profilbild perfekt im Kreis
+                # 🖼️ Profilbild exakt im Kreis
                 avatar = await load_image_async(str(user.avatar))
-                avatar = Editor(avatar).resize((140, 140)).circle_image()
-                background.paste(avatar.image, (61, 98))  # exakt im Kreis
-                background.ellipse((61, 98), 144, 144, outline="#ffffff", stroke_width=6)
+                avatar = Editor(avatar).resize((138, 138)).circle_image()
+                background.paste(avatar.image, (63, 99))
+                background.ellipse((63, 99), 144, 144, outline="#ffffff", stroke_width=6)
 
-                # 📐 Schriftarten
+                # 📐 Fonts
                 poppins = Font.poppins(size=34)
-                poppins_middle = Font.poppins(size=38)  # für XP/Level gleich
+                poppins_middle = Font.poppins(size=38)  # XP/Level einheitlich
                 poppins_big = Font.poppins(size=53)
 
-                # 📊 Progressbar exakt im Rahmen
-                if xp_start > 5:
-                    xp_percentage = (xp_start / xp_end) * 100
-                    background.bar(
-                        (209, 276),
-                        max_width=675,
-                        height=35,
-                        percentage=xp_percentage,
-                        fill="#54bbbd",
-                        radius=6,
-                    )
-
-                # 📊 Rang berechnen aus sortierter Liste
+                # 📊 Rang berechnen
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
                     (interaction.guild.id,))
                 all_users = await cur.fetchall()
                 rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), 1)
 
-                # 🔢 Level zentriert (120px Feld → Mitte bei 920)
+                # 📉 Fortschrittsbalken exakt im weißen Rahmen
+                if xp_start > 5:
+                    xp_percentage = (xp_start / xp_end) * 100
+                    background.bar(
+                        (209, 277),
+                        max_width=675,
+                        height=34,
+                        percentage=xp_percentage,
+                        fill="#54bbbd",
+                        radius=6
+                    )
+
+                # 🧮 Level zentriert bei x=920
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
-                level_x_center = 920 - level_text_width // 2
-                background.text((level_x_center, 92), level_text, font=poppins_middle, color="white")
+                background.text((920 - level_text_width // 2, 92), level_text, font=poppins_middle, color="white")
 
-                # 💠 XP zentriert
+                # 💠 XP zentriert bei x=920
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 pil_font_xp = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
-                xp_x_center = 920 - xp_text_width // 2
-                background.text((xp_x_center, 205), xp_text, font=poppins_middle, color="white")
+                background.text((920 - xp_text_width // 2, 205), xp_text, font=poppins_middle, color="white")
 
-                # 🔤 Username & Rang
+                # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
                 background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
 
