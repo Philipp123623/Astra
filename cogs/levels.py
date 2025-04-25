@@ -352,10 +352,10 @@ class levelsystem(commands.Cog):
 
                 background = Editor("cogs/Levelcard_Astra.png")
 
-                # 🖼️ Profilbild exakt im Kreis
+                # 🖼️ Profilbild (neu zentriert!)
                 avatar = await load_image_async(str(user.avatar))
                 avatar = Editor(avatar).resize((138, 138)).circle_image()
-                background.paste(avatar.image, (63, 99))
+                background.paste(avatar, (64, 100))  # leicht nach rechts/unten verschoben
                 background.ellipse((63, 99), 144, 144, outline="#ffffff", stroke_width=6)
 
                 # 📐 Fonts
@@ -370,29 +370,30 @@ class levelsystem(commands.Cog):
                 all_users = await cur.fetchall()
                 rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), 1)
 
-                # 📉 Fortschrittsbalken exakt im weißen Rahmen
+                # 📊 Progressbar (zentriert im weißen Rahmen)
                 if xp_start > 5:
                     xp_percentage = (xp_start / xp_end) * 100
                     background.bar(
-                        (209, 277),
+                        (209, 276),  # zurück auf Ursprung
                         max_width=675,
-                        height=34,
+                        height=36,  # minimal höher für perfekte Füllung
                         percentage=xp_percentage,
                         fill="#54bbbd",
-                        radius=6
+                        radius=6,
                     )
 
-                # 🧮 Level zentriert bei x=920
+                # 🔢 LEVEL zentriert (leichter linksversatz für optische Mitte)
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
-                background.text((920 - level_text_width // 2, 92), level_text, font=poppins_middle, color="white")
+                background.text((920 - level_text_width // 2 - 1, 92), level_text, font=poppins_middle, color="white")
 
-                # 💠 XP zentriert bei x=920
+                # 💠 XP zentriert und leicht höher + kleinere Schrift
                 xp_text = f"{xp_start}/{round(xp_end)}"
-                pil_font_xp = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
+                xp_font = Font.poppins(size=34)
+                pil_font_xp = ImageFont.truetype(xp_font.path, xp_font.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
-                background.text((920 - xp_text_width // 2, 205), xp_text, font=poppins_middle, color="white")
+                background.text((920 - xp_text_width // 2, 203), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
