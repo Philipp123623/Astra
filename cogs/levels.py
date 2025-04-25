@@ -389,7 +389,7 @@ class levelsystem(commands.Cog):
                 font_path = poppins_middle.path
                 font_size = poppins_middle.size
                 pil_font = ImageFont.truetype(font_path, font_size)
-                text_width = pil_font.getbox(level_text)[0]
+                text_width = pil_font.getbbox(level_text)[0]
                 x_centered = 930 - text_width // 2
                 background.text((x_centered, 91), level_text, font=poppins_middle, color="white")
 
