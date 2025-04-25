@@ -7,6 +7,7 @@ import random
 from typing import Literal
 import math
 import asyncio
+from PIL import ImageFont
 from easy_pil import *
 
 
@@ -392,21 +393,21 @@ class levelsystem(commands.Cog):
                             font=poppins_small,
                             color="white",
                         )
-                        
-                        if lvl_start > 10 and lvl_start != 100:
-                            background.text(
-                                (903, 91),
-                                f"{lvl_start}",
-                                font=poppins_middle,
-                                color="white",
-                            )
-                        if lvl_start == 100 :
-                                background.text(
-                                (898, 91),
-                                f"{lvl_start}",
-                                font=poppins_middle,
-                                color="white",
-                        	)
+
+                        level_text = f"{lvl_start}"
+                        font_path = poppins_middle.path
+                        font_size = poppins_middle.size
+                        pil_font = ImageFont.truetype(font_path, font_size)
+                        text_width = pil_font.getsize(level_text)[0]
+
+                        # Mitte auf X=930 ausrichten (angepasst an Layout)
+                        x_centered = 930 - text_width // 2
+                        background.text(
+                            (x_centered, 91),
+                            level_text,
+                            font=poppins_middle,
+                            color="white",
+                        )
 
                         file = discord.File(fp=background.image_bytes, filename="card.png")
                         return await interaction.followup.send(file=file)
@@ -642,14 +643,14 @@ class levelsystem(commands.Cog):
                 if enabled[0] == 1:
                     await cur.execute("SELECT xp FROM levelxp WHERE guildID = (%s)", (interaction.guild.id))
                     result = await cur.fetchone()
-                    if arg == "Aktivieren(x2)":
+                    if status == "Aktivieren(x2)":
                         if not result:
                             await cur.execute("INSERT INTO levelxp(guildID, xp) VALUES(%s, %s)",
                                               (interaction.guild.id, 2))
                             await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der XP-Boost ist jetzt für diesen Server aktiviert. User bekommen nun 2x XP.**")
                         if result:
                             await interaction.response.send_message("<:Astra_x:1141303954555289600> **Der XP-Boost ist für diesen Server bereits aktiviert.**", ephemeral=True)
-                    if arg == "Deaktivieren(x1)":
+                    if status == "Deaktivieren(x1)":
                         if not result:
                             await interaction.response.send_message("<:Astra_x:1141303954555289600> **Der XP-Boost ist für diesen Server bereits deaktiviert.**.", ephemeral=True)
                         if result:
