@@ -346,14 +346,15 @@ class levelsystem(commands.Cog):
 
                 background = Editor("cogs/Levelcard_Astra.png")
                 avatar = await load_image_async(str(user.avatar))
-                avatar = Editor(avatar).resize((146, 146)).circle_image()
-                background.paste(avatar.image, (59, 95))
-                background.ellipse((59, 95), 150, 150, outline="#ffffff", stroke_width=8)
+                avatar = Editor(avatar).resize((132, 132)).circle_image()
+                background.paste(avatar.image, (66, 102))
+                background.ellipse((66, 102), 140, 140, outline="#ffffff", stroke_width=6)
 
-                poppins = Font.poppins(size=37)
-                poppins_middle = Font.poppins(size=45)
-                poppins_big = Font.poppins(size=55)
-                poppins_small = Font.poppins(size=30)
+                # Angepasste Schriftgrößen
+                poppins = Font.poppins(size=34)
+                poppins_middle = Font.poppins(size=42)
+                poppins_big = Font.poppins(size=53)
+                poppins_small = Font.poppins(size=28)
 
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
@@ -372,25 +373,24 @@ class levelsystem(commands.Cog):
                         radius=5,
                     )
 
-                # Texte mittig platzieren
+                # LEVEL zentriert
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
                 level_x_center = 920 - level_text_width // 2
                 background.text((level_x_center, 91), level_text, font=poppins_middle, color="white")
 
+                # XP zentriert
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 pil_font_xp = ImageFont.truetype(poppins_small.path, poppins_small.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
                 xp_x_center = 920 - xp_text_width // 2
                 background.text((xp_x_center, 206), xp_text, font=poppins_small, color="white")
 
-                username = str(user)
-                pil_font_name = ImageFont.truetype(poppins.path, poppins.size)
-                name_width = pil_font_name.getbbox(username)[2]
-                name_x_center = 446 - name_width // 2
-                background.text((name_x_center, 100), username, font=poppins, color="white")
+                # Username (nicht mittig!)
+                background.text((246, 100), str(user), font=poppins, color="white")
 
+                # RANG
                 background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
 
                 file = File(fp=background.image_bytes, filename="card.png")
