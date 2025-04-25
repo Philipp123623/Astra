@@ -323,7 +323,6 @@ class levelsystem(commands.Cog):
         user = user or interaction.user
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Prüfen, ob Levels aktiviert sind
                 await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
                 if not enabled or enabled[0] == 0:
@@ -332,7 +331,6 @@ class levelsystem(commands.Cog):
                         ephemeral=True
                     )
 
-                # Userdaten abrufen
                 await cur.execute("SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
                                   (user.id, interaction.guild.id))
                 result = await cur.fetchone()
@@ -346,28 +344,23 @@ class levelsystem(commands.Cog):
                 xp_start, lvl_start = result
                 xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                # Bild vorbereiten
                 background = Editor("cogs/Levelcard_Astra.png")
                 avatar = await load_image_async(str(user.avatar))
                 avatar = Editor(avatar).resize((146, 146)).circle_image()
                 background.paste(avatar.image, (59, 95))
                 background.ellipse((59, 95), 150, 150, outline="#ffffff", stroke_width=8)
 
-                # Schriftarten
                 poppins = Font.poppins(size=37)
                 poppins_middle = Font.poppins(size=45)
                 poppins_big = Font.poppins(size=55)
                 poppins_small = Font.poppins(size=30)
 
-                # Rank berechnen (nur ID und XP/Level abrufen, nicht alle Spalten!)
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
                     (interaction.guild.id,))
                 all_users = await cur.fetchall()
-
                 rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), None)
 
-                # Fortschrittsbalken
                 if xp_start > 5:
                     xp_percentage = (xp_start / xp_end) * 100
                     background.bar(
@@ -379,21 +372,27 @@ class levelsystem(commands.Cog):
                         radius=5,
                     )
 
-                # Texte platzieren
-                background.text((246, 100), str(user), font=poppins, color="white")
-                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
-                background.text((886, 206), f"{xp_start}/{round(xp_end)}", font=poppins_small, color="white")
-
-                # Level zentrieren
+                # Texte mittig platzieren
                 level_text = str(lvl_start)
-                font_path = poppins_middle.path
-                font_size = poppins_middle.size
-                pil_font = ImageFont.truetype(font_path, font_size)
-                text_width = pil_font.getbbox(level_text)[0]
-                x_centered = 930 - text_width // 2
-                background.text((x_centered, 91), level_text, font=poppins_middle, color="white")
+                pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
+                level_text_width = pil_font_lvl.getbbox(level_text)[2]
+                level_x_center = 920 - level_text_width // 2
+                background.text((level_x_center, 91), level_text, font=poppins_middle, color="white")
 
-                # Bild senden
+                xp_text = f"{xp_start}/{round(xp_end)}"
+                pil_font_xp = ImageFont.truetype(poppins_small.path, poppins_small.size)
+                xp_text_width = pil_font_xp.getbbox(xp_text)[2]
+                xp_x_center = 920 - xp_text_width // 2
+                background.text((xp_x_center, 206), xp_text, font=poppins_small, color="white")
+
+                username = str(user)
+                pil_font_name = ImageFont.truetype(poppins.path, poppins.size)
+                name_width = pil_font_name.getbbox(username)[2]
+                name_x_center = 446 - name_width // 2
+                background.text((name_x_center, 100), username, font=poppins, color="white")
+
+                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
+
                 file = File(fp=background.image_bytes, filename="card.png")
                 await interaction.followup.send(file=file)
 
