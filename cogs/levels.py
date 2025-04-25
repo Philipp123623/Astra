@@ -314,103 +314,88 @@ class levelsystem(commands.Cog):
                                                                               color=discord.Color.green())
                                                         await channel.send(msg.author.mention, embed=embed)
 
-    level = Group(name='levelsystem', description="Astra")
+    level = app_commands.Group(name='levelsystem', description="Astra")
 
-    @app_commands.command()
+    @level.command(name="rank", description="Sendet deine Levelcard.")
     @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
-        """Sendet deine Levelcard."""
+        user = user or interaction.user
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(f"SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (interaction.guild.id))
+                # Prüfen, ob Levels aktiviert sind
+                await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
-                if enabled[0] == 0:
-                    await interaction.response.send_message("<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
-                                                            ephemeral=True)
-                if enabled[0] == 1:
-                    if user == None:
-                        user = interaction.user
+                if not enabled or enabled[0] == 0:
+                    return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
+                        ephemeral=True
+                    )
 
-                    await cur.execute(
-                        f"SELECT user_xp, user_level FROM levelsystem WHERE client_id = (%s) AND guild_id = (%s)",
-                        (user.id, interaction.guild.id))
-                    result = await cur.fetchall()
-                    if not result:
-                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**", ephemeral=True)
-                    if result:
-                        await interaction.response.defer(thinking=True)
+                # Userdaten abrufen
+                await cur.execute("SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                                  (user.id, interaction.guild.id))
+                result = await cur.fetchone()
+                if not result:
+                    return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**", ephemeral=True
+                    )
 
-                        xp_start = result[0][0]
+                await interaction.response.defer(thinking=True)
 
-                        lvl_start = result[0][1]
-                        xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
-                        background = Editor("cogs/Levelcard_Astra.png")
-                        profile = await load_image_async(str(user.avatar))
+                xp_start, lvl_start = result
+                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                        profile = Editor(profile).resize((146, 146)).circle_image()
+                # Bild vorbereiten
+                background = Editor("cogs/Levelcard_Astra.png")
+                avatar = await load_image_async(str(user.avatar))
+                avatar = Editor(avatar).resize((146, 146)).circle_image()
+                background.paste(avatar.image, (59, 95))
+                background.ellipse((59, 95), 150, 150, outline="#ffffff", stroke_width=8)
 
-                        poppins = Font.poppins(size=37)
-                        poppins_middle = Font.poppins(size=45)
-                        poppins_big = Font.poppins(size=55)
-                        poppins_small = Font.poppins(size=30)
-                        background.paste(profile.image, (59, 95))
-                        background.ellipse((59, 95), 150, 150, outline="#ffffff", stroke_width=8)
-                        await cur.execute(
-                            f"SELECT * FROM levelsystem WHERE guild_id = (%s) ORDER BY user_level DESC, user_xp DESC",
-                            (interaction.guild.id))
-                        result2 = await cur.fetchall()
-                        if not result:
-                            pass
-                        if result:
-                            rank = 0
-                            for x in result2:
-                                rank += 1
-                                if int(x[2]) == user.id:
-                                    break
-                                else:
-                                    pass
+                # Schriftarten
+                poppins = Font.poppins(size=37)
+                poppins_middle = Font.poppins(size=45)
+                poppins_big = Font.poppins(size=55)
+                poppins_small = Font.poppins(size=30)
 
-                        if xp_start < 5:
-                            pass
-                        if xp_start > 5:
-                            xp = ((xp_start / xp_end) * 100)
-                            background.bar(
-                                (209, 276),
-                                max_width=675,
-                                height=35,
-                                percentage=xp,
-                                fill="#54bbbd",
-                                radius=5,
-                            )
-                        background.text((246, 100), str(user), font=poppins, color="white")
+                # Rank berechnen (nur ID und XP/Level abrufen, nicht alle Spalten!)
+                await cur.execute(
+                    "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id,))
+                all_users = await cur.fetchall()
 
-                        background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
+                rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), None)
 
-                        background.text(
-                            (886, 206),
-                            f"{xp_start}/{round(xp_end)}",
-                            font=poppins_small,
-                            color="white",
-                        )
+                # Fortschrittsbalken
+                if xp_start > 5:
+                    xp_percentage = (xp_start / xp_end) * 100
+                    background.bar(
+                        (209, 276),
+                        max_width=675,
+                        height=35,
+                        percentage=xp_percentage,
+                        fill="#54bbbd",
+                        radius=5,
+                    )
 
-                        level_text = f"{lvl_start}"
-                        font_path = poppins_middle.path
-                        font_size = poppins_middle.size
-                        pil_font = ImageFont.truetype(font_path, font_size)
-                        text_width = pil_font.getsize(level_text)[0]
+                # Texte platzieren
+                background.text((246, 100), str(user), font=poppins, color="white")
+                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
+                background.text((886, 206), f"{xp_start}/{round(xp_end)}", font=poppins_small, color="white")
 
-                        # Mitte auf X=930 ausrichten (angepasst an Layout)
-                        x_centered = 930 - text_width // 2
-                        background.text(
-                            (x_centered, 91),
-                            level_text,
-                            font=poppins_middle,
-                            color="white",
-                        )
+                # Level zentrieren
+                level_text = str(lvl_start)
+                font_path = poppins_middle.path
+                font_size = poppins_middle.size
+                pil_font = ImageFont.truetype(font_path, font_size)
+                text_width = pil_font.getsize(level_text)[0]
+                x_centered = 930 - text_width // 2
+                background.text((x_centered, 91), level_text, font=poppins_middle, color="white")
 
-                        file = discord.File(fp=background.image_bytes, filename="card.png")
-                        return await interaction.followup.send(file=file)
+                # Bild senden
+                file = File(fp=background.image_bytes, filename="card.png")
+                await interaction.followup.send(file=file)
 
     @level.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
