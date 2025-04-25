@@ -283,12 +283,20 @@ class SnakeBot(commands.Cog):
                     await interaction.response.send_message(embed=embed, view=view)
                     
     @snake_game.command(name="highscore", description="Zeige den Highscore eines Spielers")
-    async def highscore(self, interaction: discord.Interaction, player: discord.User):
+    async def highscore(self, interaction: discord.Interaction, player: discord.User = None):
         # Highscore eines anderen Spielers abfragen
-        highscore = await self.get_highscore(player.id)
+        if player is None:
+            player = interaction.user
+            highscore = await self.get_highscore(player.id)
 
-        embed = discord.Embed(title=f"Highscore von {player.name}", description=f"Der Highscore ist {highscore}", color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed)
+            embed = discord.Embed(title=f"Highscore von {player.name}", description=f"Der Highscore ist {highscore}",
+                                  color=discord.Color.blue())
+            await interaction.response.send_message(embed=embed)
+        else:
+            highscore = await self.get_highscore(player.id)
+
+            embed = discord.Embed(title=f"Highscore von {player.name}", description=f"Der Highscore ist {highscore}", color=discord.Color.blue())
+            await interaction.response.send_message(embed=embed)
 
     async def spawn_food(self):
         while True:
