@@ -361,26 +361,26 @@ class levelsystem(commands.Cog):
                 all_users = await cur.fetchall()
                 rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), None)
 
-                # 💥 FINAL PROGRESS BAR FIX
+                # Set progress bar to original working alignment
                 if xp_start > 5:
                     xp_percentage = (xp_start / xp_end) * 100
                     background.bar(
-                        (246, 288),  # exakt im weißen Rahmen
-                        max_width=753,  # exakt von 246 bis 999
-                        height=28,  # exakt wie Rahmen
+                        (209, 276),
+                        max_width=675,
+                        height=35,
                         percentage=xp_percentage,
                         fill="#54bbbd",
-                        radius=10  # für saubere Rundung innen
+                        radius=5,
                     )
 
-                # LEVEL zentriert bei x=920 (120px Breite)
+                # LEVEL zentriert
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
                 level_x_center = 920 - level_text_width // 2
                 background.text((level_x_center, 92), level_text, font=poppins_middle, color="white")
 
-                # XP zentriert bei x=920
+                # XP zentriert
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 pil_font_xp = ImageFont.truetype(poppins_small.path, poppins_small.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
