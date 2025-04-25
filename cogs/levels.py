@@ -365,12 +365,12 @@ class levelsystem(commands.Cog):
                 if xp_start > 5:
                     xp_percentage = (xp_start / xp_end) * 100
                     background.bar(
-                        (246, 286),
+                        (246, 288),  # Y exakt auf Rahmen abgestimmt
                         max_width=753,
-                        height=30,
+                        height=28,  # exakt wie Rahmen
                         percentage=xp_percentage,
                         fill="#54bbbd",
-                        radius=5,
+                        radius=8,  # für weicheres Inneres
                     )
 
                 # LEVEL zentriert auf 120px Feld bei x=860-980 → Mitte = 920
