@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, File
 from discord.app_commands import Group
 from datetime import datetime
 import random
