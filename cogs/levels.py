@@ -401,9 +401,6 @@ class levelsystem(commands.Cog):
                     xp_percentage = (xp_start / xp_end)
                     bar_full_width = 675
                     bar_width = int(bar_full_width * xp_percentage)
-                    # Rahmen
-                    draw.rounded_rectangle((209, 276, 209 + bar_full_width, 276 + 36), radius=6, outline="#ffffff",
-                                           width=4)
                     # Füllung
                     draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
 
