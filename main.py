@@ -579,11 +579,11 @@ async def on_dbl_test(data):
 async def list_all_commands():
     cmds = await bot.tree.fetch_commands()
     for cmd in cmds:
-        if hasattr(cmd, "options") and cmd.options:  # Falls Optionen vorhanden
+        if hasattr(cmd, "options") and cmd.options:
             for sub in cmd.options:
-                if sub.type == discord.AppCommandType.sub_command:  # Richtiger Subcommand
+                if sub.type == discord.AppCommandType.SUB_COMMAND:
                     logging.info(f"Command: /{cmd.name} {sub.name} | ID: {sub.id}")
-                elif sub.type == discord.AppCommandType.sub_command_group:  # Gruppe, nochmal durchlaufen
+                elif sub.type == discord.AppCommandType.SUB_COMMAND_GROUP:
                     for sub_sub in sub.options:
                         logging.info(f"Command: /{cmd.name} {sub.name} {sub_sub.name} | ID: {sub_sub.id}")
         else:
