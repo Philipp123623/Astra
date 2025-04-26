@@ -382,16 +382,24 @@ class levelsystem(commands.Cog):
                         radius=6,
                     )
 
+                # LEVEL zentriert in 120x50 Kasten
                 level_text = str(lvl_start)
-                pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
-                level_text_width = pil_font_lvl.getbbox(level_text)[2]
-                background.text((920 - level_text_width // 2 + 2, 97), level_text, font=poppins_middle, color="white")
+                level_box_center = 988
+                level_box_y = 95  # vertikal zentriert im 50px hohen Feld
+                level_font = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
+                level_width = level_font.getbbox(level_text)[2]
+                level_x = level_box_center - (level_width // 2)
+                background.text((level_x, level_box_y), level_text, font=poppins_middle, color="white")
+
+                xp_font = Font.poppins(size=33)  # easy_pil Font
+                xp_pil = ImageFont.truetype(xp_font.path, xp_font.size)  # Pillow Font für Breitenberechnung
 
                 xp_text = f"{xp_start}/{round(xp_end)}"
-                xp_font = Font.poppins(size=33)
-                pil_font_xp = ImageFont.truetype(xp_font.path, xp_font.size)
-                xp_text_width = pil_font_xp.getbbox(xp_text)[2]
-                background.text((920 - xp_text_width // 2, 206), xp_text, font=xp_font, color="white")
+                xp_width = xp_pil.getbbox(xp_text)[2]
+                xp_box_center = 988
+                xp_box_y = 206
+                xp_x = xp_box_center - (xp_width // 2)
+                background.text((xp_x, xp_box_y), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
