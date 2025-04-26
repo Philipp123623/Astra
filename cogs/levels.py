@@ -382,7 +382,7 @@ class levelsystem(commands.Cog):
                 level_pil = ImageFont.truetype(level_font.path, level_font.size)
                 level_width = level_pil.getbbox(level_text)[2]  # Textbreite in Pixeln
 
-                level_x = level_box_center - (level_width // 2)  # Exakte Mitte
+                level_x = level_box_center - (level_width // 2) - 6
                 background.text((level_x, 94), level_text, font=level_font, color="white")
 
                 xp_text = f"{xp_start}/{round(xp_end)}"
@@ -391,7 +391,7 @@ class levelsystem(commands.Cog):
                 xp_width = xp_pil.getbbox(xp_text)[2]
 
                 xp_box_center = 988
-                xp_x = xp_box_center - (xp_width // 2)
+                xp_x = xp_box_center - (xp_width // 2) - 8
                 background.text((xp_x, 204), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
