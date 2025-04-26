@@ -382,18 +382,16 @@ class levelsystem(commands.Cog):
                         radius=6,
                     )
 
-                # 🔢 LEVEL zentriert (leichter linksversatz für optische Mitte)
                 level_text = str(lvl_start)
                 pil_font_lvl = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
                 level_text_width = pil_font_lvl.getbbox(level_text)[2]
-                background.text((920 - level_text_width // 2 - 1, 92), level_text, font=poppins_middle, color="white")
+                background.text((920 - level_text_width // 2 + 2, 97), level_text, font=poppins_middle, color="white")
 
-                # 💠 XP zentriert und leicht höher + kleinere Schrift
                 xp_text = f"{xp_start}/{round(xp_end)}"
-                xp_font = Font.poppins(size=34)
+                xp_font = Font.poppins(size=33)
                 pil_font_xp = ImageFont.truetype(xp_font.path, xp_font.size)
                 xp_text_width = pil_font_xp.getbbox(xp_text)[2]
-                background.text((920 - xp_text_width // 2, 203), xp_text, font=xp_font, color="white")
+                background.text((920 - xp_text_width // 2, 206), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
