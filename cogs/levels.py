@@ -382,7 +382,7 @@ class levelsystem(commands.Cog):
                 level_width = level_pil.getbbox(level_text)[2]
 
                 # ✔︎ FINETUNED Offset
-                level_x = 988 - (level_width // 2) - 11  # <- DAS funktioniert
+                level_x = 980 - (level_width // 2) - 11  # <- DAS funktioniert
                 background.text((level_x, 94), level_text, font=level_font, color="white")
 
                 xp_text = f"{xp_start}/{round(xp_end)}"
@@ -391,7 +391,7 @@ class levelsystem(commands.Cog):
                 xp_width = xp_pil.getbbox(xp_text)[2]
 
                 # ✔︎ FINETUNED Offset
-                xp_x = 988 - (xp_width // 2) - 15  # <- auch DAS funktioniert
+                xp_x = 980 - (xp_width // 2) - 15  # <- auch DAS funktioniert
                 background.text((xp_x, 204), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
