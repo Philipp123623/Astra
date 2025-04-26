@@ -581,9 +581,9 @@ async def list_all_commands():
     for cmd in cmds:
         if hasattr(cmd, "options") and cmd.options:
             for sub in cmd.options:
-                if sub.type == discord.AppCommandType.SUB_COMMAND:
+                if sub.type == 1:  # SubCommand
                     logging.info(f"Command: /{cmd.name} {sub.name} | ID: {sub.id}")
-                elif sub.type == discord.AppCommandType.SUB_COMMAND_GROUP:
+                elif sub.type == 2:  # SubCommandGroup
                     for sub_sub in sub.options:
                         logging.info(f"Command: /{cmd.name} {sub.name} {sub_sub.name} | ID: {sub_sub.id}")
         else:
