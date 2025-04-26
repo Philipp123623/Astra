@@ -349,6 +349,10 @@ class levelsystem(commands.Cog):
                 # 🖼️ Profilbild (neu zentriert!)
                 avatar = await load_image_async(str(user.avatar))
                 avatar = Editor(avatar).resize((138, 138)).circle_image()
+                poppins_small = Font.poppins(size=30)
+                poppins = Font.poppins(size=37)
+                poppins_middle = Font.poppins(size=45)
+                poppins_big = Font.poppins(size=55)
                 background.paste(avatar, (64, 100))  # leicht nach rechts/unten verschoben
                 background.ellipse((63, 99), 144, 144, outline="#ffffff", stroke_width=6)
 
@@ -357,12 +361,46 @@ class levelsystem(commands.Cog):
                 poppins_middle = Font.poppins(size=38)  # XP/Level einheitlich
                 poppins_big = Font.poppins(size=53)
 
-                # 📊 Rang berechnen
                 await cur.execute(
-                    "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
-                    (interaction.guild.id,))
-                all_users = await cur.fetchall()
-                rank = next((i + 1 for i, u in enumerate(all_users) if int(u[0]) == user.id), 1)
+                    f"SELECT * FROM levelsystem WHERE guild_id = (%s) ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id))
+                result2 = await cur.fetchall()
+                if not result2:
+                    pass
+                if result2:
+                    rank = 0
+                    for x in result2:
+                        rank += 1
+                        if int(x[2]) == user.id:
+                            break
+                        else:
+                            pass
+
+                background.text((246, 100), str(user), font=poppins, color="white")
+
+                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
+
+                background.text(
+                    (886, 206),
+                    f"{xp_start}/{round(xp_end)}",
+                    font=poppins_small,
+                    color="white",
+                )
+
+                if lvl_start > 10 and lvl_start != 100:
+                    background.text(
+                        (903, 91),
+                        f"{lvl_start}",
+                        font=poppins_middle,
+                        color="white",
+                    )
+                if lvl_start == 100:
+                    background.text(
+                        (898, 91),
+                        f"{lvl_start}",
+                        font=poppins_middle,
+                        color="white",
+                    )
 
                 # 📊 Progressbar (zentriert im weißen Rahmen)
                 if xp_start > 5:
@@ -375,28 +413,6 @@ class levelsystem(commands.Cog):
                         fill="#54bbbd",
                         radius=6,
                     )
-
-                level_text = str(lvl_start)
-                level_font = Font.poppins(size=38)
-                level_pil = ImageFont.truetype(level_font.path, level_font.size)
-                level_width = level_pil.getbbox(level_text)[2]
-
-                # ✔︎ FINETUNED Offset
-                level_x = 970 - (level_width // 2) - 11  # <- DAS funktioniert
-                background.text((level_x, 94), level_text, font=level_font, color="white")
-
-                xp_text = f"{xp_start}/{round(xp_end)}"
-                xp_font = Font.poppins(size=33)
-                xp_pil = ImageFont.truetype(xp_font.path, xp_font.size)
-                xp_width = xp_pil.getbbox(xp_text)[2]
-
-                # ✔︎ FINETUNED Offset
-                xp_x = 975 - (xp_width // 2) - 15  # <- auch DAS funktioniert
-                background.text((xp_x, 204), xp_text, font=xp_font, color="white")
-
-                # 🏷️ Username & Rang
-                background.text((246, 100), str(user), font=poppins, color="white")
-                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
 
                 file = File(fp=background.image_bytes, filename="card.png")
                 await interaction.followup.send(file=file)
