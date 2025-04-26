@@ -579,9 +579,10 @@ async def on_dbl_test(data):
 async def list_all_commands():
     cmds = await bot.tree.fetch_commands()
     for cmd in cmds:
-        if isinstance(cmd, app_commands.Group):
-            for sub in cmd.commands:
-                logging.info(f"Command: /{cmd.name} {sub.name} | ID: {sub.id}")
+        if isinstance(cmd, app_commands.Group):  # Wenn der Befehl eine Gruppe ist
+            for sub in cmd.walk_commands():  # Alle Subcommands sauber durchgehen
+                if isinstance(sub, app_commands.Command):  # Nur echte Commands
+                    logging.info(f"Command: /{cmd.name} {sub.name} | ID: {sub.id}")
         else:
             logging.info(f"Command: /{cmd.name} | ID: {cmd.id}")
 
