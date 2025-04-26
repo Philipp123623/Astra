@@ -551,9 +551,7 @@ class levelsystem(commands.Cog):
                             await cur.execute("DELETE FROM levelmsg WHERE guildID = (%s)", (interaction.guild.id))
                             await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Die Level-UP-Nachricht wurde erfolgreich zurückgesetzt.**")
 
-    roles = Group(parent=level, name="role", description="Astra")
-
-    @roles.command(name="add")
+    @level.command(name="role")
     @app_commands.checks.has_permissions(manage_roles=True)
     async def levelsystem_role_add(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int, role: discord.Role):
         """Füge/Entferne Rollen die man ab dem jeweiligem Level bekommt."""
