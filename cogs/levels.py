@@ -369,7 +369,7 @@ class levelsystem(commands.Cog):
                 draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
 
                 # --- Username zeichnen (fest positioniert)
-                draw.text((246, 105), str(user), font=font_username, fill="white")
+                draw.text((246, 95), str(user), font=font_username, fill="white")
 
                 # --- Rank (Platzierung) abrufen
                 await cur.execute(
