@@ -382,17 +382,18 @@ class levelsystem(commands.Cog):
                 # --- Rank (#Platz) zeichnen
                 draw.text((397, 174), f"#{rank}", font=font_rank, fill="white")
 
-                # --- Level mittig zeichnen
                 level_text = f"{lvl_start}"
                 level_bbox = draw.textbbox((0, 0), level_text, font=font_level)
                 level_width = level_bbox[2] - level_bbox[0]
-                draw.text((944 - level_width // 2, 88), level_text, font=font_level, fill="white")
+                level_height = level_bbox[3] - level_bbox[1]
+                draw.text((944 - level_width // 2, 88 + (40 - level_height) // 2), level_text, font=font_level,
+                          fill="white")
 
-                # --- XP mittig zeichnen
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 xp_bbox = draw.textbbox((0, 0), xp_text, font=font_xp)
                 xp_width = xp_bbox[2] - xp_bbox[0]
-                draw.text((944 - xp_width // 2, 203), xp_text, font=font_xp, fill="white")
+                xp_height = xp_bbox[3] - xp_bbox[1]
+                draw.text((944 - xp_width // 2, 203 + (40 - xp_height) // 2), xp_text, font=font_xp, fill="white")
 
                 # --- Progressbar zeichnen (wenn XP > 5)
                 if xp_start > 5:
