@@ -584,7 +584,7 @@ async def on_ready():
     bot.add_view(gw_button())
     cmds = await bot.tree.fetch_commands()
     for cmd in cmds:
-        print(f"Command: /{cmd.name} | ID: {cmd.id}")
+        logging.info(f"Command: /{cmd.name} | ID: {cmd.id}")
 
 
 async def funktion2(when: datetime.datetime):
