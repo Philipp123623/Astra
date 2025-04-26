@@ -380,24 +380,17 @@ class levelsystem(commands.Cog):
 
                 background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
 
-                background.text(
-                    (886, 206),
-                    f"{xp_start}/{round(xp_end)}",
-                    font=poppins_small,
-                    color="white",
-                )
-
-                # Level zentrieren
+                # LEVEL zentriert bei X = 944, Y = 88
                 level_text = f"{lvl_start}"
                 level_bbox = poppins_middle.getbbox(level_text)
                 level_width = level_bbox[2] - level_bbox[0]
-                background.text((958 - level_width // 2, 85), level_text, font=poppins_middle, color="white")
+                background.text((944 - level_width // 2, 88), level_text, font=poppins_middle, color="white")
 
-                # XP zentrieren
+                # XP zentriert bei X = 944, Y = 203
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 xp_bbox = poppins_small.getbbox(xp_text)
                 xp_width = xp_bbox[2] - xp_bbox[0]
-                background.text((958 - xp_width // 2, 206), xp_text, font=poppins_small, color="white")
+                background.text((944 - xp_width // 2, 203), xp_text, font=poppins_small, color="white")
 
                 file = File(fp=background.image_bytes, filename="card.png")
                 await interaction.followup.send(file=file)
