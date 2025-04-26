@@ -387,7 +387,7 @@ class levelsystem(commands.Cog):
                 level_bbox = font_level.getbbox(level_text)
                 level_width = draw.textlength(level_text, font=font_level)
                 level_height = level_bbox[3] - level_bbox[1]
-                draw.text((931 - level_width // 2, 130 - level_height // 2), level_text, font=font_level, fill="white")
+                draw.text((931 - level_width // 2, 998 - level_height // 2), level_text, font=font_level, fill="white")
 
                 # XP – vertikal & horizontal zentriert
                 xp_text = f"{xp_start}/{round(xp_end)}"
