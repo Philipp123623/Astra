@@ -387,22 +387,17 @@ class levelsystem(commands.Cog):
                     color="white",
                 )
 
-                if lvl_start > 10 and lvl_start != 100:
-                    background.text((903, 91), f"{lvl_start}", font=poppins_middle, color="white")
-                if lvl_start == 100:
-                    background.text((898, 91), f"{lvl_start}", font=poppins_middle, color="white")
+                # Level zentrieren
+                level_text = f"{lvl_start}"
+                level_bbox = poppins_middle.getbbox(level_text)
+                level_width = level_bbox[2] - level_bbox[0]
+                background.text((958 - level_width // 2, 85), level_text, font=poppins_middle, color="white")
 
-                # 📊 Progressbar (zentriert im weißen Rahmen)
-                if xp_start > 5:
-                    xp_percentage = (xp_start / xp_end) * 100
-                    background.bar(
-                        (209, 276),  # zurück auf Ursprung
-                        max_width=675,
-                        height=36,  # minimal höher für perfekte Füllung
-                        percentage=xp_percentage,
-                        fill="#54bbbd",
-                        radius=6,
-                    )
+                # XP zentrieren
+                xp_text = f"{xp_start}/{round(xp_end)}"
+                xp_bbox = poppins_small.getbbox(xp_text)
+                xp_width = xp_bbox[2] - xp_bbox[0]
+                background.text((958 - xp_width // 2, 206), xp_text, font=poppins_small, color="white")
 
                 file = File(fp=background.image_bytes, filename="card.png")
                 await interaction.followup.send(file=file)
