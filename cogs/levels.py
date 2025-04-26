@@ -387,20 +387,10 @@ class levelsystem(commands.Cog):
                     color="white",
                 )
 
-                level_text = f"{lvl_start}"
-                font_path = poppins_middle.path
-                font_size = poppins_middle.size
-                pil_font = ImageFont.truetype(font_path, font_size)
-                text_width = pil_font.getbbox(level_text)[0]
-
-                # Mitte auf X=930 ausrichten (angepasst an Layout)
-                x_centered = 910 - text_width // 2
-                background.text(
-                    (x_centered, 85),
-                    level_text,
-                    font=poppins_middle,
-                    color="white",
-                )
+                if lvl_start > 10 and lvl_start != 100:
+                    background.text((903, 91), f"{lvl_start}", font=poppins_middle, color="white")
+                if lvl_start == 100:
+                    background.text((898, 91), f"{lvl_start}", font=poppins_middle, color="white")
 
                 # 📊 Progressbar (zentriert im weißen Rahmen)
                 if xp_start > 5:
