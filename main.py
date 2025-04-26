@@ -576,8 +576,8 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     await msg.add_reaction(heart)
 
-async def list_all_commands(bot_instance):
-    cmds = await bot_instance.tree.fetch_commands()
+async def list_all_commands():
+    cmds = await bot.tree.fetch_commands()
     for cmd in cmds:
         if isinstance(cmd, app_commands.Group):
             for sub in cmd.commands:
@@ -591,7 +591,7 @@ async def on_ready():
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
     bot.add_view(gw_button())
-    await list_all_commands(bot)
+    await list_all_commands()
 
 
 async def funktion2(when: datetime.datetime):
