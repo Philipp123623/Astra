@@ -314,12 +314,6 @@ class levelsystem(commands.Cog):
                                                                               color=discord.Color.green())
                                                         await channel.send(msg.author.mention, embed=embed)
 
-    from PIL import ImageFont
-    from easy_pil import Editor, Font, load_image_async
-    from discord import app_commands, File
-    from discord.ext import commands
-    import discord
-
     level = app_commands.Group(name='levelsystem', description="Astra")
 
     @level.command(name="rank", description="Sendet deine Levelcard.")
@@ -382,23 +376,23 @@ class levelsystem(commands.Cog):
                         radius=6,
                     )
 
-                level_box_center = 988
-                level_y = 94  # 1px höher
+                level_box_center = 988  # X-Koordinate der Boxmitte (aus Bild)
                 level_text = str(lvl_start)
                 level_font = Font.poppins(size=38)
                 level_pil = ImageFont.truetype(level_font.path, level_font.size)
-                level_width = level_pil.getbbox(level_text)[2]
-                level_x = level_box_center - level_width // 2 - 1  # -1 für optische Zentrierung
-                background.text((level_x, level_y), level_text, font=level_font, color="white")
+                level_width = level_pil.getbbox(level_text)[2]  # Textbreite in Pixeln
+
+                level_x = level_box_center - (level_width // 2)  # Exakte Mitte
+                background.text((level_x, 94), level_text, font=level_font, color="white")
 
                 xp_text = f"{xp_start}/{round(xp_end)}"
                 xp_font = Font.poppins(size=33)
                 xp_pil = ImageFont.truetype(xp_font.path, xp_font.size)
                 xp_width = xp_pil.getbbox(xp_text)[2]
+
                 xp_box_center = 988
-                xp_y = 204  # leicht höher
-                xp_x = xp_box_center - xp_width // 2 - 1  # -1 für besseren optischen Ausgleich
-                background.text((xp_x, xp_y), xp_text, font=xp_font, color="white")
+                xp_x = xp_box_center - (xp_width // 2)
+                background.text((xp_x, 204), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
