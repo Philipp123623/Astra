@@ -394,7 +394,8 @@ class levelsystem(commands.Cog):
                 draw.text((931 - level_width // 2, 95 - level_height // 2), level_text, font=font_level, fill="white")
 
                 # XP – vertikal & horizontal zentriert
-                xp_text = f"{xp_start}/{round(xp_end)}"
+                percent = int((xp_start / xp_end) * 100)
+                xp_text = f"{xp_start}/{round(xp_end)} ({percent}%)"
                 xp_bbox = font_xp.getbbox(xp_text)
                 xp_width = draw.textlength(xp_text, font=font_xp)
                 xp_height = xp_bbox[3] - xp_bbox[1]
