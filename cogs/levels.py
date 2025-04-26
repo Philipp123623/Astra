@@ -349,10 +349,10 @@ class levelsystem(commands.Cog):
                 draw = ImageDraw.Draw(background)
 
                 # --- Fonts laden (achte auf den richtigen Pfad und Dateinamen der Schriftart!)
-                font_username = ImageFont.truetype("fonts/Poppins-SemiBold.ttf", size=34)
-                font_rank = ImageFont.truetype("fonts/Poppins-SemiBold.ttf", size=53)
-                font_level = ImageFont.truetype("fonts/Poppins-SemiBold.ttf", size=38)
-                font_xp = ImageFont.truetype("fonts/Poppins-SemiBold.ttf", size=30)
+                font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
+                font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
+                font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
+                font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
 
                 # --- Avatar laden und einfügen
                 avatar_asset = user.display_avatar.replace(size=256)
