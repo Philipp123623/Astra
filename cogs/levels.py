@@ -362,7 +362,11 @@ class levelsystem(commands.Cog):
                 mask = Image.new("L", (138, 138), 0)
                 mask_draw = ImageDraw.Draw(mask)
                 mask_draw.ellipse((0, 0, 138, 138), fill=255)
+
                 background.paste(avatar, (64, 100), mask)
+
+                # ✅ Umrandung zeichnen (leicht größer als Avatar)
+                draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
 
                 # --- Username zeichnen (fest positioniert)
                 draw.text((246, 100), str(user), font=font_username, fill="white")
