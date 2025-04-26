@@ -394,9 +394,9 @@ class levelsystem(commands.Cog):
                 text_width = pil_font.getbbox(level_text)[0]
 
                 # Mitte auf X=930 ausrichten (angepasst an Layout)
-                x_centered = 903 - text_width // 2
+                x_centered = 910 - text_width // 2
                 background.text(
-                    (x_centered, 91),
+                    (x_centered, 85),
                     level_text,
                     font=poppins_middle,
                     color="white",
