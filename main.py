@@ -576,15 +576,22 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     await msg.add_reaction(heart)
 
+async def list_all_commands(bot):
+    cmds = await bot.tree.fetch_commands()
+    for cmd in cmds:
+        if isinstance(cmd, app_commands.Group):  # Überprüfen ob es ein Command-Group ist
+            for sub in cmd.commands:  # Alle Subcommands durchsuchen
+                logging.info(f"Command: /{cmd.name} {sub.name} | ID: {sub.id}")
+        else:
+            logging.info(f"Command: /{cmd.name} | ID: {cmd.id}")
+
 @bot.event
 async def on_ready():
     await bot.change_presence(
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
     bot.add_view(gw_button())
-    cmds = await bot.tree.fetch_commands()
-    for cmd in cmds:
-        logging.info(f"Command: /{cmd.name} | ID: {cmd.id}")
+    await list_all_commands(bot)
 
 
 async def funktion2(when: datetime.datetime):
