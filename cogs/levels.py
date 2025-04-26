@@ -7,8 +7,8 @@ import random
 from typing import Literal
 import math
 import asyncio
-from PIL import ImageFont
-from easy_pil import *
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 
 ##########
@@ -344,55 +344,73 @@ class levelsystem(commands.Cog):
                 xp_start, lvl_start = result
                 xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                background = Editor("cogs/Levelcard_Astra.png")
+                # --- Bild und Zeichner laden
+                background = Image.open("cogs/Levelcard_Astra.png").convert("RGBA")
+                draw = ImageDraw.Draw(background)
 
-                # 🖼️ Profilbild (neu zentriert!)
-                avatar = await load_image_async(str(user.avatar))
-                avatar = Editor(avatar).resize((138, 138)).circle_image()
-                poppins_small = Font.poppins(size=30)
-                poppins = Font.poppins(size=37)
-                poppins_middle = Font.poppins(size=45)
-                poppins_big = Font.poppins(size=55)
-                background.paste(avatar, (64, 100))  # leicht nach rechts/unten verschoben
-                background.ellipse((63, 99), 144, 144, outline="#ffffff", stroke_width=6)
+                # --- Fonts laden (achte auf den richtigen Pfad und Dateinamen der Schriftart!)
+                font_username = ImageFont.truetype("Poppins-SemiBold.ttf", size=34)
+                font_rank = ImageFont.truetype("Poppins-SemiBold.ttf", size=53)
+                font_level = ImageFont.truetype("Poppins-SemiBold.ttf", size=38)
+                font_xp = ImageFont.truetype("Poppins-SemiBold.ttf", size=30)
 
-                # 📐 Fonts
-                poppins = Font.poppins(size=34)
-                poppins_middle = Font.poppins(size=38)  # XP/Level einheitlich
-                poppins_big = Font.poppins(size=53)
+                # --- Avatar laden und einfügen
+                avatar_asset = user.display_avatar.replace(size=256)
+                avatar_bytes = await avatar_asset.read()
+                avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
 
+                mask = Image.new("L", (138, 138), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.ellipse((0, 0, 138, 138), fill=255)
+                background.paste(avatar, (64, 100), mask)
+
+                # --- Username zeichnen (fest positioniert)
+                draw.text((246, 100), str(user), font=font_username, fill="white")
+
+                # --- Rank (Platzierung) abrufen
                 await cur.execute(
-                    f"SELECT * FROM levelsystem WHERE guild_id = (%s) ORDER BY user_level DESC, user_xp DESC",
-                    (interaction.guild.id))
+                    "SELECT client_id FROM levelsystem WHERE guild_id = (%s) ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id,))
                 result2 = await cur.fetchall()
-                if not result2:
-                    pass
+                rank = 0
                 if result2:
-                    rank = 0
                     for x in result2:
                         rank += 1
-                        if int(x[2]) == user.id:
+                        if int(x[0]) == user.id:
                             break
-                        else:
-                            pass
 
-                background.text((246, 100), str(user), font=poppins, color="white")
+                # --- Rank (#Platz) zeichnen
+                draw.text((397, 174), f"#{rank}", font=font_rank, fill="white")
 
-                background.text((397, 174), f"#{rank}", font=poppins_big, color="white")
-
-                # LEVEL zentriert bei X = 944, Y = 88
+                # --- Level mittig zeichnen
                 level_text = f"{lvl_start}"
-                level_bbox = poppins_middle.getbbox(level_text)
+                level_bbox = draw.textbbox((0, 0), level_text, font=font_level)
                 level_width = level_bbox[2] - level_bbox[0]
-                background.text((944 - level_width // 2, 88), level_text, font=poppins_middle, color="white")
+                draw.text((944 - level_width // 2, 88), level_text, font=font_level, fill="white")
 
-                # XP zentriert bei X = 944, Y = 203
+                # --- XP mittig zeichnen
                 xp_text = f"{xp_start}/{round(xp_end)}"
-                xp_bbox = poppins_small.getbbox(xp_text)
+                xp_bbox = draw.textbbox((0, 0), xp_text, font=font_xp)
                 xp_width = xp_bbox[2] - xp_bbox[0]
-                background.text((944 - xp_width // 2, 203), xp_text, font=poppins_small, color="white")
+                draw.text((944 - xp_width // 2, 203), xp_text, font=font_xp, fill="white")
 
-                file = File(fp=background.image_bytes, filename="card.png")
+                # --- Progressbar zeichnen (wenn XP > 5)
+                if xp_start > 5:
+                    xp_percentage = (xp_start / xp_end)
+                    bar_full_width = 675
+                    bar_width = int(bar_full_width * xp_percentage)
+                    # Rahmen
+                    draw.rounded_rectangle((209, 276, 209 + bar_full_width, 276 + 36), radius=6, outline="#ffffff",
+                                           width=4)
+                    # Füllung
+                    draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
+
+                # --- Bild speichern und senden
+                buffer = BytesIO()
+                background.save(buffer, format="PNG")
+                buffer.seek(0)
+
+                file = File(fp=buffer, filename="card.png")
                 await interaction.followup.send(file=file)
 
     @level.command(name="status")
