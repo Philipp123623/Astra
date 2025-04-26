@@ -382,24 +382,23 @@ class levelsystem(commands.Cog):
                         radius=6,
                     )
 
-                # LEVEL zentriert in 120x50 Kasten
-                level_text = str(lvl_start)
                 level_box_center = 988
-                level_box_y = 95  # vertikal zentriert im 50px hohen Feld
-                level_font = ImageFont.truetype(poppins_middle.path, poppins_middle.size)
-                level_width = level_font.getbbox(level_text)[2]
-                level_x = level_box_center - (level_width // 2)
-                background.text((level_x, level_box_y), level_text, font=poppins_middle, color="white")
-
-                xp_font = Font.poppins(size=33)  # easy_pil Font
-                xp_pil = ImageFont.truetype(xp_font.path, xp_font.size)  # Pillow Font für Breitenberechnung
+                level_y = 94  # 1px höher
+                level_text = str(lvl_start)
+                level_font = Font.poppins(size=38)
+                level_pil = ImageFont.truetype(level_font.path, level_font.size)
+                level_width = level_pil.getbbox(level_text)[2]
+                level_x = level_box_center - level_width // 2 - 1  # -1 für optische Zentrierung
+                background.text((level_x, level_y), level_text, font=level_font, color="white")
 
                 xp_text = f"{xp_start}/{round(xp_end)}"
+                xp_font = Font.poppins(size=33)
+                xp_pil = ImageFont.truetype(xp_font.path, xp_font.size)
                 xp_width = xp_pil.getbbox(xp_text)[2]
                 xp_box_center = 988
-                xp_box_y = 206
-                xp_x = xp_box_center - (xp_width // 2)
-                background.text((xp_x, xp_box_y), xp_text, font=xp_font, color="white")
+                xp_y = 204  # leicht höher
+                xp_x = xp_box_center - xp_width // 2 - 1  # -1 für besseren optischen Ausgleich
+                background.text((xp_x, xp_y), xp_text, font=xp_font, color="white")
 
                 # 🏷️ Username & Rang
                 background.text((246, 100), str(user), font=poppins, color="white")
