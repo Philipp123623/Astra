@@ -384,7 +384,7 @@ class levelsystem(commands.Cog):
                             break
 
                 # --- Rank (#Platz) zeichnen
-                draw.text((397, 174), f"#{rank}", font=font_rank, fill="white")
+                draw.text((397, 160), f"#{rank}", font=font_rank, fill="white")
 
                 # LEVEL – vertikal & horizontal zentriert
                 level_text = f"{lvl_start}"
