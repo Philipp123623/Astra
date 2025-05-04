@@ -330,6 +330,23 @@ class AdminReviewView(discord.ui.View):
         await interaction.response.send_message("✅ Partner angenommen & Werbung gestartet!", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
+        # Werbung sofort posten
+        user_embed = discord.Embed(
+            title=embed_title,
+            description=embed_description,
+            color=int(embed_color.replace("#", ""), 16)
+        )
+        if embed_thumbnail and embed_thumbnail.startswith("http"):
+            user_embed.set_thumbnail(url=embed_thumbnail)
+        if embed_image and embed_image.startswith("http"):
+            user_embed.set_image(url=embed_image)
+
+        user_ad_channel = self.bot.get_channel(int(ad_channel_id))
+        if user_ad_channel:
+            try:
+                await user_ad_channel.send(embed=user_embed)
+            except Exception as e:
+                logging.error(f"Fehler beim sofortigen Werbungsposten: {e}")
 
     @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.danger)
     async def ablehnen(self, interaction: discord.Interaction, button: discord.ui.Button):
