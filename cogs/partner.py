@@ -304,7 +304,7 @@ class AdminReviewView(discord.ui.View):
         # Thread im Forum erstellen
         await forum.create_thread(
             name=sanitize_thread_title(thread_title),
-            content=f"{invite}",
+            content=f"{invite_link}",
             embed=embed,
             applied_tags=used_tags
         )
