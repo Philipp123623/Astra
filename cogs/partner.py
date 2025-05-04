@@ -21,24 +21,20 @@ class PartnerZwischenspeicher:
 
 bewerbung_cache = PartnerZwischenspeicher()
 
-class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1: Allgemeines"):
+class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 1"):
     def __init__(self, bot, projektart, darstellung):
         super().__init__()
         self.bot = bot
         self.projektart = projektart
         self.darstellung = darstellung
 
-        thread_title = discord.ui.TextInput(label="Thread-Titel", style=discord.TextStyle.short, max_length=100)
-        invite_link = discord.ui.TextInput(label="Einladungslink", style=discord.TextStyle.short, placeholder="https://discord.gg/...", max_length=200)
-        werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", style=discord.TextStyle.short, max_length=25)
+        self.thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
+        self.invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...", max_length=200)
+        self.werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", max_length=25)
 
-        self.add_item(thread_title)
-        self.add_item(invite_link)
-        self.add_item(werbekanal_id)
-
-        self.thread_title = thread_title
-        self.invite_link = invite_link
-        self.werbekanal_id = werbekanal_id
+        self.add_item(self.thread_title)
+        self.add_item(self.invite_link)
+        self.add_item(self.werbekanal_id)
 
     async def on_submit(self, interaction: discord.Interaction):
         bewerbung_cache.set(interaction.user.id, {
@@ -48,32 +44,19 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             "projektart": self.projektart,
             "darstellung": self.darstellung
         })
-
-        view = SchrittZweiButtonView(self.bot)
-        await interaction.response.send_message("✅ Schritt 1 abgeschlossen. Klicke unten, um Schritt 2 zu starten.", view=view, ephemeral=True)
-
-class SchrittZweiButtonView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=None)
-        self.bot = bot
-
-    @discord.ui.button(label="📨 Schritt 2 starten", style=discord.ButtonStyle.primary)
-    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
-class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
+class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 2"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
-        werbetext = discord.ui.TextInput(
-            label="Werbetext für Embed/Text",
+        self.werbetext = discord.ui.TextInput(
+            label="Werbetext für Embed oder Text",
             style=discord.TextStyle.paragraph,
-            max_length=4000,
-            placeholder="Gib hier deinen Werbetext ein."
+            max_length=4000
         )
-        self.add_item(werbetext)
-        self.werbetext = werbetext
+        self.add_item(self.werbetext)
 
     async def on_submit(self, interaction: discord.Interaction):
         data = bewerbung_cache.get(interaction.user.id)
@@ -87,41 +70,36 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
             bewerbung_cache.clear(interaction.user.id)
             await save_and_send_bewerbung(self.bot, interaction, data, embed=False)
         else:
-            view = SchrittDreiButtonView(self.bot)
-            await interaction.response.send_message("✅ Schritt 2 abgeschlossen. Klicke unten, um Schritt 3 zu starten.", view=view, ephemeral=True)
+            await interaction.response.send_message("✅ Schritt 2 abgeschlossen. Fahre mit Schritt 3 fort:", view=SchrittDreiButtonView(self.bot), ephemeral=True)
 
 class SchrittDreiButtonView(discord.ui.View):
     def __init__(self, bot):
-        super().__init__(timeout=None)
+        super().__init__(timeout=900)
         self.bot = bot
 
     @discord.ui.button(label="🎨 Schritt 3 starten", style=discord.ButtonStyle.secondary)
     async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ModalDritterSchritt(self.bot))
 
-class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 3: Embed-Einstellungen"):
+class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 3"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
-        embed_color = discord.ui.TextInput(
-            label="Farbe (#5865F2)",
-            style=discord.TextStyle.short,
-            required=False,
+        self.embed_color = discord.ui.TextInput(
+            label="Farbe (Hex)",
             placeholder="#5865F2",
-            max_length=7
+            max_length=7,
+            required=False
         )
-        embed_image = discord.ui.TextInput(
+        self.embed_image = discord.ui.TextInput(
             label="Bild-URL (optional)",
-            style=discord.TextStyle.short,
-            required=False,
-            max_length=300
+            max_length=300,
+            required=False
         )
 
-        self.add_item(embed_color)
-        self.add_item(embed_image)
-        self.embed_color = embed_color
-        self.embed_image = embed_image
+        self.add_item(self.embed_color)
+        self.add_item(self.embed_image)
 
     async def on_submit(self, interaction: discord.Interaction):
         data = bewerbung_cache.get(interaction.user.id)
@@ -154,21 +132,20 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
             ))
             await conn.commit()
 
-    preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
-    preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
-    preview.add_field(name="Projektart", value=data["projektart"], inline=True)
-    preview.add_field(name="Invite", value=data["invite_link"], inline=True)
-    preview.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
-    preview.add_field(name="Werbetext", value=data["werbetext"][:1024], inline=False)
+    embed_preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
+    embed_preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
+    embed_preview.add_field(name="Projektart", value=data["projektart"], inline=True)
+    embed_preview.add_field(name="Invite", value=data["invite_link"], inline=True)
+    embed_preview.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
+    embed_preview.add_field(name="Werbetext", value=data["werbetext"][:1024], inline=False)
     if embed:
-        preview.add_field(name="Farbe", value=data.get("embed_color"), inline=True)
-        preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
+        embed_preview.add_field(name="Farbe", value=data.get("embed_color"), inline=True)
+        embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
 
     view = AdminReviewView(bot, interaction.user.id)
     admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
-    await admin_channel.send(embed=preview, view=view)
-    await interaction.response.send_message("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
-
+    await admin_channel.send(embed=embed_preview, view=view)
+    await interaction.followup.send("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
 
 class AdminReviewView(discord.ui.View):
     def __init__(self, bot, user_id):
@@ -245,7 +222,6 @@ class AdminReviewView(discord.ui.View):
         self.disable_all_items()
         await interaction.message.edit(view=self)
 
-
 class Partner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -315,7 +291,7 @@ class Partner(commands.Cog):
                     return
                 title, description, invite, thumbnail, image = data
 
-        embed = discord.Embed(title=title or "Astra Werbung", description=description.replace("\\n", "\n").replace("{invite}", invite), color=discord.Color.blurple())
+        embed = discord.Embed(title=title, description=description.replace("\\n", "\n").replace("{invite}", invite), color=discord.Color.blurple())
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
         if image:
@@ -349,11 +325,8 @@ class Partner(commands.Cog):
             app_commands.Choice(name="Einfacher Text", value="text")
         ]
     )
-    async def partnerbewerbung(self, interaction: discord.Interaction, projektart: app_commands.Choice[str],
-                               darstellung: app_commands.Choice[str]):
+    async def partnerbewerbung(self, interaction: discord.Interaction, projektart: app_commands.Choice[str], darstellung: app_commands.Choice[str]):
         await interaction.response.send_modal(ModalErsterSchritt(self.bot, projektart.value, darstellung.value))
 
 async def setup(bot):
     await bot.add_cog(Partner(bot))
-
-
