@@ -108,16 +108,29 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.werbetext = discord.ui.TextInput(label="Werbetext", style=discord.TextStyle.paragraph, max_length=4000)
+        self.werbetext = discord.ui.TextInput(
+            label="Werbetext",
+            style=discord.TextStyle.paragraph,
+            placeholder="Erkläre, warum du Partner werden möchtest...",
+            max_length=4000
+        )
         self.add_item(self.werbetext)
 
     async def on_submit(self, interaction: discord.Interaction):
+        werbetext = self.werbetext.value.strip()
+
+        if not werbetext:
+            await interaction.response.send_message("❌ Der Werbetext darf nicht leer sein.", ephemeral=True)
+            return
+
         data = bewerbung_cache.get(interaction.user.id)
         if not data:
             await interaction.response.send_message("❌ Fehler beim Zwischenspeichern.", ephemeral=True)
             return
 
-        data["werbetext"] = self.werbetext.value  # hier NICHT \n ersetzen
+        data["werbetext"] = werbetext
+
+        logging.info(f"[Partnerbewerbung] Schritt 2 gespeichert für {interaction.user.id}")
 
         if data["darstellung"] == "text":
             bewerbung_cache.clear(interaction.user.id)
@@ -145,26 +158,48 @@ class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellunge
         self.bot = bot
 
         self.embed_color = discord.ui.TextInput(
-            label="Farbe (#5865F2)", style=discord.TextStyle.short,
-            required=False, placeholder="#5865F2", max_length=7)
+            label="Farbe (#5865F2)",
+            style=discord.TextStyle.short,
+            required=False,
+            placeholder="#5865F2",
+            max_length=7
+        )
 
         self.embed_image = discord.ui.TextInput(
-            label="Bild-URL (optional)", style=discord.TextStyle.short,
-            required=False, max_length=300)
+            label="Bild-URL (optional)",
+            style=discord.TextStyle.short,
+            required=False,
+            max_length=300
+        )
 
         self.add_item(self.embed_color)
         self.add_item(self.embed_image)
 
     async def on_submit(self, interaction: discord.Interaction):
+        color_input = self.embed_color.value.strip() or "#5865F2"
+        image_url = self.embed_image.value.strip()
+
+        # Farbencheck (optional, aber empfehlenswert)
+        if not color_input.startswith("#") or len(color_input) != 7:
+            await interaction.response.send_message("❌ Ungültiger Farbcode. Beispiel: `#5865F2`", ephemeral=True)
+            return
+
+        if image_url and not image_url.startswith("http"):
+            await interaction.response.send_message("❌ Ungültige Bild-URL. Sie muss mit http beginnen.", ephemeral=True)
+            return
+
         data = bewerbung_cache.get(interaction.user.id)
         if not data:
             await interaction.response.send_message("❌ Fehler beim Zwischenspeichern.", ephemeral=True)
             return
 
-        data["embed_color"] = self.embed_color.value or "#5865F2"
-        data["embed_image"] = self.embed_image.value if self.embed_image.value.startswith("http") else None
+        data["embed_color"] = color_input
+        data["embed_image"] = image_url or None
 
         bewerbung_cache.clear(interaction.user.id)
+
+        logging.info(f"[Partnerbewerbung] Schritt 3 gespeichert für {interaction.user.id}")
+
         await interaction.response.defer()
         await save_and_send_bewerbung(self.bot, interaction, data, embed=True)
 
