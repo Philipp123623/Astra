@@ -126,7 +126,6 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
 
         if data["darstellung"] == "text":
             bewerbung_cache.clear(interaction.user.id)
-            await interaction.response.defer()
             await save_and_send_bewerbung(self.bot, interaction, data, embed=False)
         else:
             view = SchrittDreiStartView(self.bot)
@@ -224,7 +223,7 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
                 data["thread_title"],
                 data["thread_title"],
                 data["werbetext"],
-                data.get("embed_color") if embed else "#5865F2",
+                data.get("embed_color") if embed else None,
                 data.get("embed_image") if embed else None,
                 data.get("embed_thumbnail") if embed else None,
                 data["invite_link"],
@@ -233,24 +232,37 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
             ))
             await conn.commit()
 
-    embed_preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
-    embed_preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
-    embed_preview.add_field(name="Projektart", value=data["projektart"], inline=True)
-    embed_preview.add_field(name="Invite", value=data["invite_link"], inline=True)
-    embed_preview.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
-    embed_preview.add_field(name="Werbetext", value=data["werbetext"][:1024], inline=False)
-
     if embed:
-        embed_preview.add_field(name="Farbe", value=data.get("embed_color") or "#5865F2", inline=True)
-        embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
-        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins", inline=True)
-        if data.get("embed_thumbnail"):
-            embed_preview.set_thumbnail(url=data["embed_thumbnail"])
+        preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
+        preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
+        preview.add_field(name="Projektart", value=data["projektart"], inline=True)
+        preview.add_field(name="Invite", value=data["invite_link"], inline=True)
+        preview.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
+        preview.add_field(name="Werbetext", value=data["werbetext"][:1024], inline=False)
 
-    view = AdminReviewView(bot, interaction.user.id)
-    admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
-    await admin_channel.send(embed=embed_preview, view=view)
+        preview.add_field(name="Farbe", value=data.get("embed_color") or "#5865F2", inline=True)
+        preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
+        preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins", inline=True)
+
+        if data.get("embed_thumbnail"):
+            preview.set_thumbnail(url=data["embed_thumbnail"])
+
+        view = AdminReviewView(bot, interaction.user.id)
+        admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
+        await admin_channel.send(embed=preview, view=view)
+    else:
+        content = (
+            f"**🌟 Partnerprojekt: {data['thread_title']}**\n"
+            f"────────────────────────────\n"
+            f"{data['werbetext']}\n"
+            f"\n🔗 {data['invite_link']}"
+        )
+        view = AdminReviewView(bot, interaction.user.id)
+        admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
+        await admin_channel.send(content=content, view=view)
+
     await interaction.followup.send("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REVIEW VIEW
