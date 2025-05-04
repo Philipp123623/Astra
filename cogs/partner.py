@@ -372,7 +372,6 @@ class Partner(commands.Cog):
             self.autopost_tasks_started = True
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute("ALTER TABLE partner_applications ADD COLUMN embed_thumbnail TEXT;")
                     await cur.execute("""
                         CREATE TABLE IF NOT EXISTS partner_applications (
                             id INT AUTO_INCREMENT PRIMARY KEY,
