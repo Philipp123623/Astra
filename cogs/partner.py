@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import asyncio, datetime, logging, re
+import asyncio, datetime, logging
 
 FORUM_CHANNEL_ID = 1368374036240793701
 ADMIN_CHANNEL_ID = 1233028223684575274
@@ -77,20 +77,20 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
                 "beschreibung": self.beschreibung.value,
                 "invite_link": self.invite_link.value,
                 "werbekanal_id": self.werbekanal_id.value,
-                "projektart": self.projektart,
-                "darstellung": self.darstellung
+                "projektart": self.projektart
             })
             await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
-
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2 (optional)"):
-    embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False)
-    embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", required=False, placeholder="#5865F2")
-    embed_image = discord.ui.TextInput(label="Bild-URL (optional)", required=False)
-
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
+        self.embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False, max_length=1000)
+        self.embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", required=False, placeholder="#5865F2", style=discord.TextStyle.short, max_length=7)
+        self.embed_image = discord.ui.TextInput(label="Bild-URL (optional)", required=False, style=discord.TextStyle.short, max_length=300)
+        self.add_item(self.embed_text)
+        self.add_item(self.embed_color)
+        self.add_item(self.embed_image)
 
     async def on_submit(self, interaction: discord.Interaction):
         data = bewerbung_cache.get(interaction.user.id)
