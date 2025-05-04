@@ -34,20 +34,53 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         self.darstellung = darstellung
 
     async def on_submit(self, interaction: discord.Interaction):
-        bewerbung_cache.set(interaction.user.id, {
-            "thread_title": self.thread_title.value,
-            "beschreibung": self.beschreibung.value,
-            "invite_link": self.invite_link.value,
-            "werbekanal_id": self.werbekanal_id.value,
-            "projektart": self.projektart,
-            "darstellung": self.darstellung
-        })
-        if self.darstellung == "embed":
-            await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+        if self.darstellung == "text":
+            embed_text = self.beschreibung.value
+            embed_color = "#5865F2"
+            embed_image = None
+
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        INSERT INTO partner_applications
+                        (user_id, thread_title, embed_title, embed_description, embed_color, embed_image, invite_link, ad_channel_id, projektart)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """, (
+                        interaction.user.id,
+                        self.thread_title.value,
+                        self.thread_title.value,
+                        embed_text,
+                        embed_color,
+                        embed_image,
+                        self.invite_link.value,
+                        int(self.werbekanal_id.value),
+                        self.projektart
+                    ))
+                    await conn.commit()
+
+            embed = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
+            embed.add_field(name="Thread-Titel", value=self.thread_title.value, inline=False)
+            embed.add_field(name="Projektart", value=self.projektart, inline=True)
+            embed.add_field(name="Invite", value=self.invite_link.value, inline=True)
+            embed.add_field(name="Werbekanal-ID", value=self.werbekanal_id.value, inline=False)
+            embed.add_field(name="Embed-Text", value=embed_text, inline=False)
+            embed.add_field(name="Farbe", value=embed_color, inline=True)
+            embed.add_field(name="Bild", value="Keins", inline=True)
+
+            view = AdminReviewView(self.bot, interaction.user.id)
+            admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
+            await admin_channel.send(embed=embed, view=view)
+            await interaction.response.send_message("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
         else:
-            modal = ModalZweiterSchritt(self.bot)
-            modal.embed_text.default = self.beschreibung.value
-            await modal.on_submit(interaction)
+            bewerbung_cache.set(interaction.user.id, {
+                "thread_title": self.thread_title.value,
+                "beschreibung": self.beschreibung.value,
+                "invite_link": self.invite_link.value,
+                "werbekanal_id": self.werbekanal_id.value,
+                "projektart": self.projektart,
+                "darstellung": self.darstellung
+            })
+            await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2 (optional)"):
     embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False)
