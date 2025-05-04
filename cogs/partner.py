@@ -21,16 +21,16 @@ class PartnerZwischenspeicher:
 
 bewerbung_cache = PartnerZwischenspeicher()
 
-class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 1"):
+class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1: Allgemeines"):
     def __init__(self, bot, projektart, darstellung):
         super().__init__()
         self.bot = bot
         self.projektart = projektart
         self.darstellung = darstellung
 
-        self.thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
-        self.invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...", max_length=200)
-        self.werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", max_length=25)
+        self.thread_title = discord.ui.TextInput(label="Thread-Titel", style=discord.TextStyle.short, max_length=100)
+        self.invite_link = discord.ui.TextInput(label="Einladungslink", style=discord.TextStyle.short, placeholder="https://discord.gg/...", max_length=200)
+        self.werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", style=discord.TextStyle.short, max_length=25)
 
         self.add_item(self.thread_title)
         self.add_item(self.invite_link)
@@ -44,18 +44,28 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 1"):
             "projektart": self.projektart,
             "darstellung": self.darstellung
         })
+
+        view = SchrittZweiStartView(self.bot)
+        await interaction.response.send_message(
+            "✅ Schritt 1 abgeschlossen. Klicke auf den Button unten, um mit Schritt 2 fortzufahren:",
+            view=view,
+            ephemeral=True
+        )
+
+class SchrittZweiStartView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=600)
+        self.bot = bot
+
+    @discord.ui.button(label="📝 Schritt 2 starten", style=discord.ButtonStyle.secondary)
+    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
-class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 2"):
+class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-
-        self.werbetext = discord.ui.TextInput(
-            label="Werbetext für Embed oder Text",
-            style=discord.TextStyle.paragraph,
-            max_length=4000
-        )
+        self.werbetext = discord.ui.TextInput(label="Werbetext", style=discord.TextStyle.paragraph, max_length=4000)
         self.add_item(self.werbetext)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -70,33 +80,34 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 2"):
             bewerbung_cache.clear(interaction.user.id)
             await save_and_send_bewerbung(self.bot, interaction, data, embed=False)
         else:
-            await interaction.response.send_message("✅ Schritt 2 abgeschlossen. Fahre mit Schritt 3 fort:", view=SchrittDreiButtonView(self.bot), ephemeral=True)
+            view = SchrittDreiStartView(self.bot)
+            await interaction.response.send_message(
+                "✅ Schritt 2 abgeschlossen. Klicke unten, um zu den Embed-Einstellungen zu gelangen:",
+                view=view,
+                ephemeral=True
+            )
 
-class SchrittDreiButtonView(discord.ui.View):
+class SchrittDreiStartView(discord.ui.View):
     def __init__(self, bot):
-        super().__init__(timeout=900)
+        super().__init__(timeout=600)
         self.bot = bot
 
     @discord.ui.button(label="🎨 Schritt 3 starten", style=discord.ButtonStyle.secondary)
     async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ModalDritterSchritt(self.bot))
 
-class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 3"):
+class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellungen"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
         self.embed_color = discord.ui.TextInput(
-            label="Farbe (Hex)",
-            placeholder="#5865F2",
-            max_length=7,
-            required=False
-        )
+            label="Farbe (#5865F2)", style=discord.TextStyle.short,
+            required=False, placeholder="#5865F2", max_length=7)
+
         self.embed_image = discord.ui.TextInput(
-            label="Bild-URL (optional)",
-            max_length=300,
-            required=False
-        )
+            label="Bild-URL (optional)", style=discord.TextStyle.short,
+            required=False, max_length=300)
 
         self.add_item(self.embed_color)
         self.add_item(self.embed_image)
@@ -109,6 +120,7 @@ class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung Schritt 3"):
 
         data["embed_color"] = self.embed_color.value or "#5865F2"
         data["embed_image"] = self.embed_image.value if self.embed_image.value.startswith("http") else None
+
         bewerbung_cache.clear(interaction.user.id)
         await save_and_send_bewerbung(self.bot, interaction, data, embed=True)
 
