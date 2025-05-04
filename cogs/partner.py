@@ -54,8 +54,16 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.werbetext = discord.ui.TextInput(label="Werbetext für Embed/Text", style=discord.TextStyle.paragraph, max_length=4000)
-        self.add_item(self.werbetext)
+
+        # Discord akzeptiert nur bestimmte Feldtypen. style=paragraph → type 4 ✅
+        werbetext = discord.ui.TextInput(
+            label="Werbetext für Embed/Text",
+            style=discord.TextStyle.paragraph,
+            max_length=4000,
+            placeholder="Gib hier deinen Werbetext ein."
+        )
+        self.add_item(werbetext)
+        self.werbetext = werbetext
 
     async def on_submit(self, interaction: discord.Interaction):
         data = bewerbung_cache.get(interaction.user.id)
