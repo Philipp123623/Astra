@@ -82,6 +82,7 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             })
             await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
+
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2 (optional)"):
     embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False)
     embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", required=False, placeholder="#5865F2")
