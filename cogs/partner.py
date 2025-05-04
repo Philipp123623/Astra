@@ -28,9 +28,9 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         self.projektart = projektart
         self.darstellung = darstellung
 
-        thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
-        invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...", max_length=200)
-        werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", max_length=25)
+        thread_title = discord.ui.TextInput(label="Thread-Titel", style=discord.TextStyle.short, max_length=100)
+        invite_link = discord.ui.TextInput(label="Einladungslink", style=discord.TextStyle.short, placeholder="https://discord.gg/...", max_length=200)
+        werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", style=discord.TextStyle.short, max_length=25)
 
         self.add_item(thread_title)
         self.add_item(invite_link)
@@ -55,7 +55,6 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
         super().__init__()
         self.bot = bot
 
-        # Discord akzeptiert nur bestimmte Feldtypen. style=paragraph → type 4 ✅
         werbetext = discord.ui.TextInput(
             label="Werbetext für Embed/Text",
             style=discord.TextStyle.paragraph,
@@ -83,10 +82,25 @@ class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", required=False, placeholder="#5865F2", style=discord.TextStyle.short, max_length=7)
-        self.embed_image = discord.ui.TextInput(label="Bild-URL (optional)", required=False, style=discord.TextStyle.short, max_length=300)
-        self.add_item(self.embed_color)
-        self.add_item(self.embed_image)
+
+        embed_color = discord.ui.TextInput(
+            label="Farbe (#5865F2)",
+            style=discord.TextStyle.short,
+            required=False,
+            placeholder="#5865F2",
+            max_length=7
+        )
+        embed_image = discord.ui.TextInput(
+            label="Bild-URL (optional)",
+            style=discord.TextStyle.short,
+            required=False,
+            max_length=300
+        )
+
+        self.add_item(embed_color)
+        self.add_item(embed_image)
+        self.embed_color = embed_color
+        self.embed_image = embed_image
 
     async def on_submit(self, interaction: discord.Interaction):
         data = bewerbung_cache.get(interaction.user.id)
