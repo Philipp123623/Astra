@@ -283,7 +283,7 @@ class AdminReviewView(discord.ui.View):
         # Embed vorbereiten
         embed = discord.Embed(
             title=embed_title,
-            description=f"{embed_description.replace('\\n', '\n')}\n\n{invite}",
+            description=f"{embed_description.replace('\\n', '\n')}",
             color=int(embed_color.replace("#", ""), 16)
         )
         if embed_image and embed_image.startswith("http"):
@@ -292,7 +292,7 @@ class AdminReviewView(discord.ui.View):
         # Thread im Forum erstellen
         await forum.create_thread(
             name=sanitize_thread_title(thread_title),
-            content="",
+            content=f"{invite}",
             embed=embed,
             applied_tags=used_tags
         )
