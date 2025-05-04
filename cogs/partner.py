@@ -48,7 +48,8 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             "projektart": self.projektart,
             "darstellung": self.darstellung
         })
-        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+        await interaction.response.defer()
+        await interaction.followup.send_modal(ModalZweiterSchritt(self.bot))
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
     def __init__(self, bot):
