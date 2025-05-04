@@ -21,15 +21,6 @@ class PartnerZwischenspeicher:
 
 bewerbung_cache = PartnerZwischenspeicher()
 
-class Schritt2StarterView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=300)
-        self.bot = bot
-
-    @discord.ui.button(label="Schritt 2 starten", style=discord.ButtonStyle.primary)
-    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
-
 class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1: Allgemeines"):
     def __init__(self, bot, projektart, darstellung):
         super().__init__()
@@ -57,14 +48,30 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             "projektart": self.projektart,
             "darstellung": self.darstellung
         })
-        await interaction.response.send_message("✅ Schritt 1 gespeichert. Starte Schritt 2.", view=Schritt2StarterView(self.bot), ephemeral=True)
+
+        view = SchrittZweiButtonView(self.bot)
+        await interaction.response.send_message("✅ Schritt 1 abgeschlossen. Klicke unten, um Schritt 2 zu starten.", view=view, ephemeral=True)
+
+class SchrittZweiButtonView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(label="📨 Schritt 2 starten", style=discord.ButtonStyle.primary)
+    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
-        werbetext = discord.ui.TextInput(label="Werbetext für Embed/Text", style=discord.TextStyle.paragraph, max_length=4000)
+        werbetext = discord.ui.TextInput(
+            label="Werbetext für Embed/Text",
+            style=discord.TextStyle.paragraph,
+            max_length=4000,
+            placeholder="Gib hier deinen Werbetext ein."
+        )
         self.add_item(werbetext)
         self.werbetext = werbetext
 
@@ -80,15 +87,36 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
             bewerbung_cache.clear(interaction.user.id)
             await save_and_send_bewerbung(self.bot, interaction, data, embed=False)
         else:
-            await interaction.response.send_modal(ModalDritterSchritt(self.bot))
+            view = SchrittDreiButtonView(self.bot)
+            await interaction.response.send_message("✅ Schritt 2 abgeschlossen. Klicke unten, um Schritt 3 zu starten.", view=view, ephemeral=True)
+
+class SchrittDreiButtonView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(label="🎨 Schritt 3 starten", style=discord.ButtonStyle.secondary)
+    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ModalDritterSchritt(self.bot))
 
 class ModalDritterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 3: Embed-Einstellungen"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
 
-        embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", style=discord.TextStyle.short, required=False, placeholder="#5865F2", max_length=7)
-        embed_image = discord.ui.TextInput(label="Bild-URL (optional)", style=discord.TextStyle.short, required=False, max_length=300)
+        embed_color = discord.ui.TextInput(
+            label="Farbe (#5865F2)",
+            style=discord.TextStyle.short,
+            required=False,
+            placeholder="#5865F2",
+            max_length=7
+        )
+        embed_image = discord.ui.TextInput(
+            label="Bild-URL (optional)",
+            style=discord.TextStyle.short,
+            required=False,
+            max_length=300
+        )
 
         self.add_item(embed_color)
         self.add_item(embed_image)
