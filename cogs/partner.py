@@ -261,6 +261,10 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
         admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
         await admin_channel.send(content=content, view=view)
 
+    # Am Ende von save_and_send_bewerbung, vor followup.send():
+    if not interaction.response.is_done():
+        await interaction.response.defer()
+
     await interaction.followup.send("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
 
 
