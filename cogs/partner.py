@@ -269,7 +269,10 @@ class AdminReviewView(discord.ui.View):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT * FROM partner_applications 
+                    SELECT id, user_id, thread_title, embed_title, embed_description, embed_color,
+                           embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart,
+                           status, created_at
+                    FROM partner_applications 
                     WHERE user_id = %s 
                     ORDER BY created_at DESC 
                     LIMIT 1
@@ -304,7 +307,7 @@ class AdminReviewView(discord.ui.View):
         )
         if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
-        if embed_thumbnail and embed_thumbnail.lower().endswith((".png", ".jpg", ".jpeg")):
+        if embed_thumbnail and embed_thumbnail.startswith("http"):
             embed.set_thumbnail(url=embed_thumbnail)
 
         await forum.create_thread(
@@ -321,7 +324,8 @@ class AdminReviewView(discord.ui.View):
                 async with self.bot.pool.acquire() as conn:
                     async with conn.cursor() as cur:
                         await cur.execute(
-                            "SELECT title, description, invite_link, thumbnail, image FROM astra_ad_config LIMIT 1")
+                            "SELECT title, description, invite_link, thumbnail, image FROM astra_ad_config LIMIT 1"
+                        )
                         data = await cur.fetchone()
                 if data:
                     a_title, a_desc, a_inv, a_thumb, a_img = data
