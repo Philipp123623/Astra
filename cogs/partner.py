@@ -236,6 +236,10 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
     if embed:
         embed_preview.add_field(name="Farbe", value=data.get("embed_color"), inline=True)
         embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
+        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins",
+                                inline=True)  # HINZUGEFÜGT
+        if data.get("embed_thumbnail"):  # Thumbnail wird auch visuell angezeigt
+            embed_preview.set_thumbnail(url=data["embed_thumbnail"])
 
     view = AdminReviewView(bot, interaction.user.id)
     admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
@@ -292,6 +296,10 @@ class AdminReviewView(discord.ui.View):
         )
         if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
+
+        embed_thumbnail = row[11]
+        if embed_thumbnail and embed_thumbnail.startswith("http"):
+            embed.set_thumbnail(url=embed_thumbnail)
 
         # Thread im Forum erstellen
         await forum.create_thread(
