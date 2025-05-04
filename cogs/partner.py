@@ -249,19 +249,23 @@ class AdminReviewView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
-
     @discord.ui.button(label="Annehmen", style=discord.ButtonStyle.success)
     async def annehmen(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT * FROM partner_applications WHERE user_id = %s", (self.user_id,))
+                await cur.execute("""
+                    SELECT * FROM partner_applications 
+                    WHERE user_id = %s 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                """, (self.user_id,))
                 row = await cur.fetchone()
 
         if not row:
             await interaction.response.send_message("❌ Keine Bewerbung gefunden.", ephemeral=True)
             return
 
-        # Korrektes Entpacken aller Daten
+        # Daten entpacken
         _, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, invite, ad_channel_id, projektart, *_ = row
 
         forum = self.bot.get_channel(FORUM_CHANNEL_ID)
@@ -269,14 +273,14 @@ class AdminReviewView(discord.ui.View):
         main_tag = discord.utils.get(tags, name="Partner")
         project_tag = discord.utils.get(tags, name=projektart)
 
-        # Partner-Tag immer zuerst
+        # Tag-Reihenfolge: Partner zuerst
         used_tags = []
         if main_tag:
             used_tags.append(main_tag)
         if project_tag and project_tag != main_tag:
             used_tags.append(project_tag)
 
-        # Embed korrekt mit Zeilenumbrüchen
+        # Embed vorbereiten
         embed = discord.Embed(
             title=embed_title,
             description=f"{embed_description.replace('\\n', '\n')}\n\n[Beitreten]({invite})",
@@ -285,7 +289,7 @@ class AdminReviewView(discord.ui.View):
         if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
 
-        # Thread mit bereinigtem Titel erstellen
+        # Thread im Forum erstellen
         await forum.create_thread(
             name=sanitize_thread_title(thread_title),
             content=".",
@@ -293,7 +297,7 @@ class AdminReviewView(discord.ui.View):
             applied_tags=used_tags
         )
 
-        # Werbung im Werbekanal posten
+        # Astra-Werbung posten
         channel = self.bot.get_channel(int(ad_channel_id))
         if channel:
             try:
@@ -317,14 +321,17 @@ class AdminReviewView(discord.ui.View):
             except Exception as e:
                 logging.error(f"Fehler beim Werbung posten: {e}")
 
+        # Zeit updaten + Status speichern
         neue_zeit = int((datetime.datetime.now() + datetime.timedelta(hours=6)).timestamp())
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE partner_applications SET status = 'accepted' WHERE user_id = %s",
                                   (self.user_id,))
-                await cur.execute(
-                    "INSERT INTO partner_ad_config (ad_channel_id, time) VALUES (%s, %s) ON DUPLICATE KEY UPDATE time = %s",
-                    (int(ad_channel_id), neue_zeit, neue_zeit))
+                await cur.execute("""
+                    INSERT INTO partner_ad_config (ad_channel_id, time)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE time = %s
+                """, (int(ad_channel_id), neue_zeit, neue_zeit))
                 await conn.commit()
 
         await interaction.response.send_message("✅ Partner angenommen & Werbung gestartet!", ephemeral=True)
