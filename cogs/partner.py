@@ -274,7 +274,7 @@ class AdminReviewView(discord.ui.View):
             return
 
         # Daten entpacken
-        _, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, invite, ad_channel_id, projektart, *_ = row
+        _, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, embed_thumbnail, invite, ad_channel_id, projektart, *_ = row
 
         forum = self.bot.get_channel(FORUM_CHANNEL_ID)
         tags = forum.available_tags
@@ -298,7 +298,7 @@ class AdminReviewView(discord.ui.View):
             embed.set_image(url=embed_image)
 
         embed_thumbnail = row[11]
-        if embed_thumbnail and embed_thumbnail.startswith("http"):
+        if isinstance(embed_thumbnail, str) and embed_thumbnail.startswith("http"):
             embed.set_thumbnail(url=embed_thumbnail)
 
         # Thread im Forum erstellen
