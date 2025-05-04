@@ -296,7 +296,7 @@ class AdminReviewView(discord.ui.View):
         )
         if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
-        if embed_thumbnail and embed_thumbnail.startswith("http"):
+        if embed_thumbnail and embed_thumbnail.lower().endswith((".png", ".jpg", ".jpeg")):
             embed.set_thumbnail(url=embed_thumbnail)
 
         await forum.create_thread(
@@ -371,10 +371,10 @@ class Partner(commands.Cog):
             self.autopost_tasks_started = True
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    await cur.execute("""
-                        ALTER TABLE partner_applications
-                        ADD COLUMN IF NOT EXISTS embed_thumbnail TEXT
-                    """)
+                    await cur.execute("SHOW COLUMNS FROM partner_applications LIKE 'embed_thumbnail'")
+                    exists = await cur.fetchone()
+                    if not exists:
+                        await cur.execute("ALTER TABLE partner_applications ADD COLUMN embed_thumbnail TEXT")
                     await cur.execute("""
                         CREATE TABLE IF NOT EXISTS partner_applications (
                             id INT AUTO_INCREMENT PRIMARY KEY,
