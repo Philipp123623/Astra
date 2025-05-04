@@ -6,14 +6,26 @@ import asyncio, datetime, logging, re
 FORUM_CHANNEL_ID = 1368374036240793701
 ADMIN_CHANNEL_ID = 1233028223684575274
 
-class BewerbungModalEmbed(discord.ui.Modal, title="Partnerbewerbung – Embed"):
-    thread_title = discord.ui.TextInput(label="Thread-Titel", required=True, max_length=100)
-    embed_title = discord.ui.TextInput(label="Embed-Titel", required=True, max_length=256)
-    embed_description = discord.ui.TextInput(label="Beschreibung", style=discord.TextStyle.paragraph, required=True)
-    embed_color = discord.ui.TextInput(label="Farbe (HEX z. B. #5865F2)", required=False, default="#5865F2")
-    embed_image = discord.ui.TextInput(label="Bild-URL (optional)", required=False)
-    invite_link = discord.ui.TextInput(label="Einladungslink zum Server", required=True)
-    werbekanal_id = discord.ui.TextInput(label="Channel-ID für unsere Werbung", required=True)
+class PartnerZwischenspeicher:
+    def __init__(self):
+        self.cache = {}
+
+    def set(self, user_id, data):
+        self.cache[user_id] = data
+
+    def get(self, user_id):
+        return self.cache.get(user_id)
+
+    def clear(self, user_id):
+        self.cache.pop(user_id, None)
+
+bewerbung_cache = PartnerZwischenspeicher()
+
+class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1"):
+    thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
+    beschreibung = discord.ui.TextInput(label="Beschreibung (auch im Embed)", style=discord.TextStyle.paragraph)
+    invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...")
+    werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID (für Astra-Werbung)")
 
     def __init__(self, bot, projektart):
         super().__init__()
@@ -21,9 +33,35 @@ class BewerbungModalEmbed(discord.ui.Modal, title="Partnerbewerbung – Embed"):
         self.projektart = projektart
 
     async def on_submit(self, interaction: discord.Interaction):
-        if self.embed_image.value and not re.match(r"https?://", self.embed_image.value):
-            await interaction.response.send_message("❌ Ungültige Bild-URL. Bitte mit http:// oder https://", ephemeral=True)
+        bewerbung_cache.set(interaction.user.id, {
+            "thread_title": self.thread_title.value,
+            "beschreibung": self.beschreibung.value,
+            "invite_link": self.invite_link.value,
+            "werbekanal_id": self.werbekanal_id.value,
+            "projektart": self.projektart
+        })
+        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+
+class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2 (optional)"):
+    embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False)
+    embed_color = discord.ui.TextInput(label="Farbe (#5865F2)", required=False, placeholder="#5865F2")
+    embed_image = discord.ui.TextInput(label="Bild-URL (optional)", required=False)
+
+    def __init__(self, bot):
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction):
+        data = bewerbung_cache.get(interaction.user.id)
+        if not data:
+            await interaction.response.send_message("❌ Fehler beim Zwischenspeichern.", ephemeral=True)
             return
+
+        bewerbung_cache.clear(interaction.user.id)
+
+        embed_text = self.embed_text.value or data["beschreibung"]
+        embed_color = self.embed_color.value or "#5865F2"
+        embed_image = self.embed_image.value if self.embed_image.value.startswith("http") else None
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -33,71 +71,30 @@ class BewerbungModalEmbed(discord.ui.Modal, title="Partnerbewerbung – Embed"):
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     interaction.user.id,
-                    self.thread_title.value,
-                    self.embed_title.value,
-                    self.embed_description.value,
-                    self.embed_color.value,
-                    self.embed_image.value,
-                    self.invite_link.value,
-                    int(self.werbekanal_id.value),
-                    self.projektart
+                    data["thread_title"],
+                    data["thread_title"],
+                    embed_text,
+                    embed_color,
+                    embed_image,
+                    data["invite_link"],
+                    int(data["werbekanal_id"]),
+                    data["projektart"]
                 ))
                 await conn.commit()
 
-        embed = discord.Embed(title="📬 Neue Partnerbewerbung (Embed)", color=discord.Color.blurple())
-        embed.add_field(name="Thread-Titel", value=self.thread_title.value, inline=False)
-        embed.add_field(name="Projektart", value=self.projektart, inline=True)
-        embed.add_field(name="Einladung", value=self.invite_link.value, inline=True)
-        embed.add_field(name="Werbekanal-ID", value=self.werbekanal_id.value, inline=False)
-        embed.add_field(name="Embed-Titel", value=self.embed_title.value, inline=False)
-        embed.add_field(name="Beschreibung", value=self.embed_description.value, inline=False)
-        embed.add_field(name="Farbe", value=self.embed_color.value, inline=True)
-        embed.add_field(name="Bild", value=self.embed_image.value or "Keins", inline=True)
+        embed = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
+        embed.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
+        embed.add_field(name="Projektart", value=data["projektart"], inline=True)
+        embed.add_field(name="Invite", value=data["invite_link"], inline=True)
+        embed.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
+        embed.add_field(name="Embed-Text", value=embed_text, inline=False)
+        embed.add_field(name="Farbe", value=embed_color, inline=True)
+        embed.add_field(name="Bild", value=embed_image or "Keins", inline=True)
 
         view = AdminReviewView(self.bot, interaction.user.id)
         admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
         await admin_channel.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht und wird geprüft.", ephemeral=True)
-
-class BewerbungModalText(discord.ui.Modal, title="Partnerbewerbung – Text"):
-    thread_title = discord.ui.TextInput(label="Thread-Titel", required=True, max_length=100)
-    beschreibung = discord.ui.TextInput(label="Beschreibung (Text im Thread)", style=discord.TextStyle.paragraph, required=True)
-    invite_link = discord.ui.TextInput(label="Einladungslink zum Server", required=True)
-    werbekanal_id = discord.ui.TextInput(label="Channel-ID für unsere Werbung", required=True)
-
-    def __init__(self, bot, projektart):
-        super().__init__()
-        self.bot = bot
-        self.projektart = projektart
-
-    async def on_submit(self, interaction: discord.Interaction):
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("""
-                    INSERT INTO partner_applications
-                    (user_id, thread_title, embed_title, embed_description, embed_color, embed_image, invite_link, ad_channel_id, projektart)
-                    VALUES (%s,%s,NULL,%s,NULL,NULL,%s,%s,%s)
-                """, (
-                    interaction.user.id,
-                    self.thread_title.value,
-                    self.beschreibung.value,
-                    self.invite_link.value,
-                    int(self.werbekanal_id.value),
-                    self.projektart
-                ))
-                await conn.commit()
-
-        embed = discord.Embed(title="📬 Neue Partnerbewerbung (Text)", color=discord.Color.blurple())
-        embed.add_field(name="Thread-Titel", value=self.thread_title.value, inline=False)
-        embed.add_field(name="Projektart", value=self.projektart, inline=True)
-        embed.add_field(name="Einladung", value=self.invite_link.value, inline=True)
-        embed.add_field(name="Werbekanal-ID", value=self.werbekanal_id.value, inline=False)
-        embed.add_field(name="Text-Inhalt", value=self.beschreibung.value, inline=False)
-
-        view = AdminReviewView(self.bot, interaction.user.id)
-        admin_channel = self.bot.get_channel(ADMIN_CHANNEL_ID)
-        await admin_channel.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht und wird geprüft.", ephemeral=True)
+        await interaction.response.send_message("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
 
 class Partner(commands.Cog):
     def __init__(self, bot):
@@ -142,6 +139,7 @@ class Partner(commands.Cog):
                         image TEXT
                     )
                     """)
+
                     await cur.execute("SELECT ad_channel_id, time FROM partner_ad_config")
                     eintraege = await cur.fetchall()
 
@@ -189,26 +187,17 @@ class Partner(commands.Cog):
 
         asyncio.create_task(self.sende_werbung(datetime.datetime.fromtimestamp(neue_zeit), ad_channel_id))
 
-    @app_commands.command(name="partnerbewerbung", description="Starte eine Partnerbewerbung mit Embed oder Text")
+    @app_commands.command(name="partnerbewerbung", description="Beginne deine Partnerbewerbung in 2 Schritten")
     @app_commands.choices(
         projektart=[
             app_commands.Choice(name="Discord", value="Discord"),
             app_commands.Choice(name="Bots", value="Bots"),
             app_commands.Choice(name="Webseite", value="Webseite"),
             app_commands.Choice(name="Community", value="Community")
-        ],
-        darstellung=[
-            app_commands.Choice(name="Embed", value="embed"),
-            app_commands.Choice(name="Text", value="text")
         ]
     )
-    async def partnerbewerbung(self, interaction: discord.Interaction,
-                                projektart: app_commands.Choice[str],
-                                darstellung: app_commands.Choice[str]):
-        if darstellung.value == "embed":
-            await interaction.response.send_modal(BewerbungModalEmbed(self.bot, projektart.value))
-        else:
-            await interaction.response.send_modal(BewerbungModalText(self.bot, projektart.value))
+    async def partnerbewerbung(self, interaction: discord.Interaction, projektart: app_commands.Choice[str]):
+        await interaction.response.send_modal(ModalErsterSchritt(self.bot, projektart.value))
 
 class AdminReviewView(discord.ui.View):
     def __init__(self, bot, user_id):
@@ -239,13 +228,11 @@ class AdminReviewView(discord.ui.View):
         project_tag = discord.utils.get(tags, name=projektart)
         used_tags = [t for t in [main_tag, project_tag] if t]
 
-        if embed_title:
-            embed = discord.Embed(title=embed_title, description=f"{embed_description}\n\n[Beitreten]({invite})", color=int(embed_color.replace("#", ""), 16))
-            if embed_image:
-                embed.set_image(url=embed_image)
-            await forum.create_thread(name=thread_title, content=".", embed=embed, applied_tags=used_tags)
-        else:
-            await forum.create_thread(name=thread_title, content=f"**{projektart}**\n{embed_description}\n\n[Beitreten]({invite})", applied_tags=used_tags)
+        embed = discord.Embed(title=embed_title, description=f"{embed_description}\n\n[Beitreten]({invite})", color=int(embed_color.replace("#", ""), 16))
+        if embed_image:
+            embed.set_image(url=embed_image)
+
+        await forum.create_thread(name=thread_title, content=".", embed=embed, applied_tags=used_tags)
 
         channel = self.bot.get_channel(int(ad_channel_id))
         if channel:
