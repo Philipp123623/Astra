@@ -21,6 +21,9 @@ class PartnerZwischenspeicher:
 
 bewerbung_cache = PartnerZwischenspeicher()
 
+def sanitize_text(text):
+    return text.replace("\\n", "\n")
+
 class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1: Allgemeines"):
     def __init__(self, bot, projektart, darstellung):
         super().__init__()
@@ -74,7 +77,7 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
             await interaction.response.send_message("❌ Fehler beim Zwischenspeichern.", ephemeral=True)
             return
 
-        data["werbetext"] = self.werbetext.value
+        data["werbetext"] = sanitize_text(self.werbetext.value)
 
         if data["darstellung"] == "text":
             bewerbung_cache.clear(interaction.user.id)
