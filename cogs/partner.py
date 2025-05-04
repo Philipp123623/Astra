@@ -6,7 +6,6 @@ import asyncio, datetime, logging
 FORUM_CHANNEL_ID = 1368374036240793701
 ADMIN_CHANNEL_ID = 1233028223684575274
 
-
 def sanitize_thread_title(title: str) -> str:
     return ''.join(c for c in title if c.isalnum() or c in " -_")[:100]
 
@@ -61,20 +60,16 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         self.add_item(self.werbekanal_id)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Werte sichern und bereinigen
         title = self.thread_title.value.strip()
         invite = self.invite_link.value.strip()
         werbekanal = self.werbekanal_id.value.strip()
 
-        # Validierung
         if not title or not invite or not werbekanal:
             await interaction.response.send_message(
-                "❌ Bitte fülle alle Felder korrekt aus.",
-                ephemeral=True
+                "❌ Bitte fülle alle Felder korrekt aus.", ephemeral=True
             )
             return
 
-        # Cache speichern
         bewerbung_cache.set(interaction.user.id, {
             "thread_title": title,
             "invite_link": invite,
@@ -83,11 +78,8 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             "darstellung": self.darstellung
         })
 
-        # Debug-Log
-        logging.info(f"[Partnerbewerbung] Schritt 1 gespeichert für User {interaction.user.id}: "
-                     f"{bewerbung_cache.get(interaction.user.id)}")
+        logging.info(f"[Partnerbewerbung] Schritt 1 gespeichert für User {interaction.user.id}: {bewerbung_cache.get(interaction.user.id)}")
 
-        # Weiter mit Schritt 2
         view = SchrittZweiStartView(self.bot)
         await interaction.response.send_message(
             "✅ Schritt 1 abgeschlossen. Klicke auf den Button unten, um mit Schritt 2 fortzufahren:",
@@ -172,21 +164,32 @@ class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellunge
             max_length=300
         )
 
+        self.embed_thumbnail = discord.ui.TextInput(
+            label="Thumbnail-URL (optional)",
+            style=discord.TextStyle.short,
+            required=False,
+            max_length=300
+        )
+
         self.add_item(self.embed_color)
         self.add_item(self.embed_image)
+        self.add_item(self.embed_thumbnail)
 
     async def on_submit(self, interaction: discord.Interaction):
         color_input = self.embed_color.value.strip() or "#5865F2"
         image_url = self.embed_image.value.strip()
+        thumbnail_url = self.embed_thumbnail.value.strip()
 
-        # Farbencheck (optional, aber empfehlenswert)
-        if not color_input.startswith("#") or len(color_input) != 7:
+        try:
+            int(color_input.replace("#", ""), 16)
+        except ValueError:
             await interaction.response.send_message("❌ Ungültiger Farbcode. Beispiel: `#5865F2`", ephemeral=True)
             return
 
-        if image_url and not image_url.startswith("http"):
-            await interaction.response.send_message("❌ Ungültige Bild-URL. Sie muss mit http beginnen.", ephemeral=True)
-            return
+        for url, label in [(image_url, "Bild-URL"), (thumbnail_url, "Thumbnail-URL")]:
+            if url and not url.startswith("http"):
+                await interaction.response.send_message(f"❌ Ungültige {label}. Sie muss mit http beginnen.", ephemeral=True)
+                return
 
         data = bewerbung_cache.get(interaction.user.id)
         if not data:
@@ -195,6 +198,7 @@ class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellunge
 
         data["embed_color"] = color_input
         data["embed_image"] = image_url or None
+        data["embed_thumbnail"] = thumbnail_url or None
 
         bewerbung_cache.clear(interaction.user.id)
 
