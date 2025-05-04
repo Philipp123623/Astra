@@ -80,7 +80,7 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
 
         logging.info(f"[Partnerbewerbung] Schritt 1 gespeichert für User {interaction.user.id}: {bewerbung_cache.get(interaction.user.id)}")
 
-        view = SchrittZweiStartView(self.bot, self.darstellung)
+        view = SchrittZweiStartView(self.bot)
         await interaction.response.send_message(
             "✅ Schritt 1 abgeschlossen. Klicke auf den Button unten, um mit Schritt 2 fortzufahren:",
             view=view,
@@ -88,27 +88,22 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         )
 
 class SchrittZweiStartView(discord.ui.View):
-    def __init__(self, bot, darstellung):
+    def __init__(self, bot):
         super().__init__(timeout=600)
         self.bot = bot
-        self.darstellung = darstellung
 
     @discord.ui.button(label="📝 Schritt 2 starten", style=discord.ButtonStyle.secondary)
     async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ModalZweiterSchritt(self.bot, self.darstellung))
+        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
-    def __init__(self, bot, darstellung):
+    def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        placeholder = (
-            "Dein Werbetext – dein Invite wird automatisch unten ergänzt." if darstellung == "text"
-            else "Dein Werbetext für das Embed – Invite wird automatisch eingebaut."
-        )
         self.werbetext = discord.ui.TextInput(
             label="Werbetext",
             style=discord.TextStyle.paragraph,
-            placeholder=placeholder,
+            placeholder="Dein Werbetext – bei Textdarstellung wird automatisch dein Einladungslink unten ergänzt.",
             max_length=4000
         )
         self.add_item(self.werbetext)
@@ -292,11 +287,11 @@ class AdminReviewView(discord.ui.View):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT * FROM partner_applications
-                    WHERE user_id = %s
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """, (self.user_id,))
+                        SELECT * FROM partner_applications
+                        WHERE user_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (self.user_id,))
                 row = await cur.fetchone()
 
         if not row:
@@ -313,38 +308,53 @@ class AdminReviewView(discord.ui.View):
         tags = forum.available_tags
         main_tag = discord.utils.get(tags, name="Partner")
         project_tag = discord.utils.get(tags, name=projektart)
-
         used_tags = [tag for tag in [main_tag, project_tag] if tag]
 
-        embed = discord.Embed(
-            title=embed_title,
-            description=embed_description,
-            color=int(embed_color.replace("#", ""), 16)
-        )
-        if embed_image:
-            embed.set_image(url=embed_image)
-        if embed_thumbnail:
-            embed.set_thumbnail(url=embed_thumbnail)
+        if embed_color:
+            try:
+                embed = discord.Embed(
+                    title=embed_title,
+                    description=embed_description,
+                    color=int(embed_color.replace("#", ""), 16)
+                )
+                if embed_image:
+                    embed.set_image(url=embed_image)
+                if embed_thumbnail:
+                    embed.set_thumbnail(url=embed_thumbnail)
 
-        await forum.create_thread(
-            name=sanitize_thread_title(thread_title),
-            content=invite_link,
-            embed=embed,
-            applied_tags=used_tags
-        )
+                await forum.create_thread(
+                    name=sanitize_thread_title(thread_title),
+                    content=invite_link,
+                    embed=embed,
+                    applied_tags=used_tags
+                )
 
-        # Werbung direkt senden + Task starten
+            except Exception as e:
+                logging.error(f"❌ Fehler beim Thread mit Embed: {e}")
+        else:
+            content = (
+                f"**🌟 {thread_title}**\n"
+                f"────────────────────────────\n"
+                f"{embed_description}\n"
+                f"\n🔗 {invite_link}"
+            )
+            await forum.create_thread(
+                name=sanitize_thread_title(thread_title),
+                content=content,
+                applied_tags=used_tags
+            )
+
         neue_zeit = int((datetime.datetime.now() + datetime.timedelta(hours=6)).timestamp())
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    UPDATE partner_applications SET status = 'accepted' WHERE user_id = %s
-                """, (self.user_id,))
+                        UPDATE partner_applications SET status = 'accepted' WHERE user_id = %s
+                    """, (self.user_id,))
                 await cur.execute("""
-                    INSERT INTO partner_ad_config (ad_channel_id, time)
-                    VALUES (%s, %s)
-                    ON DUPLICATE KEY UPDATE time = %s
-                """, (int(ad_channel_id), neue_zeit, neue_zeit))
+                        INSERT INTO partner_ad_config (ad_channel_id, time)
+                        VALUES (%s, %s)
+                        ON DUPLICATE KEY UPDATE time = %s
+                    """, (int(ad_channel_id), neue_zeit, neue_zeit))
                 await conn.commit()
 
         asyncio.create_task(self.bot.partner_post_task(datetime.datetime.fromtimestamp(neue_zeit), int(ad_channel_id)))
@@ -352,23 +362,25 @@ class AdminReviewView(discord.ui.View):
         await interaction.response.send_message("✅ Partner angenommen & Werbung gestartet!", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
-        # Werbung sofort posten
-        user_embed = discord.Embed(
-            title=embed_title,
-            description=embed_description,
-            color=int(embed_color.replace("#", ""), 16)
-        )
-        if embed_thumbnail and embed_thumbnail.startswith("http"):
-            user_embed.set_thumbnail(url=embed_thumbnail)
-        if embed_image and embed_image.startswith("http"):
-            user_embed.set_image(url=embed_image)
 
-        user_ad_channel = self.bot.get_channel(int(ad_channel_id))
-        if user_ad_channel:
-            try:
-                await user_ad_channel.send(embed=user_embed)
-            except Exception as e:
-                logging.error(f"Fehler beim sofortigen Werbungsposten: {e}")
+        try:
+            if embed_color:
+                user_embed = discord.Embed(
+                    title=embed_title,
+                    description=embed_description,
+                    color=int(embed_color.replace("#", ""), 16)
+                )
+                if embed_thumbnail and embed_thumbnail.startswith("http"):
+                    user_embed.set_thumbnail(url=embed_thumbnail)
+                if embed_image and embed_image.startswith("http"):
+                    user_embed.set_image(url=embed_image)
+
+                await self.bot.get_channel(int(ad_channel_id)).send(embed=user_embed)
+            else:
+                content = f"**🌟 {thread_title}**\n{embed_description}\n\n🔗 {invite_link}"
+                await self.bot.get_channel(int(ad_channel_id)).send(content=content)
+        except Exception as e:
+            logging.error(f"Fehler beim sofortigen Werbungsposten: {e}")
 
     @discord.ui.button(label="Ablehnen", style=discord.ButtonStyle.danger)
     async def ablehnen(self, interaction: discord.Interaction, button: discord.ui.Button):
