@@ -80,7 +80,7 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
 
         logging.info(f"[Partnerbewerbung] Schritt 1 gespeichert für User {interaction.user.id}: {bewerbung_cache.get(interaction.user.id)}")
 
-        view = SchrittZweiStartView(self.bot)
+        view = SchrittZweiStartView(self.bot, self.darstellung)
         await interaction.response.send_message(
             "✅ Schritt 1 abgeschlossen. Klicke auf den Button unten, um mit Schritt 2 fortzufahren:",
             view=view,
@@ -88,22 +88,27 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         )
 
 class SchrittZweiStartView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, darstellung):
         super().__init__(timeout=600)
         self.bot = bot
+        self.darstellung = darstellung
 
     @discord.ui.button(label="📝 Schritt 2 starten", style=discord.ButtonStyle.secondary)
     async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+        await interaction.response.send_modal(ModalZweiterSchritt(self.bot, self.darstellung))
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2: Werbetext"):
-    def __init__(self, bot):
+    def __init__(self, bot, darstellung):
         super().__init__()
         self.bot = bot
+        placeholder = (
+            "Dein Werbetext – dein Invite wird automatisch unten ergänzt." if darstellung == "text"
+            else "Dein Werbetext für das Embed – Invite wird automatisch eingebaut."
+        )
         self.werbetext = discord.ui.TextInput(
             label="Werbetext",
             style=discord.TextStyle.paragraph,
-            placeholder="Erkläre, warum du Partner werden möchtest...",
+            placeholder=placeholder,
             max_length=4000
         )
         self.add_item(self.werbetext)
