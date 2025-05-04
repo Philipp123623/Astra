@@ -190,7 +190,7 @@ class AdminReviewView(discord.ui.View):
         used_tags = [t for t in [main_tag, project_tag] if t]
 
         embed = discord.Embed(title=embed_title, description=f"{embed_description}\n\n[Beitreten]({invite})", color=int(embed_color.replace("#", ""), 16))
-        if embed_image:
+        if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
 
         await forum.create_thread(name=thread_title, content=".", embed=embed, applied_tags=used_tags)
