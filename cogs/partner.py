@@ -212,8 +212,8 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
         async with conn.cursor() as cur:
             await cur.execute("""
                 INSERT INTO partner_applications
-                (user_id, thread_title, embed_title, embed_description, embed_color, embed_image, invite_link, ad_channel_id, projektart)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (user_id, thread_title, embed_title, embed_description, embed_color, embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 interaction.user.id,
                 data["thread_title"],
@@ -221,6 +221,7 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
                 data["werbetext"],
                 data.get("embed_color") if embed else "#5865F2",
                 data.get("embed_image") if embed else None,
+                data.get("embed_thumbnail") if embed else None,
                 data["invite_link"],
                 int(data["werbekanal_id"]),
                 data["projektart"]
@@ -236,16 +237,14 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
     if embed:
         embed_preview.add_field(name="Farbe", value=data.get("embed_color"), inline=True)
         embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
-        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins",
-                                inline=True)  # HINZUGEFÜGT
-        if data.get("embed_thumbnail"):  # Thumbnail wird auch visuell angezeigt
+        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins", inline=True)
+        if data.get("embed_thumbnail"):
             embed_preview.set_thumbnail(url=data["embed_thumbnail"])
 
     view = AdminReviewView(bot, interaction.user.id)
     admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
     await admin_channel.send(embed=embed_preview, view=view)
     await interaction.followup.send("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
-
 
 class AdminReviewView(discord.ui.View):
     def __init__(self, bot, user_id):
@@ -273,35 +272,33 @@ class AdminReviewView(discord.ui.View):
             await interaction.response.send_message("❌ Keine Bewerbung gefunden.", ephemeral=True)
             return
 
-        # Daten entpacken
-        id, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart, status, created_at = row
+        (
+            _id, user_id, thread_title, embed_title, embed_description, embed_color,
+            embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart,
+            status, created_at
+        ) = row
 
         forum = self.bot.get_channel(FORUM_CHANNEL_ID)
         tags = forum.available_tags
         main_tag = discord.utils.get(tags, name="Partner")
         project_tag = discord.utils.get(tags, name=projektart)
 
-        # Tag-Reihenfolge: Partner zuerst
         used_tags = []
         if main_tag:
             used_tags.append(main_tag)
         if project_tag and project_tag != main_tag:
             used_tags.append(project_tag)
 
-        # Embed vorbereiten
         embed = discord.Embed(
             title=embed_title,
-            description=f"{embed_description.replace('\\n', '\n')}",
+            description=embed_description.replace("\\n", "\n"),
             color=int(embed_color.replace("#", ""), 16)
         )
         if embed_image and embed_image.startswith("http"):
             embed.set_image(url=embed_image)
-
-        embed_thumbnail = row[11]
-        if isinstance(embed_thumbnail, str) and embed_thumbnail.startswith("http"):
+        if embed_thumbnail and embed_thumbnail.startswith("http"):
             embed.set_thumbnail(url=embed_thumbnail)
 
-        # Thread im Forum erstellen
         await forum.create_thread(
             name=sanitize_thread_title(thread_title),
             content=f"{invite_link}",
@@ -354,12 +351,14 @@ class AdminReviewView(discord.ui.View):
     async def ablehnen(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE partner_applications SET status = 'declined' WHERE user_id = %s", (self.user_id,))
+                await cur.execute("UPDATE partner_applications SET status = 'declined' WHERE user_id = %s",
+                                  (self.user_id,))
                 await conn.commit()
 
         await interaction.response.send_message("❌ Bewerbung abgelehnt.", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
+
 
 class Partner(commands.Cog):
     def __init__(self, bot):
