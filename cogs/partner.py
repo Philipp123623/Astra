@@ -274,7 +274,7 @@ class AdminReviewView(discord.ui.View):
             return
 
         # Daten entpacken
-        _, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, embed_thumbnail, invite, ad_channel_id, projektart, *_ = row
+        id, user_id, thread_title, embed_title, embed_description, embed_color, embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart, status, created_at = row
 
         forum = self.bot.get_channel(FORUM_CHANNEL_ID)
         tags = forum.available_tags
