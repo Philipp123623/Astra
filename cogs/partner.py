@@ -372,6 +372,10 @@ class Partner(commands.Cog):
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("""
+                        ALTER TABLE partner_applications
+                        ADD COLUMN IF NOT EXISTS embed_thumbnail TEXT
+                    """)
+                    await cur.execute("""
                         CREATE TABLE IF NOT EXISTS partner_applications (
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             user_id BIGINT,
