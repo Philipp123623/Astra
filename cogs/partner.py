@@ -301,7 +301,7 @@ class AdminReviewView(discord.ui.View):
 
         await forum.create_thread(
             name=sanitize_thread_title(thread_title),
-            content=f"{invite_link}",
+            content=invite_link,
             embed=embed,
             applied_tags=used_tags
         )
@@ -330,7 +330,6 @@ class AdminReviewView(discord.ui.View):
             except Exception as e:
                 logging.error(f"Fehler beim Werbung posten: {e}")
 
-        # Zeit updaten + Status speichern
         neue_zeit = int((datetime.datetime.now() + datetime.timedelta(hours=6)).timestamp())
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -358,6 +357,7 @@ class AdminReviewView(discord.ui.View):
         await interaction.response.send_message("❌ Bewerbung abgelehnt.", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
+
 
 
 class Partner(commands.Cog):
