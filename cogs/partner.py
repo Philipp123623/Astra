@@ -126,6 +126,7 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
 
         if data["darstellung"] == "text":
             bewerbung_cache.clear(interaction.user.id)
+            await interaction.response.defer()
             await save_and_send_bewerbung(self.bot, interaction, data, embed=False)
         else:
             view = SchrittDreiStartView(self.bot)
