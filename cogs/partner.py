@@ -228,16 +228,24 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
             ))
             await conn.commit()
 
+    def format_media_field(url):
+        if not url or not url.startswith("http"):
+            return "Keins"
+        filename = url.split("/")[-1].split("?")[0]
+        return f"[{filename}]({url})"
+
     embed_preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
     embed_preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
     embed_preview.add_field(name="Projektart", value=data["projektart"], inline=True)
     embed_preview.add_field(name="Invite", value=data["invite_link"], inline=True)
     embed_preview.add_field(name="Werbekanal-ID", value=data["werbekanal_id"], inline=False)
     embed_preview.add_field(name="Werbetext", value=data["werbetext"][:1024], inline=False)
+
     if embed:
-        embed_preview.add_field(name="Farbe", value=data.get("embed_color"), inline=True)
-        embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
-        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins", inline=True)
+        embed_preview.add_field(name="Farbe", value=data.get("embed_color") or "#5865F2", inline=True)
+        embed_preview.add_field(name="Bild", value=format_media_field(data.get("embed_image")), inline=True)
+        embed_preview.add_field(name="Thumbnail", value=format_media_field(data.get("embed_thumbnail")), inline=True)
+
         if data.get("embed_thumbnail"):
             embed_preview.set_thumbnail(url=data["embed_thumbnail"])
 
