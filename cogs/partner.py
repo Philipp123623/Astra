@@ -122,6 +122,7 @@ class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellunge
         data["embed_image"] = self.embed_image.value if self.embed_image.value.startswith("http") else None
 
         bewerbung_cache.clear(interaction.user.id)
+        await interaction.response.defer()
         await save_and_send_bewerbung(self.bot, interaction, data, embed=True)
 
 async def save_and_send_bewerbung(bot, interaction, data, embed):
