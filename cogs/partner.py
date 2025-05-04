@@ -35,23 +35,59 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         self.projektart = projektart
         self.darstellung = darstellung
 
-        self.thread_title = discord.ui.TextInput(label="Thread-Titel", style=discord.TextStyle.short, max_length=100)
-        self.invite_link = discord.ui.TextInput(label="Einladungslink", style=discord.TextStyle.short, placeholder="https://discord.gg/...", max_length=200)
-        self.werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", style=discord.TextStyle.short, max_length=25)
+        self.thread_title = discord.ui.TextInput(
+            label="Thread-Titel",
+            style=discord.TextStyle.short,
+            max_length=100,
+            placeholder="Z. B. Cooles Projekt"
+        )
+
+        self.invite_link = discord.ui.TextInput(
+            label="Einladungslink",
+            style=discord.TextStyle.short,
+            placeholder="https://discord.gg/...",
+            max_length=200
+        )
+
+        self.werbekanal_id = discord.ui.TextInput(
+            label="Werbekanal-ID",
+            style=discord.TextStyle.short,
+            placeholder="Z. B. 1234567890",
+            max_length=25
+        )
 
         self.add_item(self.thread_title)
         self.add_item(self.invite_link)
         self.add_item(self.werbekanal_id)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Werte sichern und bereinigen
+        title = self.thread_title.value.strip()
+        invite = self.invite_link.value.strip()
+        werbekanal = self.werbekanal_id.value.strip()
+
+        # Validierung
+        if not title or not invite or not werbekanal:
+            await interaction.response.send_message(
+                "❌ Bitte fülle alle Felder korrekt aus.",
+                ephemeral=True
+            )
+            return
+
+        # Cache speichern
         bewerbung_cache.set(interaction.user.id, {
-            "thread_title": self.thread_title.value,
-            "invite_link": self.invite_link.value,
-            "werbekanal_id": self.werbekanal_id.value,
+            "thread_title": title,
+            "invite_link": invite,
+            "werbekanal_id": werbekanal,
             "projektart": self.projektart,
             "darstellung": self.darstellung
         })
 
+        # Debug-Log
+        logging.info(f"[Partnerbewerbung] Schritt 1 gespeichert für User {interaction.user.id}: "
+                     f"{bewerbung_cache.get(interaction.user.id)}")
+
+        # Weiter mit Schritt 2
         view = SchrittZweiStartView(self.bot)
         await interaction.response.send_message(
             "✅ Schritt 1 abgeschlossen. Klicke auf den Button unten, um mit Schritt 2 fortzufahren:",
