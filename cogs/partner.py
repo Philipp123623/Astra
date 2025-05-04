@@ -207,6 +207,10 @@ class ModalDritterSchritt(discord.ui.Modal, title="Schritt 3: Embed-Einstellunge
         await interaction.response.defer()
         await save_and_send_bewerbung(self.bot, interaction, data, embed=True)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SAVE & SEND
+# ─────────────────────────────────────────────────────────────────────────────
+
 async def save_and_send_bewerbung(bot, interaction, data, embed):
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -228,12 +232,6 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
             ))
             await conn.commit()
 
-    def format_media_field(url):
-        if not url or not url.startswith("http"):
-            return "Keins"
-        filename = url.split("/")[-1].split("?")[0]
-        return f"[{filename}]({url})"
-
     embed_preview = discord.Embed(title="📬 Neue Partnerbewerbung", color=discord.Color.blurple())
     embed_preview.add_field(name="Thread-Titel", value=data["thread_title"], inline=False)
     embed_preview.add_field(name="Projektart", value=data["projektart"], inline=True)
@@ -243,9 +241,8 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
 
     if embed:
         embed_preview.add_field(name="Farbe", value=data.get("embed_color") or "#5865F2", inline=True)
-        embed_preview.add_field(name="Bild", value=format_media_field(data.get("embed_image")), inline=True)
-        embed_preview.add_field(name="Thumbnail", value=format_media_field(data.get("embed_thumbnail")), inline=True)
-
+        embed_preview.add_field(name="Bild", value=data.get("embed_image") or "Keins", inline=True)
+        embed_preview.add_field(name="Thumbnail", value=data.get("embed_thumbnail") or "Keins", inline=True)
         if data.get("embed_thumbnail"):
             embed_preview.set_thumbnail(url=data["embed_thumbnail"])
 
@@ -253,6 +250,10 @@ async def save_and_send_bewerbung(bot, interaction, data, embed):
     admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
     await admin_channel.send(embed=embed_preview, view=view)
     await interaction.followup.send("✅ Deine Bewerbung wurde übermittelt!", ephemeral=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REVIEW VIEW
+# ─────────────────────────────────────────────────────────────────────────────
 
 class AdminReviewView(discord.ui.View):
     def __init__(self, bot, user_id):
@@ -269,12 +270,9 @@ class AdminReviewView(discord.ui.View):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT id, user_id, thread_title, embed_title, embed_description, embed_color,
-                           embed_image, embed_thumbnail, invite_link, ad_channel_id, projektart,
-                           status, created_at
-                    FROM partner_applications 
-                    WHERE user_id = %s 
-                    ORDER BY created_at DESC 
+                    SELECT * FROM partner_applications
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
                     LIMIT 1
                 """, (self.user_id,))
                 row = await cur.fetchone()
@@ -294,20 +292,16 @@ class AdminReviewView(discord.ui.View):
         main_tag = discord.utils.get(tags, name="Partner")
         project_tag = discord.utils.get(tags, name=projektart)
 
-        used_tags = []
-        if main_tag:
-            used_tags.append(main_tag)
-        if project_tag and project_tag != main_tag:
-            used_tags.append(project_tag)
+        used_tags = [tag for tag in [main_tag, project_tag] if tag]
 
         embed = discord.Embed(
             title=embed_title,
-            description=embed_description.replace("\\n", "\n"),
+            description=embed_description,
             color=int(embed_color.replace("#", ""), 16)
         )
-        if embed_image and embed_image.startswith("http"):
+        if embed_image:
             embed.set_image(url=embed_image)
-        if embed_thumbnail and embed_thumbnail.startswith("http"):
+        if embed_thumbnail:
             embed.set_thumbnail(url=embed_thumbnail)
 
         await forum.create_thread(
@@ -317,42 +311,21 @@ class AdminReviewView(discord.ui.View):
             applied_tags=used_tags
         )
 
-        # Astra-Werbung posten
-        channel = self.bot.get_channel(int(ad_channel_id))
-        if channel:
-            try:
-                async with self.bot.pool.acquire() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            "SELECT title, description, invite_link, thumbnail, image FROM astra_ad_config LIMIT 1"
-                        )
-                        data = await cur.fetchone()
-                if data:
-                    a_title, a_desc, a_inv, a_thumb, a_img = data
-                    astra_embed = discord.Embed(
-                        title=a_title,
-                        description=a_desc.replace("{invite}", a_inv),
-                        color=discord.Color.blurple()
-                    )
-                    if a_thumb:
-                        astra_embed.set_thumbnail(url=a_thumb)
-                    if a_img:
-                        astra_embed.set_image(url=a_img)
-                    await channel.send(embed=astra_embed)
-            except Exception as e:
-                logging.error(f"Fehler beim Werbung posten: {e}")
-
+        # Werbung direkt senden + Task starten
         neue_zeit = int((datetime.datetime.now() + datetime.timedelta(hours=6)).timestamp())
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE partner_applications SET status = 'accepted' WHERE user_id = %s",
-                                  (self.user_id,))
+                await cur.execute("""
+                    UPDATE partner_applications SET status = 'accepted' WHERE user_id = %s
+                """, (self.user_id,))
                 await cur.execute("""
                     INSERT INTO partner_ad_config (ad_channel_id, time)
                     VALUES (%s, %s)
                     ON DUPLICATE KEY UPDATE time = %s
                 """, (int(ad_channel_id), neue_zeit, neue_zeit))
                 await conn.commit()
+
+        asyncio.create_task(self.bot.partner_post_task(datetime.datetime.fromtimestamp(neue_zeit), int(ad_channel_id)))
 
         await interaction.response.send_message("✅ Partner angenommen & Werbung gestartet!", ephemeral=True)
         self.disable_all_items()
@@ -362,76 +335,59 @@ class AdminReviewView(discord.ui.View):
     async def ablehnen(self, interaction: discord.Interaction, button: discord.ui.Button):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE partner_applications SET status = 'declined' WHERE user_id = %s",
-                                  (self.user_id,))
+                await cur.execute("UPDATE partner_applications SET status = 'declined' WHERE user_id = %s", (self.user_id,))
                 await conn.commit()
 
         await interaction.response.send_message("❌ Bewerbung abgelehnt.", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
 
-
+# ─────────────────────────────────────────────────────────────────────────────
+# PARTNER-COG MIT TASK
+# ─────────────────────────────────────────────────────────────────────────────
 
 class Partner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.autopost_tasks_started = False
+        self.bot.partner_post_task = self.sende_werbung
 
     @commands.Cog.listener()
     async def on_ready(self):
-        if not self.autopost_tasks_started:
-            self.autopost_tasks_started = True
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("SHOW COLUMNS FROM partner_applications LIKE 'embed_thumbnail'")
-                    exists = await cur.fetchone()
-                    if not exists:
-                        await cur.execute("ALTER TABLE partner_applications ADD COLUMN embed_thumbnail TEXT")
-                    await cur.execute("""
-                        CREATE TABLE IF NOT EXISTS partner_applications (
-                            id INT AUTO_INCREMENT PRIMARY KEY,
-                            user_id BIGINT,
-                            thread_title TEXT,
-                            embed_title TEXT,
-                            embed_description TEXT,
-                            embed_color TEXT,
-                            embed_image TEXT,
-                            invite_link TEXT,
-                            ad_channel_id BIGINT,
-                            projektart TEXT,
-                            status ENUM('pending','accepted','declined') DEFAULT 'pending',
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    await cur.execute("""
-                        CREATE TABLE IF NOT EXISTS partner_ad_config (
-                            ad_channel_id BIGINT PRIMARY KEY,
-                            time BIGINT
-                        )
-                    """)
-                    await cur.execute("""
-                        CREATE TABLE IF NOT EXISTS astra_ad_config (
-                            id INT PRIMARY KEY DEFAULT 1,
-                            title TEXT,
-                            description TEXT,
-                            invite_link TEXT,
-                            thumbnail TEXT,
-                            image TEXT
-                        )
-                    """)
-                    await cur.execute("SELECT ad_channel_id, time FROM partner_ad_config")
-                    eintraege = await cur.fetchall()
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # CLEAN TABLES (NUR FÜR TESTS)
+                await cur.execute("DROP TABLE IF EXISTS partner_ad_config")
+                await cur.execute("DROP TABLE IF EXISTS partner_applications")
 
-                    async def starte_autopost_tasks():
-                        for ad_channel_id, time_ts in eintraege:
-                            try:
-                                when = datetime.datetime.fromtimestamp(int(time_ts))
-                                asyncio.create_task(self.sende_werbung(when, int(ad_channel_id)))
-                                await asyncio.sleep(0.5)
-                            except Exception as e:
-                                logging.error(f"❌ Werbung-Task Fehler: {e}")
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_ad_config (
+                        ad_channel_id BIGINT PRIMARY KEY,
+                        time BIGINT
+                    )
+                """)
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS partner_applications (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id BIGINT,
+                        thread_title TEXT,
+                        embed_title TEXT,
+                        embed_description TEXT,
+                        embed_color TEXT,
+                        embed_image TEXT,
+                        embed_thumbnail TEXT,
+                        invite_link TEXT,
+                        ad_channel_id BIGINT,
+                        projektart TEXT,
+                        status ENUM('pending','accepted','declined') DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                await cur.execute("SELECT ad_channel_id, time FROM partner_ad_config")
+                eintraege = await cur.fetchall()
 
-                    asyncio.create_task(starte_autopost_tasks())
+                for ad_channel_id, timestamp in eintraege:
+                    when = datetime.datetime.fromtimestamp(timestamp)
+                    asyncio.create_task(self.sende_werbung(when, ad_channel_id))
 
     async def sende_werbung(self, when: datetime.datetime, ad_channel_id: int):
         await self.bot.wait_until_ready()
@@ -440,12 +396,19 @@ class Partner(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT title, description, invite_link, thumbnail, image FROM astra_ad_config LIMIT 1")
-                data = await cur.fetchone()
-                if not data:
-                    return
-                title, description, invite, thumbnail, image = data
+                result = await cur.fetchone()
 
-        embed = discord.Embed(title=title, description=description.replace("\\n", "\n").replace("{invite}", invite), color=discord.Color.blurple())
+        if not result:
+            logging.warning("⚠️ Kein Werbeintrag gefunden in astra_ad_config")
+            return
+
+        title, description, invite, thumbnail, image = result
+
+        embed = discord.Embed(
+            title=title,
+            description=description.replace("{invite}", invite),
+            color=discord.Color.blurple()
+        )
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
         if image:
@@ -456,7 +419,7 @@ class Partner(commands.Cog):
             try:
                 await channel.send(embed=embed)
             except Exception as e:
-                logging.error(f"Fehler beim automatischen Posten in {ad_channel_id}: {e}")
+                logging.error(f"Fehler beim Werbung posten in {ad_channel_id}: {e}")
 
         neue_zeit = int((datetime.datetime.now() + datetime.timedelta(hours=6)).timestamp())
         async with self.bot.pool.acquire() as conn:
@@ -465,6 +428,7 @@ class Partner(commands.Cog):
                 await conn.commit()
 
         asyncio.create_task(self.sende_werbung(datetime.datetime.fromtimestamp(neue_zeit), ad_channel_id))
+
 
     @app_commands.command(name="partnerbewerbung", description="Beginne deine Partnerbewerbung")
     @app_commands.choices(
