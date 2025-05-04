@@ -23,14 +23,15 @@ bewerbung_cache = PartnerZwischenspeicher()
 
 class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1"):
     thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
-    beschreibung = discord.ui.TextInput(label="Beschreibung (auch im Embed)", style=discord.TextStyle.paragraph)
+    beschreibung = discord.ui.TextInput(label="Beschreibung (Text oder Embed)", style=discord.TextStyle.paragraph)
     invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...")
     werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID (für Astra-Werbung)")
 
-    def __init__(self, bot, projektart):
+    def __init__(self, bot, projektart, darstellung):
         super().__init__()
         self.bot = bot
         self.projektart = projektart
+        self.darstellung = darstellung
 
     async def on_submit(self, interaction: discord.Interaction):
         bewerbung_cache.set(interaction.user.id, {
@@ -38,9 +39,15 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
             "beschreibung": self.beschreibung.value,
             "invite_link": self.invite_link.value,
             "werbekanal_id": self.werbekanal_id.value,
-            "projektart": self.projektart
+            "projektart": self.projektart,
+            "darstellung": self.darstellung
         })
-        await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+        if self.darstellung == "embed":
+            await interaction.response.send_modal(ModalZweiterSchritt(self.bot))
+        else:
+            modal = ModalZweiterSchritt(self.bot)
+            modal.embed_text.default = self.beschreibung.value
+            await modal.on_submit(interaction)
 
 class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 2 (optional)"):
     embed_text = discord.ui.TextInput(label="Embed-Inhalt (Text im Embed)", style=discord.TextStyle.paragraph, required=False)
@@ -139,7 +146,6 @@ class Partner(commands.Cog):
                         image TEXT
                     )
                     """)
-
                     await cur.execute("SELECT ad_channel_id, time FROM partner_ad_config")
                     eintraege = await cur.fetchall()
 
@@ -187,17 +193,21 @@ class Partner(commands.Cog):
 
         asyncio.create_task(self.sende_werbung(datetime.datetime.fromtimestamp(neue_zeit), ad_channel_id))
 
-    @app_commands.command(name="partnerbewerbung", description="Beginne deine Partnerbewerbung in 2 Schritten")
+    @app_commands.command(name="partnerbewerbung", description="Beginne deine Partnerbewerbung")
     @app_commands.choices(
         projektart=[
             app_commands.Choice(name="Discord", value="Discord"),
             app_commands.Choice(name="Bots", value="Bots"),
             app_commands.Choice(name="Webseite", value="Webseite"),
             app_commands.Choice(name="Community", value="Community")
+        ],
+        darstellung=[
+            app_commands.Choice(name="Embed", value="embed"),
+            app_commands.Choice(name="Einfacher Text", value="text")
         ]
     )
-    async def partnerbewerbung(self, interaction: discord.Interaction, projektart: app_commands.Choice[str]):
-        await interaction.response.send_modal(ModalErsterSchritt(self.bot, projektart.value))
+    async def partnerbewerbung(self, interaction: discord.Interaction, projektart: app_commands.Choice[str], darstellung: app_commands.Choice[str]):
+        await interaction.response.send_modal(ModalErsterSchritt(self.bot, projektart.value, darstellung.value))
 
 class AdminReviewView(discord.ui.View):
     def __init__(self, bot, user_id):
