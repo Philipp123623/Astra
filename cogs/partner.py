@@ -77,7 +77,7 @@ class ModalZweiterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 
             await interaction.response.send_message("❌ Fehler beim Zwischenspeichern.", ephemeral=True)
             return
 
-        data["werbetext"] = sanitize_text(self.werbetext.value)
+        data["werbetext"] = self.werbetext.value  # hier NICHT \n ersetzen
 
         if data["darstellung"] == "text":
             bewerbung_cache.clear(interaction.user.id)
@@ -191,6 +191,8 @@ class AdminReviewView(discord.ui.View):
         main_tag = discord.utils.get(tags, name="Partner")
         project_tag = discord.utils.get(tags, name=projektart)
         used_tags = [t for t in [main_tag, project_tag] if t]
+        if project_tag and main_tag:
+            used_tags = [main_tag, project_tag]  # Reihenfolge sicherstellen
 
         embed = discord.Embed(title=embed_title, description=f"{embed_description}\n\n[Beitreten]({invite})", color=int(embed_color.replace("#", ""), 16))
         if embed_image and embed_image.startswith("http"):
