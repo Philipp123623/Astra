@@ -28,13 +28,17 @@ class ModalErsterSchritt(discord.ui.Modal, title="Partnerbewerbung – Schritt 1
         self.projektart = projektart
         self.darstellung = darstellung
 
-        self.thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
-        self.invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...", max_length=200)
-        self.werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", max_length=25)
+        thread_title = discord.ui.TextInput(label="Thread-Titel", max_length=100)
+        invite_link = discord.ui.TextInput(label="Einladungslink", placeholder="https://discord.gg/...", max_length=200)
+        werbekanal_id = discord.ui.TextInput(label="Werbekanal-ID", max_length=25)
 
-        self.add_item(self.thread_title)
-        self.add_item(self.invite_link)
-        self.add_item(self.werbekanal_id)
+        self.add_item(thread_title)
+        self.add_item(invite_link)
+        self.add_item(werbekanal_id)
+
+        self.thread_title = thread_title
+        self.invite_link = invite_link
+        self.werbekanal_id = werbekanal_id
 
     async def on_submit(self, interaction: discord.Interaction):
         bewerbung_cache.set(interaction.user.id, {
