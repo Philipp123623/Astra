@@ -25,10 +25,10 @@ def get_ram_usage():
 
 # --- Grafik-Erstellung ---
 def generate_graph(cpu_data, ram_data, time_points):
-    plt.style.use("seaborn-vibrant")
+    plt.style.use("seaborn-darkgrid")  # ← sicherer Stil
+
     fig, ax1 = plt.subplots(figsize=(10, 5), dpi=100)
 
-    # CPU
     ax1.set_title("Systemauslastung – CPU & RAM", fontsize=14, fontweight="bold")
     ax1.set_xlabel("Zeit (Sekunden)")
     ax1.set_ylabel("CPU-Auslastung (%)", color="tab:blue")
@@ -36,14 +36,12 @@ def generate_graph(cpu_data, ram_data, time_points):
     ax1.tick_params(axis='y', labelcolor="tab:blue")
     ax1.set_ylim(0, 100)
 
-    # RAM
     ax2 = ax1.twinx()
     ax2.set_ylabel("RAM-Auslastung (%)", color="tab:orange")
     ax2.plot(time_points, ram_data, color="tab:orange", marker="s", label="RAM (%)")
     ax2.tick_params(axis='y', labelcolor="tab:orange")
     ax2.set_ylim(0, 100)
 
-    # Legende und Layout
     fig.legend(loc="upper right", bbox_to_anchor=(0.9, 0.85))
     ax1.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
@@ -52,7 +50,6 @@ def generate_graph(cpu_data, ram_data, time_points):
     plt.savefig(file_path)
     plt.close()
     return file_path
-
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
