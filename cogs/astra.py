@@ -21,37 +21,40 @@ def get_ram_usage():
     return psutil.virtual_memory().percent
 
 # --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
-def generate_graph(cpu_data, ram_data):
-    time_points = list(range(1, len(cpu_data) + 1))
+def generate_graph(cpu_data, ram_data, time_points):
+    plt.style.use('dark_background')
 
-    plt.style.use("dark_background")
-    fig, ax = plt.subplots(figsize=(9, 4.5), dpi=120)
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    ax2 = ax1.twinx()  # Zweite y-Achse für RAM
 
-    # Linienfarben und Stil
-    ax.plot(time_points, cpu_data, color='#00BFFF', linewidth=2.5, label='CPU-Auslastung (%)', marker='o')
-    ax.plot(time_points, ram_data, color='#1E90FF', linewidth=2.5, label='RAM-Auslastung (%)', marker='s')
+    # CPU-Auslastung (linke Achse)
+    cpu_line = ax1.plot(time_points, cpu_data, color='#00BFFF', marker='o', linewidth=2.5, label='CPU-Auslastung (%)')
+    ax1.set_ylabel('CPU-Auslastung (%)', color='#00BFFF')
+    ax1.tick_params(axis='y', labelcolor='#00BFFF')
+    ax1.set_ylim(0, max(cpu_data) + 1)
 
-    ax.set_title('Systemauslastung – CPU & RAM', fontsize=14, color='white', pad=15)
-    ax.set_xlabel('Zeit (Sekunden)', fontsize=11, color='white')
-    ax.set_ylabel('Auslastung (%)', fontsize=11, color='white')
-    ax.set_xticks(time_points)
+    # RAM-Auslastung (rechte Achse)
+    ram_line = ax2.plot(time_points, ram_data, color='#FF8C00', marker='s', linewidth=2.5, label='RAM-Auslastung (%)')
+    ax2.set_ylabel('RAM-Auslastung (%)', color='#FF8C00')
+    ax2.tick_params(axis='y', labelcolor='#FF8C00')
+    ax2.set_ylim(0, max(ram_data) + 0.01)
 
-    # Design
-    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3)
-    ax.legend(facecolor='#1a1a1a', edgecolor='white', fontsize=9)
-    ax.set_facecolor('#111111')
-    fig.patch.set_facecolor('#111111')
+    # Achsenbeschriftung und Titel
+    ax1.set_xlabel('Zeit (Sekunden)')
+    ax1.set_title('Systemauslastung – CPU & RAM')
 
-    ax.tick_params(axis='x', colors='white')
-    ax.tick_params(axis='y', colors='white')
+    # Legende zusammenführen
+    lines = cpu_line + ram_line
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc='upper right')
 
-    # Als Bild speichern
-    buffer = io.BytesIO()
+    # Raster
+    ax1.grid(True, linestyle='--', alpha=0.5)
+
+    # Layout & Anzeige
     plt.tight_layout()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    plt.close(fig)
-    return buffer
+    plt.savefig("systemauslastung.png")  # oder plt.show()
+    plt.close()
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
