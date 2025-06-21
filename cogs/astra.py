@@ -23,38 +23,31 @@ def get_ram_usage():
 # --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
 def generate_graph(cpu_data, ram_data, time_points):
     plt.style.use('dark_background')
-
     fig, ax1 = plt.subplots(figsize=(12, 6))
-    ax2 = ax1.twinx()  # Zweite y-Achse für RAM
+    ax2 = ax1.twinx()
 
-    # CPU-Auslastung (linke Achse)
     cpu_line = ax1.plot(time_points, cpu_data, color='#00BFFF', marker='o', linewidth=2.5, label='CPU-Auslastung (%)')
     ax1.set_ylabel('CPU-Auslastung (%)', color='#00BFFF')
     ax1.tick_params(axis='y', labelcolor='#00BFFF')
     ax1.set_ylim(0, max(cpu_data) + 1)
 
-    # RAM-Auslastung (rechte Achse)
     ram_line = ax2.plot(time_points, ram_data, color='#FF8C00', marker='s', linewidth=2.5, label='RAM-Auslastung (%)')
     ax2.set_ylabel('RAM-Auslastung (%)', color='#FF8C00')
     ax2.tick_params(axis='y', labelcolor='#FF8C00')
     ax2.set_ylim(0, max(ram_data) + 0.01)
 
-    # Achsenbeschriftung und Titel
     ax1.set_xlabel('Zeit (Sekunden)')
     ax1.set_title('Systemauslastung – CPU & RAM')
-
-    # Legende zusammenführen
     lines = cpu_line + ram_line
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc='upper right')
-
-    # Raster
     ax1.grid(True, linestyle='--', alpha=0.5)
 
-    # Layout & Anzeige
     plt.tight_layout()
-    plt.savefig("systemauslastung.png")  # oder plt.show()
+    plt.savefig("systemauslastung.png")
     plt.close()
+
+    return "systemauslastung.png"  # <<< WICHTIG
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
@@ -155,18 +148,17 @@ class astra(commands.Cog):
         cpu_data = []
         ram_data = []
 
-        # RAM-Startwert als Referenz merken
         start_ram = get_ram_usage()
 
         for _ in range(10):
             cpu_data.append(get_cpu_usage())
             current_ram = get_ram_usage()
-            ram_data.append(current_ram - start_ram)  # Differenz zum Startwert
+            ram_data.append(current_ram - start_ram)
             await asyncio.sleep(1)
 
-        # Diagramm generieren
-        graph = generate_graph(cpu_data, ram_data)
-        graph_file = discord.File(graph, filename="graph.png")
+        time_points = list(range(10))  # Sauber generiert
+        graph_path = generate_graph(cpu_data, ram_data, time_points)
+        graph_file = discord.File(graph_path, filename="systemauslastung.png")
 
         # Bot Infos
         bot_owner = self.bot.get_user(789555434201677824)  # Deine ID hier
@@ -202,6 +194,7 @@ class astra(commands.Cog):
                          icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
 
         await interaction.followup.send(embed=embed, file=graph_file)
+        os.remove(graph_path)
 
     @app_commands.command(name="invite")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
