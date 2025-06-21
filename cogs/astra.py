@@ -14,55 +14,45 @@ from PIL import Image
 import asyncio
 import tempfile
 
-# --- Performance Funktionen ---
+# --- CPU & RAM Nutzung ---
 def get_cpu_usage():
     return psutil.cpu_percent(interval=None)
 
+
 def get_ram_usage():
-    return psutil.virtual_memory().percent  # Direkt Prozent
+    return psutil.virtual_memory().percent
 
-# --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
+
+# --- Grafik-Erstellung ---
 def generate_graph(cpu_data, ram_data, time_points):
-    plt.style.use('dark_background')
-    fig, ax1 = plt.subplots(figsize=(12, 6), dpi=100)
-    ax2 = ax1.twinx()
+    plt.style.use("seaborn-vibrant")
+    fig, ax1 = plt.subplots(figsize=(10, 5), dpi=100)
 
-    # CPU-Linie
-    cpu_line = ax1.plot(
-        time_points, cpu_data,
-        color='#00BFFF', marker='o', markersize=5, linewidth=2,
-        label='CPU-Auslastung (%)'
-    )
-    ax1.set_ylabel('CPU-Auslastung (%)', color='#00BFFF', fontsize=10)
-    ax1.tick_params(axis='y', labelcolor='#00BFFF')
+    # CPU
+    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=14, fontweight="bold")
+    ax1.set_xlabel("Zeit (Sekunden)")
+    ax1.set_ylabel("CPU-Auslastung (%)", color="tab:blue")
+    ax1.plot(time_points, cpu_data, color="tab:blue", marker="o", label="CPU (%)")
+    ax1.tick_params(axis='y', labelcolor="tab:blue")
     ax1.set_ylim(0, 100)
 
-    # RAM-Linie
-    ram_line = ax2.plot(
-        time_points, ram_data,
-        color='#FFA500', marker='s', markersize=5, linewidth=2,
-        label='RAM-Auslastung (%)'
-    )
-    ax2.set_ylabel('RAM-Auslastung (%)', color='#FFA500', fontsize=10)
-    ax2.tick_params(axis='y', labelcolor='#FFA500')
+    # RAM
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("RAM-Auslastung (%)", color="tab:orange")
+    ax2.plot(time_points, ram_data, color="tab:orange", marker="s", label="RAM (%)")
+    ax2.tick_params(axis='y', labelcolor="tab:orange")
     ax2.set_ylim(0, 100)
 
-    ax1.set_xlabel('Zeit (Sekunden)', fontsize=10)
-    ax1.set_title('Systemauslastung – CPU & RAM', fontsize=14, weight='bold')
-    ax1.grid(True, linestyle='--', alpha=0.3)
-
-    # Legende
-    lines = cpu_line + ram_line
-    labels = [l.get_label() for l in lines]
-    ax1.legend(lines, labels, loc='upper right', fontsize=9)
-
+    # Legende und Layout
+    fig.legend(loc="upper right", bbox_to_anchor=(0.9, 0.85))
+    ax1.grid(True, linestyle="--", alpha=0.5)
     plt.tight_layout()
 
-    # Temporäre Datei erstellen
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-        plt.savefig(tmpfile.name, bbox_inches='tight')
-        plt.close()
-        return tmpfile.name
+    file_path = "system_usage_graph.png"
+    plt.savefig(file_path)
+    plt.close()
+    return file_path
+
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
@@ -161,7 +151,7 @@ class astra(commands.Cog):
         cpu_data = []
         ram_data = []
 
-        # Systemdaten sammeln
+        # Systemdaten sammeln (10 Sekunden)
         for _ in range(10):
             cpu_data.append(get_cpu_usage())
             ram_data.append(get_ram_usage())
@@ -186,7 +176,7 @@ class astra(commands.Cog):
         embed = discord.Embed(
             title="🛰️ Astra Systemübersicht",
             description="Hier findest du aktuelle Informationen über den Bot und seine Leistung.",
-            color=discord.Color.blue()
+            color=discord.Color.blurple()
         )
 
         embed.add_field(name="👤 Bot Owner", value=bot_owner.mention if bot_owner else "Unbekannt", inline=True)
@@ -208,7 +198,6 @@ class astra(commands.Cog):
 
         await interaction.followup.send(embed=embed, file=graph_file)
 
-        # Aufräumen
         os.remove(graph_path)
 
     @app_commands.command(name="invite")
