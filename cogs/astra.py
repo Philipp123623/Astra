@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import os
 import time
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import numpy as np
 import platform
 import io
 from PIL import Image
@@ -25,29 +27,53 @@ def get_ram_usage():
 
 # --- Grafik-Erstellung ---
 def generate_graph(cpu_data, ram_data, time_points):
-    plt.style.use("default")  # ← sicherer Stil
+    plt.style.use("default")
 
+    # --- Konvertiere Daten in glattere Kurven (Spline-Interpolation) ---
+    x = np.array(time_points)
+    x_smooth = np.linspace(x.min(), x.max(), 300)
+
+    cpu_smooth = np.interp(x_smooth, x, cpu_data)
+    ram_smooth = np.interp(x_smooth, x, ram_data)
+
+    # --- Grafik-Setup ---
     fig, ax1 = plt.subplots(figsize=(10, 5), dpi=100)
+    fig.patch.set_facecolor("#1e1e1e")  # Hintergrund dunkelgrau
+    ax1.set_facecolor("#2c2c2c")        # Plot-Bereich etwas heller
 
-    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=14, fontweight="bold")
-    ax1.set_xlabel("Zeit (Sekunden)")
-    ax1.set_ylabel("CPU-Auslastung (%)", color="tab:blue")
-    ax1.plot(time_points, cpu_data, color="tab:blue", marker="o", label="CPU (%)")
-    ax1.tick_params(axis='y', labelcolor="tab:blue")
+    # --- CPU-Linie ---
+    ax1.plot(x_smooth, cpu_smooth, color="#4aa8ff", linewidth=2.5, label="CPU-Auslastung (%)")
+    ax1.set_ylabel("CPU (%)", color="#4aa8ff", fontsize=11)
+    ax1.tick_params(axis='y', labelcolor="#4aa8ff")
     ax1.set_ylim(0, 100)
 
+    # --- RAM-Linie auf zweiter Y-Achse ---
     ax2 = ax1.twinx()
-    ax2.set_ylabel("RAM-Auslastung (%)", color="tab:orange")
-    ax2.plot(time_points, ram_data, color="tab:orange", marker="s", label="RAM (%)")
-    ax2.tick_params(axis='y', labelcolor="tab:orange")
+    ax2.plot(x_smooth, ram_smooth, color="#f5a742", linewidth=2.5, label="RAM-Auslastung (%)")
+    ax2.set_ylabel("RAM (%)", color="#f5a742", fontsize=11)
+    ax2.tick_params(axis='y', labelcolor="#f5a742")
     ax2.set_ylim(0, 100)
 
-    fig.legend(loc="upper right", bbox_to_anchor=(0.9, 0.85))
-    ax1.grid(True, linestyle="--", alpha=0.5)
-    plt.tight_layout()
+    # --- Achsen & Raster ---
+    ax1.set_xlabel("Zeit (Sekunden)", fontsize=11, color="white")
+    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=15, color="white", weight="bold", pad=15)
+    ax1.grid(True, linestyle="--", linewidth=0.5, alpha=0.3)
 
+    # --- Ticks & Farben ---
+    ax1.tick_params(axis='x', colors='white')
+    ax1.tick_params(axis='y', colors='white')
+    ax2.tick_params(axis='y', colors='white')
+    ax1.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+    # --- Legende ---
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines + lines2, labels + labels2, loc="upper left", fontsize=10, facecolor="#2c2c2c", edgecolor="white")
+
+    # --- Finalisierung ---
+    plt.tight_layout()
     file_path = "system_usage_graph.png"
-    plt.savefig(file_path)
+    plt.savefig(file_path, facecolor=fig.get_facecolor())
     plt.close()
     return file_path
 
