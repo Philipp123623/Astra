@@ -14,11 +14,9 @@ from PIL import Image
 import asyncio
 
 # --- Performance Funktionen ---
-@staticmethod
 def get_cpu_usage():
     return psutil.cpu_percent(interval=None)
 
-@staticmethod
 def get_ram_usage():
     return psutil.virtual_memory().percent
 
@@ -153,9 +151,14 @@ class astra(commands.Cog):
         # CPU & RAM Daten sammeln
         cpu_data = []
         ram_data = []
+
+        # RAM-Startwert als Referenz merken
+        start_ram = get_ram_usage()
+
         for _ in range(10):
             cpu_data.append(get_cpu_usage())
-            ram_data.append(get_ram_usage())
+            current_ram = get_ram_usage()
+            ram_data.append(current_ram - start_ram)  # Differenz zum Startwert
             await asyncio.sleep(1)
 
         # Diagramm generieren
