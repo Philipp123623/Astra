@@ -25,7 +25,7 @@ def get_ram_usage():
 
 # --- Grafik-Erstellung ---
 def generate_graph(cpu_data, ram_data, time_points):
-    plt.style.use("seaborn-darkgrid")  # ← sicherer Stil
+    plt.style.use("default")  # ← sicherer Stil
 
     fig, ax1 = plt.subplots(figsize=(10, 5), dpi=100)
 
