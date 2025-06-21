@@ -104,11 +104,10 @@ class astra(commands.Cog):
                         await channels.send(embed=embed)
                     except:
                         pass
-                    channels = sum(1 for g in bot.guilds for _ in g.channels)
+                    channels = sum(1 for g in self.bot.guilds for _ in g.channels)
                     servers = len(self.bot.guilds)
                     users = len(self.bot.users)
                     commands = len(len(self.bot.tree.get_commands()))
-                    await cur.execute("UPDATE website_stats SET users = (%s) AND servers = (%s) AND channels = (%s) AND commands = (%s)", (users, servers, channels, commands))
                     embed = discord.Embed(colour=discord.Colour.blurple(), title=f"✨ ASTRA ✨",
                                           description=f"Hallo, mein Name ist Astra und ich bin hier, um diesen Server zu verbessern! ⠀ ⠀ ⠀ ⠀ ⠀ ⠀\nIch bin aktuell auf **{len(self.bot.guilds)}** Servern!")
                     embed.add_field(name="Zum Starten",
@@ -143,63 +142,105 @@ class astra(commands.Cog):
         except:
             pass
 
-    @app_commands.command(name="about")
-    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
-    async def about(self, interaction: discord.Interaction):
-        """Infos über Astra."""
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await interaction.response.defer(thinking=True)
-                cpu_data = []
-                ram_data = []
+    # --- Performance Funktionen ---
+    @staticmethod
+    def get_cpu_usage():
+        return psutil.cpu_percent(interval=None)
 
-                # Führe die Messungen über einen Zeitraum von 10 Sekunden durch
-                for _ in range(10):
-                    cpu_data.append(get_cpu_usage())
-                    ram_data.append(get_ram_usage())
-                    await asyncio.sleep(1)  # Warte 1 Sekunde zwischen den Messungen
+    @staticmethod
+    def get_ram_usage():
+        return psutil.virtual_memory().percent
 
-                # Generiere das Diagramm
-                performance_graph = generate_graph(cpu_data, ram_data)
+    # --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
+    def generate_graph(cpu_data, ram_data):
+        time_points = list(range(1, len(cpu_data) + 1))
 
-                # Konvertiere die discord.File-Instanz in ein temporäres Dateiobjekt
-                graph_file = discord.File(performance_graph, 'graph.png')
+        plt.style.use("dark_background")
+        fig, ax = plt.subplots(figsize=(9, 4.5), dpi=120)
 
-                # Informationen über den Bot
-                bot_owner = self.bot.get_user(789555434201677824)  # Deine Bot-Owner-ID hier einfügen
-                servers_count = len(self.bot.guilds)
-                channel_count = 0
-                for i in self.bot.guilds:
-                    channel_count += len(i.channels)
-                print(channel_count)
-                await cur.execute("DELETE FROM website_stats WHERE servers = (%s)", 4)
-                total_members = sum(guild.member_count for guild in self.bot.guilds)
-                average_members = total_members / servers_count if servers_count > 0 else 0
+        # Linienfarben und Stil
+        ax.plot(time_points, cpu_data, color='#00BFFF', linewidth=2.5, label='CPU-Auslastung (%)', marker='o')
+        ax.plot(time_points, ram_data, color='#1E90FF', linewidth=2.5, label='RAM-Auslastung (%)', marker='s')
 
-                delta_uptime = datetime.utcnow() - self.uptime
-                hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
-                minutes, seconds = divmod(remainder, 60)
-                days, hours = divmod(hours, 24)
-                # Informationen über die Umgebung
-                python_version = platform.python_version()
-                discord_py_version = discord.__version__
+        ax.set_title('Systemauslastung – CPU & RAM', fontsize=14, color='white', pad=15)
+        ax.set_xlabel('Zeit (Sekunden)', fontsize=11, color='white')
+        ax.set_ylabel('Auslastung (%)', fontsize=11, color='white')
+        ax.set_xticks(time_points)
 
-                # Anzahl der registrierten Slash-Befehle
-                slash_commands_count = len(self.bot.tree.get_commands())
+        # Design
+        ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3)
+        ax.legend(facecolor='#1a1a1a', edgecolor='white', fontsize=9)
+        ax.set_facecolor('#111111')
+        fig.patch.set_facecolor('#111111')
 
-                embed = discord.Embed(title='Bot Informationen', color=discord.Color.blue())
-                embed.add_field(name='👤 Bot Owner', value=bot_owner.mention if bot_owner else 'Nicht gefunden', inline=False)
-                embed.add_field(name='🌐 Server', value=f'{servers_count}', inline=False)
-                embed.add_field(name='👥 User', value=f'{total_members}', inline=False)
-                embed.add_field(name='👥 Durchschnittliche User pro Server', value=f'{average_members:.2f}', inline=False)
-                embed.add_field(name='🐍 Python Version', value=python_version, inline=False)
-                embed.add_field(name='🤖 Discord.py Version', value=discord_py_version, inline=False)
-                embed.add_field(name='⏰ Online seit', value=f"{days}d {hours}h {minutes}m {seconds}s", inline=False)
-                embed.add_field(name='🔧 Commands', value=f'{slash_commands_count}', inline=False)
-                embed.add_field(name='🏓 Bot Ping', value=f'{self.bot.latency * 1000:.2f} ms', inline=False)
-                embed.set_image(url="attachment://graph.png")  # Füge das Bild als Attachment hinzu
+        ax.tick_params(axis='x', colors='white')
+        ax.tick_params(axis='y', colors='white')
 
-                await interaction.followup.send(file=graph_file, embed=embed)
+        # Als Bild speichern
+        buffer = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buffer, format='png')
+        buffer.seek(0)
+        plt.close(fig)
+        return buffer
+
+    # --- Der Command selbst ---
+    class About(commands.Cog):
+        def __init__(self, bot):
+            self.bot = bot
+            self.uptime = datetime.utcnow()
+
+        @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
+        @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
+        async def about(self, interaction: discord.Interaction):
+            await interaction.response.defer(thinking=True)
+
+            # CPU & RAM Daten sammeln
+            cpu_data = []
+            ram_data = []
+            for _ in range(10):
+                cpu_data.append(get_cpu_usage())
+                ram_data.append(get_ram_usage())
+                await asyncio.sleep(1)
+
+            # Diagramm generieren
+            graph = generate_graph(cpu_data, ram_data)
+            graph_file = discord.File(graph, filename="graph.png")
+
+            # Bot Infos
+            bot_owner = self.bot.get_user(789555434201677824)  # Deine ID hier
+            servers_count = len(self.bot.guilds)
+            total_members = sum(g.member_count or 0 for g in self.bot.guilds)
+            average_members = total_members / servers_count if servers_count else 0
+
+            # Uptime
+            delta = datetime.utcnow() - self.uptime
+            days, rem = divmod(delta.total_seconds(), 86400)
+            hours, rem = divmod(rem, 3600)
+            minutes, seconds = divmod(rem, 60)
+
+            embed = discord.Embed(
+                title="🛰️ Astra Systemübersicht",
+                description="Hier findest du aktuelle Informationen über den Bot und seine Leistung.",
+                color=discord.Color.blue()
+            )
+
+            embed.add_field(name="👤 Bot Owner", value=bot_owner.mention if bot_owner else "Unbekannt", inline=True)
+            embed.add_field(name="🌐 Server", value=f"{servers_count}", inline=True)
+            embed.add_field(name="👥 Nutzer", value=f"{total_members}", inline=True)
+            embed.add_field(name="📊 Durchschnitt pro Server", value=f"{average_members:.2f}", inline=True)
+            embed.add_field(name="🐍 Python", value=platform.python_version(), inline=True)
+            embed.add_field(name="🤖 discord.py", value=discord.__version__, inline=True)
+            embed.add_field(name="🕓 Uptime", value=f"{int(days)}d {int(hours)}h {int(minutes)}m {int(seconds)}s",
+                            inline=True)
+            embed.add_field(name="🛠️ Slash Commands", value=str(len(self.bot.tree.get_commands())), inline=True)
+            embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
+
+            embed.set_image(url="attachment://graph.png")
+            embed.set_footer(text="Astra • Performance-Überblick",
+                             icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
+
+            await interaction.followup.send(embed=embed, file=graph_file)
 
     @app_commands.command(name="invite")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))

@@ -4,7 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/astra.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/astra.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -90,7 +93,8 @@
       <workItem from="1745622651583" duration="328000" />
       <workItem from="1745623071216" duration="7877000" />
       <workItem from="1745663066287" duration="5276000" />
-      <workItem from="1746317890996" duration="16965000" />
+      <workItem from="1746317890996" duration="17553000" />
+      <workItem from="1750538984141" duration="807000" />
     </task>
     <servers />
   </component>
