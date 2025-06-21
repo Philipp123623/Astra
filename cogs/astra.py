@@ -13,46 +13,47 @@ import io
 from PIL import Image
 import asyncio
 
+# --- Performance Funktionen ---
+@staticmethod
 def get_cpu_usage():
-    return psutil.cpu_percent(interval=1)
+    return psutil.cpu_percent(interval=None)
 
-
-# Funktion zur Berechnung der RAM-Nutzung
+@staticmethod
 def get_ram_usage():
     return psutil.virtual_memory().percent
 
+# --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
+def generate_graph(cpu_data, ram_data):
+    time_points = list(range(1, len(cpu_data) + 1))
 
-def generate_graph(cpu_usage, ram_usage, width=400, height=250):
-    # Erstelle Diagramm
-    plt.plot(cpu_usage, label='CPU Usage')
-    plt.plot(ram_usage, label='RAM Usage')
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(figsize=(9, 4.5), dpi=120)
 
-    # Füge Labels und Titel hinzu
-    plt.xlabel('Time (seconds)')
-    plt.ylabel('Percentage')
-    plt.title('Bot Performance Over Time')
+    # Linienfarben und Stil
+    ax.plot(time_points, cpu_data, color='#00BFFF', linewidth=2.5, label='CPU-Auslastung (%)', marker='o')
+    ax.plot(time_points, ram_data, color='#1E90FF', linewidth=2.5, label='RAM-Auslastung (%)', marker='s')
 
-    # Füge eine Legende hinzu
-    plt.legend(loc='upper right')
+    ax.set_title('Systemauslastung – CPU & RAM', fontsize=14, color='white', pad=15)
+    ax.set_xlabel('Zeit (Sekunden)', fontsize=11, color='white')
+    ax.set_ylabel('Auslastung (%)', fontsize=11, color='white')
+    ax.set_xticks(time_points)
 
-    # Speichere das Diagramm in einem BytesIO-Objekt
+    # Design
+    ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3)
+    ax.legend(facecolor='#1a1a1a', edgecolor='white', fontsize=9)
+    ax.set_facecolor('#111111')
+    fig.patch.set_facecolor('#111111')
+
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white')
+
+    # Als Bild speichern
     buffer = io.BytesIO()
+    plt.tight_layout()
     plt.savefig(buffer, format='png')
     buffer.seek(0)
-
-    # Öffne das Bild mit PIL und passe die Größe an
-    image = Image.open(buffer)
-    image = image.resize((width, height))
-
-    # Speichere das angepasste Bild erneut in einem BytesIO-Objekt
-    resized_buffer = io.BytesIO()
-    image.save(resized_buffer, format='png')
-    resized_buffer.seek(0)
-
-    # Schließe das Diagramm
-    plt.close()
-
-    return resized_buffer
+    plt.close(fig)
+    return buffer
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
@@ -142,105 +143,59 @@ class astra(commands.Cog):
         except:
             pass
 
-    # --- Performance Funktionen ---
-    @staticmethod
-    def get_cpu_usage():
-        return psutil.cpu_percent(interval=None)
 
-    @staticmethod
-    def get_ram_usage():
-        return psutil.virtual_memory().percent
 
-    # --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
-    def generate_graph(cpu_data, ram_data):
-        time_points = list(range(1, len(cpu_data) + 1))
+    @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
+    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
+    async def about(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
 
-        plt.style.use("dark_background")
-        fig, ax = plt.subplots(figsize=(9, 4.5), dpi=120)
+        # CPU & RAM Daten sammeln
+        cpu_data = []
+        ram_data = []
+        for _ in range(10):
+            cpu_data.append(get_cpu_usage())
+            ram_data.append(get_ram_usage())
+            await asyncio.sleep(1)
 
-        # Linienfarben und Stil
-        ax.plot(time_points, cpu_data, color='#00BFFF', linewidth=2.5, label='CPU-Auslastung (%)', marker='o')
-        ax.plot(time_points, ram_data, color='#1E90FF', linewidth=2.5, label='RAM-Auslastung (%)', marker='s')
+        # Diagramm generieren
+        graph = generate_graph(cpu_data, ram_data)
+        graph_file = discord.File(graph, filename="graph.png")
 
-        ax.set_title('Systemauslastung – CPU & RAM', fontsize=14, color='white', pad=15)
-        ax.set_xlabel('Zeit (Sekunden)', fontsize=11, color='white')
-        ax.set_ylabel('Auslastung (%)', fontsize=11, color='white')
-        ax.set_xticks(time_points)
+        # Bot Infos
+        bot_owner = self.bot.get_user(789555434201677824)  # Deine ID hier
+        servers_count = len(self.bot.guilds)
+        total_members = sum(g.member_count or 0 for g in self.bot.guilds)
+        average_members = total_members / servers_count if servers_count else 0
 
-        # Design
-        ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3)
-        ax.legend(facecolor='#1a1a1a', edgecolor='white', fontsize=9)
-        ax.set_facecolor('#111111')
-        fig.patch.set_facecolor('#111111')
+        # Uptime
+        delta = datetime.utcnow() - self.uptime
+        days, rem = divmod(delta.total_seconds(), 86400)
+        hours, rem = divmod(rem, 3600)
+        minutes, seconds = divmod(rem, 60)
 
-        ax.tick_params(axis='x', colors='white')
-        ax.tick_params(axis='y', colors='white')
+        embed = discord.Embed(
+            title="🛰️ Astra Systemübersicht",
+            description="Hier findest du aktuelle Informationen über den Bot und seine Leistung.",
+            color=discord.Color.blue()
+        )
 
-        # Als Bild speichern
-        buffer = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        plt.close(fig)
-        return buffer
+        embed.add_field(name="👤 Bot Owner", value=bot_owner.mention if bot_owner else "Unbekannt", inline=True)
+        embed.add_field(name="🌐 Server", value=f"{servers_count}", inline=True)
+        embed.add_field(name="👥 Nutzer", value=f"{total_members}", inline=True)
+        embed.add_field(name="📊 Durchschnitt pro Server", value=f"{average_members:.2f}", inline=True)
+        embed.add_field(name="🐍 Python", value=platform.python_version(), inline=True)
+        embed.add_field(name="🤖 discord.py", value=discord.__version__, inline=True)
+        embed.add_field(name="🕓 Uptime", value=f"{int(days)}d {int(hours)}h {int(minutes)}m {int(seconds)}s",
+                        inline=True)
+        embed.add_field(name="🛠️ Slash Commands", value=str(len(self.bot.tree.get_commands())), inline=True)
+        embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
 
-    # --- Der Command selbst ---
-    class About(commands.Cog):
-        def __init__(self, bot):
-            self.bot = bot
-            self.uptime = datetime.utcnow()
+        embed.set_image(url="attachment://graph.png")
+        embed.set_footer(text="Astra • Performance-Überblick",
+                         icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
 
-        @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
-        @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
-        async def about(self, interaction: discord.Interaction):
-            await interaction.response.defer(thinking=True)
-
-            # CPU & RAM Daten sammeln
-            cpu_data = []
-            ram_data = []
-            for _ in range(10):
-                cpu_data.append(get_cpu_usage())
-                ram_data.append(get_ram_usage())
-                await asyncio.sleep(1)
-
-            # Diagramm generieren
-            graph = generate_graph(cpu_data, ram_data)
-            graph_file = discord.File(graph, filename="graph.png")
-
-            # Bot Infos
-            bot_owner = self.bot.get_user(789555434201677824)  # Deine ID hier
-            servers_count = len(self.bot.guilds)
-            total_members = sum(g.member_count or 0 for g in self.bot.guilds)
-            average_members = total_members / servers_count if servers_count else 0
-
-            # Uptime
-            delta = datetime.utcnow() - self.uptime
-            days, rem = divmod(delta.total_seconds(), 86400)
-            hours, rem = divmod(rem, 3600)
-            minutes, seconds = divmod(rem, 60)
-
-            embed = discord.Embed(
-                title="🛰️ Astra Systemübersicht",
-                description="Hier findest du aktuelle Informationen über den Bot und seine Leistung.",
-                color=discord.Color.blue()
-            )
-
-            embed.add_field(name="👤 Bot Owner", value=bot_owner.mention if bot_owner else "Unbekannt", inline=True)
-            embed.add_field(name="🌐 Server", value=f"{servers_count}", inline=True)
-            embed.add_field(name="👥 Nutzer", value=f"{total_members}", inline=True)
-            embed.add_field(name="📊 Durchschnitt pro Server", value=f"{average_members:.2f}", inline=True)
-            embed.add_field(name="🐍 Python", value=platform.python_version(), inline=True)
-            embed.add_field(name="🤖 discord.py", value=discord.__version__, inline=True)
-            embed.add_field(name="🕓 Uptime", value=f"{int(days)}d {int(hours)}h {int(minutes)}m {int(seconds)}s",
-                            inline=True)
-            embed.add_field(name="🛠️ Slash Commands", value=str(len(self.bot.tree.get_commands())), inline=True)
-            embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
-
-            embed.set_image(url="attachment://graph.png")
-            embed.set_footer(text="Astra • Performance-Überblick",
-                             icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
-
-            await interaction.followup.send(embed=embed, file=graph_file)
+        await interaction.followup.send(embed=embed, file=graph_file)
 
     @app_commands.command(name="invite")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
@@ -271,7 +226,7 @@ class astra(commands.Cog):
         msg = await interaction.original_message()
         t_2 = time.perf_counter()
         time_delta = round((t_2 - t_1) * 1000, 2)
-        await msg.edit(content=f"```Websocket: {round(self.bot.latency * 1000, 2)} ms\Antwort: {time_delta} ms```")
+        await msg.edit(content=f"```Websocket: {round(self.bot.latency * 1000, 2)} ms\nAntwort: {time_delta} ms```")
 
     @app_commands.command(name="uptime")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
