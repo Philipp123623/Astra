@@ -12,42 +12,57 @@ import platform
 import io
 from PIL import Image
 import asyncio
+import tempfile
 
 # --- Performance Funktionen ---
 def get_cpu_usage():
     return psutil.cpu_percent(interval=None)
 
 def get_ram_usage():
-    return psutil.virtual_memory().percent
+    return psutil.virtual_memory().percent  # Direkt Prozent
 
 # --- Grafik-Erstellung mit dunklem Hintergrund und modernen Blautönen ---
 def generate_graph(cpu_data, ram_data, time_points):
     plt.style.use('dark_background')
-    fig, ax1 = plt.subplots(figsize=(12, 6))
+    fig, ax1 = plt.subplots(figsize=(12, 6), dpi=100)
     ax2 = ax1.twinx()
 
-    cpu_line = ax1.plot(time_points, cpu_data, color='#00BFFF', marker='o', linewidth=2.5, label='CPU-Auslastung (%)')
-    ax1.set_ylabel('CPU-Auslastung (%)', color='#00BFFF')
+    # CPU-Linie
+    cpu_line = ax1.plot(
+        time_points, cpu_data,
+        color='#00BFFF', marker='o', markersize=5, linewidth=2,
+        label='CPU-Auslastung (%)'
+    )
+    ax1.set_ylabel('CPU-Auslastung (%)', color='#00BFFF', fontsize=10)
     ax1.tick_params(axis='y', labelcolor='#00BFFF')
-    ax1.set_ylim(0, max(cpu_data) + 1)
+    ax1.set_ylim(0, 100)
 
-    ram_line = ax2.plot(time_points, ram_data, color='#FF8C00', marker='s', linewidth=2.5, label='RAM-Auslastung (%)')
-    ax2.set_ylabel('RAM-Auslastung (%)', color='#FF8C00')
-    ax2.tick_params(axis='y', labelcolor='#FF8C00')
-    ax2.set_ylim(0, max(ram_data) + 0.01)
+    # RAM-Linie
+    ram_line = ax2.plot(
+        time_points, ram_data,
+        color='#FFA500', marker='s', markersize=5, linewidth=2,
+        label='RAM-Auslastung (%)'
+    )
+    ax2.set_ylabel('RAM-Auslastung (%)', color='#FFA500', fontsize=10)
+    ax2.tick_params(axis='y', labelcolor='#FFA500')
+    ax2.set_ylim(0, 100)
 
-    ax1.set_xlabel('Zeit (Sekunden)')
-    ax1.set_title('Systemauslastung – CPU & RAM')
+    ax1.set_xlabel('Zeit (Sekunden)', fontsize=10)
+    ax1.set_title('Systemauslastung – CPU & RAM', fontsize=14, weight='bold')
+    ax1.grid(True, linestyle='--', alpha=0.3)
+
+    # Legende
     lines = cpu_line + ram_line
     labels = [l.get_label() for l in lines]
-    ax1.legend(lines, labels, loc='upper right')
-    ax1.grid(True, linestyle='--', alpha=0.5)
+    ax1.legend(lines, labels, loc='upper right', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig("systemauslastung.png")
-    plt.close()
 
-    return "systemauslastung.png"  # <<< WICHTIG
+    # Temporäre Datei erstellen
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+        plt.savefig(tmpfile.name, bbox_inches='tight')
+        plt.close()
+        return tmpfile.name
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
@@ -137,31 +152,27 @@ class astra(commands.Cog):
         except:
             pass
 
-
-
+    # --- About Command ---
     @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
 
-        # CPU & RAM Daten sammeln
         cpu_data = []
         ram_data = []
 
-        start_ram = get_ram_usage()
-
+        # Systemdaten sammeln
         for _ in range(10):
             cpu_data.append(get_cpu_usage())
-            current_ram = get_ram_usage()
-            ram_data.append(current_ram - start_ram)
+            ram_data.append(get_ram_usage())
             await asyncio.sleep(1)
 
-        time_points = list(range(10))  # Sauber generiert
+        time_points = list(range(10))
         graph_path = generate_graph(cpu_data, ram_data, time_points)
-        graph_file = discord.File(graph_path, filename="systemauslastung.png")
+        graph_file = discord.File(graph_path, filename="graph.png")
 
-        # Bot Infos
-        bot_owner = self.bot.get_user(789555434201677824)  # Deine ID hier
+        # Bot-Infos
+        bot_owner = self.bot.get_user(789555434201677824)  # Deine ID
         servers_count = len(self.bot.guilds)
         total_members = sum(g.member_count or 0 for g in self.bot.guilds)
         average_members = total_members / servers_count if servers_count else 0
@@ -190,10 +201,14 @@ class astra(commands.Cog):
         embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
 
         embed.set_image(url="attachment://graph.png")
-        embed.set_footer(text="Astra • Performance-Überblick",
-                         icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
+        embed.set_footer(
+            text="Astra • Performance-Überblick",
+            icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None
+        )
 
         await interaction.followup.send(embed=embed, file=graph_file)
+
+        # Aufräumen
         os.remove(graph_path)
 
     @app_commands.command(name="invite")
