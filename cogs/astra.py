@@ -30,7 +30,7 @@ def get_ram_usage() -> float:
 
 
 # ------------------------------------------------------------
-#  Graph Generator (Dark‑Dashboard‑Style)
+#  Graph Generator (Dark‑Dashboard‑Style, verbessert)
 # ------------------------------------------------------------
 def generate_graph(cpu, ram, t):
     # ---------- Farben ----------
@@ -47,7 +47,7 @@ def generate_graph(cpu, ram, t):
 
     # ---------- Global Style ----------
     plt.rcParams.update({
-        "font.family": "DejaVu Sans",
+        "font.family": "Inter",  # Alternativ: 'Segoe UI', 'Ubuntu', 'DejaVu Sans'
         "font.size":   10,
         "axes.edgecolor": "white",
         "axes.labelcolor": "white",
@@ -61,17 +61,20 @@ def generate_graph(cpu, ram, t):
     fig.patch.set_facecolor(BG_FIG)
     ax1.set_facecolor(BG_AX)
 
+    # ---------- Optional: Padding für Platz auf Achsen ----------
+    fig.subplots_adjust(left=0.08, right=0.92)
+
     # ---------- CPU‑Linie ----------
     cpu_line, = ax1.plot(
         xs, cpu_s, color=CPU_C, lw=2.4, label="CPU",
         path_effects=[patheffects.Stroke(linewidth=3.4, foreground="#0E4066"),
-                      patheffects.Normal()]  # dezent leuchtender Rand
+                      patheffects.Normal()]
     )
     ax1.fill_between(xs, cpu_s, color=CPU_C, alpha=0.12)
 
     ax1.set_ylabel("CPU (%)", color=CPU_C, weight="bold")
     ax1.tick_params(axis="y", labelcolor=CPU_C)
-    ax1.set_ylim(0, max(10, max(cpu) + 5))          # 0‑…10 % +, da CPU bei dir niedrig
+    ax1.set_ylim(0, max(10, max(cpu) + 5))
 
     # ---------- RAM‑Linie (rechte Y‑Achse) ----------
     ax2 = ax1.twinx()
@@ -80,7 +83,8 @@ def generate_graph(cpu, ram, t):
         path_effects=[patheffects.Stroke(linewidth=3.4, foreground="#664315"),
                       patheffects.Normal()]
     )
-    ax2.fill_between(xs, ram_s, color=RAM_C, alpha=0.10)
+    ax2.fill_between(xs, ram_s, color=RAM_C, alpha=0.07)  # << dunkleres RAM-Fill
+
     ax2.set_ylabel("RAM (%)", color=RAM_C, weight="bold")
     ax2.tick_params(axis="y", labelcolor=RAM_C)
     ax2.set_ylim(min(0, min(ram) - 5), min(100, max(ram) + 5))
@@ -89,7 +93,7 @@ def generate_graph(cpu, ram, t):
     ax1.set_xlabel("Zeit (Sekunden)")
     ax1.set_title("Systemauslastung – CPU & RAM", fontsize=16, weight="bold", pad=10)
     ax1.xaxis.set_major_locator(tkr.MaxNLocator(integer=True))
-    ax1.grid(ls="--", lw=0.5, alpha=0.28)
+    ax1.grid(ls="--", lw=0.6, alpha=0.15, color="white")  # << smoother Grid
 
     # ---------- Legende ----------
     ax1.legend(
@@ -100,7 +104,7 @@ def generate_graph(cpu, ram, t):
         fontsize=9
     )
 
-    # ---------- OPTIONAL: Punkt‑Labels (auskommentieren wenn zu busy) -----
+    # ---------- Punkt‑Labels ----------
     for x_pt, y_pt in zip(x, cpu):
         ax1.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=CPU_C, fontsize=8, ha="center")
     for x_pt, y_pt in zip(x, ram):
