@@ -101,10 +101,10 @@ def generate_graph(cpu, ram, t):
     )
 
     # ---------- OPTIONAL: Punkt‑Labels (auskommentieren wenn zu busy) -----
-    # for x_pt, y_pt in zip(x, cpu):
-    #     ax1.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=CPU_C, fontsize=8, ha="center")
-    # for x_pt, y_pt in zip(x, ram):
-    #     ax2.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=RAM_C, fontsize=8, ha="center")
+    for x_pt, y_pt in zip(x, cpu):
+        ax1.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=CPU_C, fontsize=8, ha="center")
+    for x_pt, y_pt in zip(x, ram):
+        ax2.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=RAM_C, fontsize=8, ha="center")
 
     # ---------- Export ----------
     save_path = "system_usage_graph.png"
