@@ -34,9 +34,14 @@ def get_ram_usage() -> float:
 #  Graph Generator (Dark‑Dashboard‑Style, verbessert)
 # ------------------------------------------------------------
 def generate_graph(cpu, ram, t):
-    # Lade die Schrift
-    font_path = "cogs/fonts/Poppins-SemiBold.ttf"
-    font_prop = fm.FontProperties(fname=font_path)
+    # 1)  Font registrieren
+    FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"  # dein absoluter oder relativer Pfad
+    fm.fontManager.addfont(FONT_PATH)  # <‑ in den Matplotlib‑Cache eintragen
+    # fm._rebuild()  # Font‑Datenbank neu aufbauen
+
+    # Interner Name exakt auslesen
+    POPPINS_NAME = fm.FontProperties(fname=FONT_PATH).get_name()
+    # -> gibt meist "Poppins SemiBold" zurück
 
     # ---------- Farben ----------
     BG_FIG = "#181818"     # super‑dunkel
@@ -52,7 +57,7 @@ def generate_graph(cpu, ram, t):
 
     # ---------- Global Style ----------
     plt.rcParams.update({
-        "font.family": font_prop.get_name(),  # Alternativ: 'Segoe UI', 'Ubuntu', 'DejaVu Sans'
+        "font.family": POPPINS_NAME,  # Alternativ: 'Segoe UI', 'Ubuntu', 'DejaVu Sans'
         "font.size":   10,
         "axes.edgecolor": "white",
         "axes.labelcolor": "white",
