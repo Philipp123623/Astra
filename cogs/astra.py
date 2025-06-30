@@ -9,6 +9,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tkr
+import matplotlib.font_manager as fm
 import numpy as np
 from matplotlib import patheffects
 import platform
@@ -33,6 +34,10 @@ def get_ram_usage() -> float:
 #  Graph Generator (Dark‑Dashboard‑Style, verbessert)
 # ------------------------------------------------------------
 def generate_graph(cpu, ram, t):
+    # Lade die Schrift
+    font_path = "cogs/fonts/Poppins-SemiBold.ttf"
+    font_prop = fm.FontProperties(fname=font_path)
+
     # ---------- Farben ----------
     BG_FIG = "#181818"     # super‑dunkel
     BG_AX  = "#222222"     # etwas heller
@@ -47,7 +52,7 @@ def generate_graph(cpu, ram, t):
 
     # ---------- Global Style ----------
     plt.rcParams.update({
-        "font.family": "Inter",  # Alternativ: 'Segoe UI', 'Ubuntu', 'DejaVu Sans'
+        "font.family": font_prop.get_name(),  # Alternativ: 'Segoe UI', 'Ubuntu', 'DejaVu Sans'
         "font.size":   10,
         "axes.edgecolor": "white",
         "axes.labelcolor": "white",
