@@ -16,66 +16,85 @@ from PIL import Image
 import asyncio
 import tempfile
 
-# --- CPU & RAM Nutzung ---
-def get_cpu_usage():
-    return psutil.cpu_percent(interval=None)
+# ------------------------------------------------------------
+#  CPU & RAM Helpers
+# ------------------------------------------------------------
+def get_cpu_usage() -> float:
+    # 1‑Sekunden‑Messung => realistische Schwankungen
+    return psutil.cpu_percent(interval=1)
 
 
-def get_ram_usage():
+def get_ram_usage() -> float:
     return psutil.virtual_memory().percent
 
 
-# --- Grafik-Erstellung ---
-def generate_graph(cpu_data, ram_data, time_points):
-    plt.style.use("default")
+# ------------------------------------------------------------
+#  Graph Generator (Dark‑Dashboard‑Style)
+# ------------------------------------------------------------
+def generate_graph(cpu, ram, t):
+    # ---- Farben / Theme ---------------------------------------------------
+    BG_FIG = "#1e1e1e"     # dunkler Hintergrund
+    BG_AX  = "#2a2a2a"     # Plot‑Pane
+    CPU_C  = "#3FA9F5"     # Astra‑Blau
+    RAM_C  = "#F5A623"     # Orange
 
-    # --- Konvertiere Daten in glattere Kurven (Spline-Interpolation) ---
-    x = np.array(time_points)
-    x_smooth = np.linspace(x.min(), x.max(), 300)
+    # ---- glatte Linien per Interpolation ----------------------------------
+    x = np.array(t)
+    xs = np.linspace(x.min(), x.max(), 320)
+    cpu_s = np.interp(xs, x, cpu)
+    ram_s = np.interp(xs, x, ram)
 
-    cpu_smooth = np.interp(x_smooth, x, cpu_data)
-    ram_smooth = np.interp(x_smooth, x, ram_data)
+    # ---- Matplotlib‑Look ---------------------------------------------------
+    plt.rcParams.update({
+        "font.family": "DejaVu Sans",
+        "font.size": 10,
+        "axes.edgecolor": "white",
+        "axes.labelcolor": "white",
+        "xtick.color": "white",
+        "ytick.color": "white",
+        "text.color": "white"
+    })
 
-    # --- Grafik-Setup ---
-    fig, ax1 = plt.subplots(figsize=(10, 5), dpi=100)
-    fig.patch.set_facecolor("#1e1e1e")  # Hintergrund dunkelgrau
-    ax1.set_facecolor("#2c2c2c")        # Plot-Bereich etwas heller
+    fig, ax1 = plt.subplots(figsize=(11, 5.5), dpi=120)
+    fig.patch.set_facecolor(BG_FIG)
+    ax1.set_facecolor(BG_AX)
 
-    # --- CPU-Linie ---
-    ax1.plot(x_smooth, cpu_smooth, color="#4aa8ff", linewidth=2.5, label="CPU-Auslastung (%)")
-    ax1.set_ylabel("CPU (%)", color="#4aa8ff", fontsize=11)
-    ax1.tick_params(axis='y', labelcolor="#4aa8ff")
-    ax1.set_ylim(0, 100)
+    # ---- CPU‑Plot ----------------------------------------------------------
+    ax1.plot(xs, cpu_s, color=CPU_C, lw=2.5, label="CPU")
+    ax1.fill_between(xs, cpu_s, color=CPU_C, alpha=0.15)
+    ax1.set_ylabel("CPU (%)", color=CPU_C, weight="bold")
+    ax1.tick_params(axis="y", labelcolor=CPU_C)
+    ax1.set_xlabel("Zeit (Sekunden)")
 
-    # --- RAM-Linie auf zweiter Y-Achse ---
+    cpu_min, cpu_max = min(cpu), max(cpu)
+    ax1.set_ylim(max(0, cpu_min - 5), min(100, cpu_max + 5))
+
+    # ---- RAM‑Plot (zweite Achse) ------------------------------------------
     ax2 = ax1.twinx()
-    ax2.plot(x_smooth, ram_smooth, color="#f5a742", linewidth=2.5, label="RAM-Auslastung (%)")
-    ax2.set_ylabel("RAM (%)", color="#f5a742", fontsize=11)
-    ax2.tick_params(axis='y', labelcolor="#f5a742")
-    ax2.set_ylim(0, 100)
+    ax2.plot(xs, ram_s, color=RAM_C, lw=2.5, label="RAM")
+    ax2.fill_between(xs, ram_s, color=RAM_C, alpha=0.10)
+    ax2.set_ylabel("RAM (%)", color=RAM_C, weight="bold")
+    ax2.tick_params(axis="y", labelcolor=RAM_C)
 
-    # --- Achsen & Raster ---
-    ax1.set_xlabel("Zeit (Sekunden)", fontsize=11, color="white")
-    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=15, color="white", weight="bold", pad=15)
-    ax1.grid(True, linestyle="--", linewidth=0.5, alpha=0.3)
+    ram_min, ram_max = min(ram), max(ram)
+    ax2.set_ylim(max(0, ram_min - 5), min(100, ram_max + 5))
 
-    # --- Ticks & Farben ---
-    ax1.tick_params(axis='x', colors='white')
-    ax1.tick_params(axis='y', colors='white')
-    ax2.tick_params(axis='y', colors='white')
+    # ---- Layout / Style ----------------------------------------------------
+    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=15, weight="bold", pad=12)
     ax1.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    ax1.grid(ls="--", lw=0.6, alpha=0.35)
 
-    # --- Legende ---
     lines, labels = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines + lines2, labels + labels2, loc="upper left", fontsize=10, facecolor="#2c2c2c", edgecolor="white")
+    l2, lab2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines + l2, labels + lab2,
+               loc="upper left", frameon=False, fontsize=9)
 
-    # --- Finalisierung ---
     plt.tight_layout()
-    file_path = "system_usage_graph.png"
-    plt.savefig(file_path, facecolor=fig.get_facecolor())
+    path = "system_usage_graph.png"
+    plt.savefig(path, facecolor=fig.get_facecolor(), bbox_inches="tight")
     plt.close()
-    return file_path
+    return path
+
 
 def convert(time):
     pos = ["s", "m", "h", "d"]
@@ -165,62 +184,54 @@ class astra(commands.Cog):
         except:
             pass
 
-    # --- About Command ---
     @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
 
-        cpu_data = []
-        ram_data = []
-
-        # Systemdaten sammeln (10 Sekunden)
+        # -------- Daten sammeln -------------------------------------------
+        cpu_data, ram_data = [], []
         for _ in range(10):
             cpu_data.append(get_cpu_usage())
             ram_data.append(get_ram_usage())
-            await asyncio.sleep(1)
 
         time_points = list(range(10))
         graph_path = generate_graph(cpu_data, ram_data, time_points)
         graph_file = discord.File(graph_path, filename="graph.png")
 
-        # Bot-Infos
-        bot_owner = self.bot.get_user(789555434201677824)  # Deine ID
-        servers_count = len(self.bot.guilds)
-        total_members = sum(g.member_count or 0 for g in self.bot.guilds)
-        average_members = total_members / servers_count if servers_count else 0
+        # -------- Bot‑Infos ----------------------------------------------
+        bot_owner = self.bot.get_user(789555434201677824)  # <‑ deine ID
+        servers = len(self.bot.guilds)
+        members_total = sum(g.member_count or 0 for g in self.bot.guilds)
+        members_avg = members_total / servers if servers else 0
 
-        # Uptime
+        # -------- Uptime --------------------------------------------------
         delta = datetime.utcnow() - self.uptime
-        days, rem = divmod(delta.total_seconds(), 86400)
-        hours, rem = divmod(rem, 3600)
-        minutes, seconds = divmod(rem, 60)
+        d, r = divmod(delta.total_seconds(), 86400)
+        h, r = divmod(r, 3600)
+        m, s = divmod(r, 60)
 
         embed = discord.Embed(
             title="🛰️ Astra Systemübersicht",
             description="Hier findest du aktuelle Informationen über den Bot und seine Leistung.",
             color=discord.Color.blurple()
         )
-
         embed.add_field(name="👤 Bot Owner", value=bot_owner.mention if bot_owner else "Unbekannt", inline=True)
-        embed.add_field(name="🌐 Server", value=f"{servers_count}", inline=True)
-        embed.add_field(name="👥 Nutzer", value=f"{total_members}", inline=True)
-        embed.add_field(name="📊 Durchschnitt pro Server", value=f"{average_members:.2f}", inline=True)
+        embed.add_field(name="🌐 Server", value=f"{servers}", inline=True)
+        embed.add_field(name="👥 Nutzer", value=f"{members_total}", inline=True)
+        embed.add_field(name="📊 Schnitt/Server", value=f"{members_avg:.2f}", inline=True)
         embed.add_field(name="🐍 Python", value=platform.python_version(), inline=True)
         embed.add_field(name="🤖 discord.py", value=discord.__version__, inline=True)
-        embed.add_field(name="🕓 Uptime", value=f"{int(days)}d {int(hours)}h {int(minutes)}m {int(seconds)}s",
-                        inline=True)
-        embed.add_field(name="🛠️ Slash Commands", value=str(len(self.bot.tree.get_commands())), inline=True)
-        embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
+        embed.add_field(name="🕓 Uptime",
+                        value=f"{int(d)}d {int(h)}h {int(m)}m {int(s)}s", inline=True)
+        embed.add_field(name="🛠️ Slash Cmds", value=str(len(self.bot.tree.get_commands())), inline=True)
+        embed.add_field(name="🏓 Latenz", value=f"{self.bot.latency * 1000:.2f} ms", inline=True)
 
         embed.set_image(url="attachment://graph.png")
-        embed.set_footer(
-            text="Astra • Performance-Überblick",
-            icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None
-        )
+        embed.set_footer(text="Astra • Performance‑Überblick",
+                         icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None)
 
         await interaction.followup.send(embed=embed, file=graph_file)
-
         os.remove(graph_path)
 
     @app_commands.command(name="invite")
