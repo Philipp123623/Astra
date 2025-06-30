@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 import os
 import time
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
+import matplotlib.ticker as tkr
 import numpy as np
+from matplotlib import patheffects
 import platform
 import io
 from PIL import Image
@@ -32,68 +33,84 @@ def get_ram_usage() -> float:
 #  Graph Generator (Dark‑Dashboard‑Style)
 # ------------------------------------------------------------
 def generate_graph(cpu, ram, t):
-    # ---- Farben / Theme ---------------------------------------------------
-    BG_FIG = "#1e1e1e"     # dunkler Hintergrund
-    BG_AX  = "#2a2a2a"     # Plot‑Pane
-    CPU_C  = "#3FA9F5"     # Astra‑Blau
-    RAM_C  = "#F5A623"     # Orange
+    # ---------- Farben ----------
+    BG_FIG = "#181818"     # super‑dunkel
+    BG_AX  = "#222222"     # etwas heller
+    CPU_C  = "#36A8FF"     # Astra‑Blau
+    RAM_C  = "#FFB547"     # Amber‑Orange
 
-    # ---- glatte Linien per Interpolation ----------------------------------
-    x = np.array(t)
-    xs = np.linspace(x.min(), x.max(), 320)
+    # ---------- Interpolation (smooth) ----------
+    x  = np.array(t)
+    xs = np.linspace(x.min(), x.max(), 240)
     cpu_s = np.interp(xs, x, cpu)
     ram_s = np.interp(xs, x, ram)
 
-    # ---- Matplotlib‑Look ---------------------------------------------------
+    # ---------- Global Style ----------
     plt.rcParams.update({
         "font.family": "DejaVu Sans",
-        "font.size": 10,
+        "font.size":   10,
         "axes.edgecolor": "white",
         "axes.labelcolor": "white",
         "xtick.color": "white",
         "ytick.color": "white",
-        "text.color": "white"
+        "text.color":  "white",
+        "figure.autolayout": True,
     })
 
-    fig, ax1 = plt.subplots(figsize=(11, 5.5), dpi=120)
+    fig, ax1 = plt.subplots(figsize=(11, 5.5), dpi=130)
     fig.patch.set_facecolor(BG_FIG)
     ax1.set_facecolor(BG_AX)
 
-    # ---- CPU‑Plot ----------------------------------------------------------
-    ax1.plot(xs, cpu_s, color=CPU_C, lw=2.5, label="CPU")
-    ax1.fill_between(xs, cpu_s, color=CPU_C, alpha=0.15)
+    # ---------- CPU‑Linie ----------
+    cpu_line, = ax1.plot(
+        xs, cpu_s, color=CPU_C, lw=2.4, label="CPU",
+        path_effects=[patheffects.Stroke(linewidth=3.4, foreground="#0E4066"),
+                      patheffects.Normal()]  # dezent leuchtender Rand
+    )
+    ax1.fill_between(xs, cpu_s, color=CPU_C, alpha=0.12)
+
     ax1.set_ylabel("CPU (%)", color=CPU_C, weight="bold")
     ax1.tick_params(axis="y", labelcolor=CPU_C)
-    ax1.set_xlabel("Zeit (Sekunden)")
+    ax1.set_ylim(0, max(10, max(cpu) + 5))          # 0‑…10 % +, da CPU bei dir niedrig
 
-    cpu_min, cpu_max = min(cpu), max(cpu)
-    ax1.set_ylim(max(0, cpu_min - 5), min(100, cpu_max + 5))
-
-    # ---- RAM‑Plot (zweite Achse) ------------------------------------------
+    # ---------- RAM‑Linie (rechte Y‑Achse) ----------
     ax2 = ax1.twinx()
-    ax2.plot(xs, ram_s, color=RAM_C, lw=2.5, label="RAM")
+    ram_line, = ax2.plot(
+        xs, ram_s, color=RAM_C, lw=2.4, label="RAM",
+        path_effects=[patheffects.Stroke(linewidth=3.4, foreground="#664315"),
+                      patheffects.Normal()]
+    )
     ax2.fill_between(xs, ram_s, color=RAM_C, alpha=0.10)
     ax2.set_ylabel("RAM (%)", color=RAM_C, weight="bold")
     ax2.tick_params(axis="y", labelcolor=RAM_C)
+    ax2.set_ylim(min(0, min(ram) - 5), min(100, max(ram) + 5))
 
-    ram_min, ram_max = min(ram), max(ram)
-    ax2.set_ylim(max(0, ram_min - 5), min(100, ram_max + 5))
+    # ---------- Achsen & Grid ----------
+    ax1.set_xlabel("Zeit (Sekunden)")
+    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=16, weight="bold", pad=10)
+    ax1.xaxis.set_major_locator(tkr.MaxNLocator(integer=True))
+    ax1.grid(ls="--", lw=0.5, alpha=0.28)
 
-    # ---- Layout / Style ----------------------------------------------------
-    ax1.set_title("Systemauslastung – CPU & RAM", fontsize=15, weight="bold", pad=12)
-    ax1.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-    ax1.grid(ls="--", lw=0.6, alpha=0.35)
+    # ---------- Legende ----------
+    ax1.legend(
+        handles=[cpu_line, ram_line],
+        labels=["CPU", "RAM"],
+        loc="upper left",
+        frameon=False,
+        fontsize=9
+    )
 
-    lines, labels = ax1.get_legend_handles_labels()
-    l2, lab2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines + l2, labels + lab2,
-               loc="upper left", frameon=False, fontsize=9)
+    # ---------- OPTIONAL: Punkt‑Labels (auskommentieren wenn zu busy) -----
+    # for x_pt, y_pt in zip(x, cpu):
+    #     ax1.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=CPU_C, fontsize=8, ha="center")
+    # for x_pt, y_pt in zip(x, ram):
+    #     ax2.text(x_pt, y_pt + 0.3, f"{y_pt:.1f}", color=RAM_C, fontsize=8, ha="center")
 
-    plt.tight_layout()
-    path = "system_usage_graph.png"
-    plt.savefig(path, facecolor=fig.get_facecolor(), bbox_inches="tight")
-    plt.close()
-    return path
+    # ---------- Export ----------
+    save_path = "system_usage_graph.png"
+    plt.savefig(save_path, facecolor=fig.get_facecolor(), bbox_inches="tight")
+    plt.close(fig)
+    return save_path
 
 
 def convert(time):
