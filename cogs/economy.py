@@ -144,7 +144,7 @@ class BlackjackView(discord.ui.View):
         dealer_cards_display = self.dealer_hand[0] + " ❓" if not self.stand_called else " ".join(self.dealer_hand)
         dealer_value_display = "?" if not self.stand_called else str(dealer_value)
 
-        embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.blurple())
+        embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.blue())
         embed.set_footer(text="Blackjack • Astra Bot")
 
         embed.add_field(name="👤 Deine Karten:", value=f"```{player_cards}```Wert: **{player_value}**", inline=False)
@@ -155,21 +155,21 @@ class BlackjackView(discord.ui.View):
 
         if player_value > 21:
             game_over = True
-            result_text = "❌ Du hast den Wert von 21 überschritten. Du hast verloren."
+            result_text = "<:Astra_x:1141303954555289600> Du hast den Wert von 21 überschritten. Du hast verloren."
         elif dealer_value > 21:
             game_over = True
-            result_text = "✅ Der Dealer hat überzogen. Du hast gewonnen!"
+            result_text = "<:Astra_gw1:1141303852889550928> Der Dealer hat überzogen. Du hast gewonnen!"
         elif self.stand_called and dealer_value >= 17:
             game_over = True
             if player_value > dealer_value:
-                result_text = "✅ Du hast gewonnen!"
+                result_text = "<:Astra_gw1:1141303852889550928> Du hast gewonnen!"
             elif player_value < dealer_value:
-                result_text = "❌ Der Dealer hat gewonnen."
+                result_text = "<:Astra_x:1141303954555289600> Der Dealer hat gewonnen."
             else:
-                result_text = "🤝 Unentschieden."
+                result_text = "<:Astra_x:1141303954555289600> Unentschieden."
 
         if game_over:
-            embed.add_field(name="📢 Ergebnis", value=result_text, inline=False)
+            embed.add_field(name="<:Astra_wichtig:1141303951862534224> Ergebnis", value=result_text, inline=False)
             for child in self.children:
                 child.disabled = True
             if not self.result_shown:
@@ -220,14 +220,14 @@ class JobListView(discord.ui.View):
         self.items_per_page = 5
 
     def generate_job_embed(self):
-        embed = discord.Embed(title="🧾 Jobliste", color=discord.Color.green())
+        embed = discord.Embed(title="<:Astra_file1:1141303837181886494> Jobliste", color=discord.Color.blue())
         start_idx = self.page * self.items_per_page
         end_idx = start_idx + self.items_per_page
         jobs_to_display = self.jobs[start_idx:end_idx]
 
         for job in jobs_to_display:
             locked = self.user_hours < job["req"]
-            status = "🔒 Gesperrt" if locked else "✅ Verfügbar"
+            status = "<:Astra_locked:1141824745243942912> Gesperrt" if locked else "<:Astra_unlock:1141824750851731486> Verfügbar"
             embed.add_field(
                 name=f"{job['name']} ({status})",
                 value=f"{job['desc']}\nBenötigte Stunden: **{job['req']}**",
@@ -236,7 +236,7 @@ class JobListView(discord.ui.View):
 
         return embed
 
-    @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow_backwards:1392540551546671348>")
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
@@ -246,7 +246,7 @@ class JobListView(discord.ui.View):
             message = await interaction.original_response()  # Abrufen der ursprünglichen Nachricht
             await message.edit(embed=embed, view=self)
 
-    @discord.ui.button(label="Weiter", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Weiter", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow:1141303823600717885>")
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.jobs):
             self.page += 1
@@ -296,7 +296,7 @@ class Economy(commands.Cog):
         user_data = await self.get_user(interaction.user.id)
         wallet, bank = user_data[1], user_data[2]
 
-        embed = discord.Embed(title="💰 Kontostand", color=discord.Color.gold())
+        embed = discord.Embed(title="💰 Kontostand", color=discord.Color.blue())
         embed.add_field(name="Barvermögen", value=f"{wallet} <:Coin:1359178077011181811>", inline=False)
         embed.add_field(name="Bank", value=f"{bank} 🏦", inline=False)
         await interaction.response.send_message(embed=embed)
@@ -395,7 +395,7 @@ class Economy(commands.Cog):
         job = next((j for j in JOBS if j["name"].lower() == name.lower()), None)
 
         if not job:
-            await interaction.response.send_message("❌ Dieser Job existiert nicht.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Dieser Job existiert nicht.", ephemeral=True)
             return
 
         if user_hours < job["req"]:
@@ -407,7 +407,7 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE economy_users SET job = %s WHERE user_id = %s", (job["name"], interaction.user.id))
 
-        await interaction.response.send_message(f"✅ Du arbeitest jetzt als **{job['name']}**!")
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Du arbeitest jetzt als **{job['name']}**!")
 
     @job.command(name="quit", description="Kündige deinen aktuellen Job.")
     async def job_quit(self, interaction: discord.Interaction):
@@ -455,7 +455,7 @@ class Economy(commands.Cog):
 
         # Überprüfen ob der Einsatz gültig ist
         if einsatz <= 0 or einsatz > user_data[1]:
-            await interaction.response.send_message("❌ Ungültiger Einsatz.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Einsatz.", ephemeral=True)
             return
 
         # Die möglichen Obst-Emojis für den Slot
@@ -518,11 +518,11 @@ class Economy(commands.Cog):
 
     @eco.command(name="rps", description="Spiele Schere, Stein, Papier gegen den Bot.")
     @app_commands.describe(choice="Wähle 'Schere', 'Stein' oder 'Papier'.")
-    async def rps(self, interaction: discord.Interaction, choice: str):
+    async def rps(self, interaction: discord.Interaction, choice: Literal['Stein', 'Schere', 'Papier']):
         """Spiele Schere, Stein, Papier gegen den Bot."""
         choice = choice.lower()
         if choice not in ["schere", "stein", "papier"]:
-            await interaction.response.send_message("Bitte wähle entweder 'Schere', 'Stein' oder 'Papier'.",
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte wähle entweder 'Schere', 'Stein' oder 'Papier'.",
                                                     ephemeral=True)
             return
 
@@ -538,7 +538,7 @@ class Economy(commands.Cog):
         else:
             result = "Du hast verloren!"
 
-        embed = discord.Embed(title="🪶 Schere, Stein, Papier", color=discord.Color.green())
+        embed = discord.Embed(title="🪶 Schere, Stein, Papier", color=discord.Color.blue())
         embed.add_field(name="Deine Wahl", value=f"**{choice.capitalize()}**", inline=False)
         embed.add_field(name="Bot's Wahl", value=f"**{bot_choice.capitalize()}**", inline=False)
         embed.add_field(name="Ergebnis", value=result, inline=False)
@@ -554,11 +554,11 @@ class Economy(commands.Cog):
         # Überprüfen, ob die Eingabe gültig ist
         guess = wahl.lower()
         if guess not in ["kopf", "zahl"]:
-            await interaction.response.send_message("Bitte wähle entweder 'Kopf' oder 'Zahl'.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte wähle entweder 'Kopf' oder 'Zahl'.", ephemeral=True)
             return
 
         if betrag <= 0:
-            await interaction.response.send_message("Bitte gib einen gültigen Betrag ein, der größer als 0 ist.",
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Betrag ein, der größer als 0 ist.",
                                                     ephemeral=True)
             return
 
@@ -567,7 +567,7 @@ class Economy(commands.Cog):
 
         if wallet < betrag:
             await interaction.response.send_message(
-                f"Du hast nicht genug Münzen. Dein aktueller Kontostand ist {wallet} <:Coin:1359178077011181811>.", ephemeral=True)
+                f"<:Astra_x:1141303954555289600> Du hast nicht genug Münzen. Dein aktueller Kontostand ist {wallet} <:Coin:1359178077011181811>.", ephemeral=True)
             return
 
         # Münzwurf
@@ -673,7 +673,7 @@ class Economy(commands.Cog):
             # Embed erstellen
             embed = discord.Embed(
                 title="🏆 Rangliste (Global)" if scope == "global" else f"🏆 Rangliste ({interaction.guild.name})",
-                color=discord.Color.gold()
+                color=discord.Color.blue()
             )
 
             for i, (user_id, gesamt) in enumerate(top_users, start=1):
@@ -699,11 +699,11 @@ class Economy(commands.Cog):
         wallet = user_data[1]
 
         if einsatz <= 0:
-            await interaction.response.send_message("❌ Bitte gib einen gültigen Einsatz an.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Einsatz an.", ephemeral=True)
             return
 
         if wallet < einsatz:
-            await interaction.response.send_message("💸 Du hast nicht genug Münzen.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> hast nicht genug Münzen.", ephemeral=True)
             return
 
         # Abziehen des Einsatzes
@@ -715,9 +715,9 @@ class Economy(commands.Cog):
         embed = discord.Embed(
             title="🎮 Blackjack wird gestartet!",
             description="Ziehe Karten mit `Hit` oder beende mit `Stand`. Ziel: So nah wie möglich an 21!",
-            color=discord.Color.gold()
+            color=discord.Color.blue()
         )
-        embed.add_field(name="Einsatz", value=f"{einsatz} 🥜", inline=False)
+        embed.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811>", inline=False)
 
         await interaction.response.send_message(embed=embed, view=view)
         view.message = await interaction.original_response()  # Damit `update_message` funktioniert
@@ -729,12 +729,12 @@ class Economy(commands.Cog):
     async def addcoins(self, ctx, user: discord.User, betrag: int, balance_type: str = "wallet"):
         """Fügt einem Nutzer Coins hinzu. Kann Bar- oder Bank-Balance verwenden."""
         if betrag <= 0:
-            await ctx.channel.send("❌ Ungültiger Betrag.")
+            await ctx.channel.send("<:Astra_x:1141303954555289600> Ungültiger Betrag.")
             return
 
         # Überprüfen, ob balance_type korrekt ist (wallet oder bank)
         if balance_type not in ["wallet", "bank"]:
-            await ctx.channel.send("❌ Ungültiger Balance-Typ. Verwende `wallet` oder `bank`.")
+            await ctx.channel.send("<:Astra_x:1141303954555289600> Ungültiger Balance-Typ. Verwende `wallet` oder `bank`.")
             return
 
         # User Balance abrufen
@@ -745,7 +745,7 @@ class Economy(commands.Cog):
         await self.update_balance(user.id, wallet_change=betrag if balance_type == "wallet" else 0,
                                   bank_change=betrag if balance_type == "bank" else 0)
         await ctx.channel.send(
-            f"✅ {betrag} <:Coin:1359178077011181811> wurden {user.mention} zu {balance_type} hinzugefügt.")
+            f"<:Astra_accept:1141303821176422460> {betrag} <:Coin:1359178077011181811> wurden {user.mention} zu {balance_type} hinzugefügt.")
 
     @commands.command(name="removecoins",
                       description="Entferne einem Nutzer <:Coin:1359178077011181811> (Nur für Botbesitzer).")
@@ -753,12 +753,12 @@ class Economy(commands.Cog):
     async def removecoins(self, ctx, user: discord.User, betrag: int, balance_type: str = "wallet"):
         """Entfernt einem Nutzer Coins. Kann Bar- oder Bank-Balance verwenden."""
         if betrag <= 0:
-            await ctx.channel.send("❌ Ungültiger Betrag.")
+            await ctx.channel.send("<:Astra_x:1141303954555289600> Ungültiger Betrag.")
             return
 
         # Überprüfen, ob balance_type korrekt ist (wallet oder bank)
         if balance_type not in ["wallet", "bank"]:
-            await ctx.channel.send("❌ Ungültiger Balance-Typ. Verwende `wallet` oder `bank`.")
+            await ctx.channel.send("<:Astra_x:1141303954555289600> Ungültiger Balance-Typ. Verwende `wallet` oder `bank`.")
             return
 
         # User Balance abrufen
@@ -767,14 +767,14 @@ class Economy(commands.Cog):
 
         # Überprüfen, ob der Betrag entfernt werden kann
         if current_balance < betrag:
-            await ctx.channel.send(f"❌ {user.mention} hat nicht genug {balance_type} um {betrag} zu entfernen.")
+            await ctx.channel.send(f"<:Astra_x:1141303954555289600> {user.mention} hat nicht genug {balance_type} um {betrag} zu entfernen.")
             return
 
         # Balance aktualisieren
         await self.update_balance(user.id, wallet_change=-betrag if balance_type == "wallet" else 0,
                                   bank_change=-betrag if balance_type == "bank" else 0)
         await ctx.channel.send(
-            f"✅ {betrag} <:Coin:1359178077011181811> wurden {user.mention} von {balance_type} entfernt.")
+            f"<:Astra_accept:1141303821176422460> {betrag} <:Coin:1359178077011181811> wurden {user.mention} von {balance_type} entfernt.")
 
 
 async def setup(bot):

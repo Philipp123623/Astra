@@ -71,7 +71,7 @@ class HangmanRestartView(View):
 
         display = "⬜ " * len(word)
         ascii_art = HANGMAN_PICS[0]
-        embed = discord.Embed(title="Hangman", description=f"{display.strip()}\n{ascii_art}\n`{' '.join(['_' for _ in word])}`", color=discord.Color.blurple())
+        embed = discord.Embed(title="Hangman", description=f"{display.strip()}\n{ascii_art}\n`{' '.join(['_' for _ in word])}`", color=discord.Color.blue())
         embed.add_field(name="Versuche übrig", value="9", inline=True)
         embed.add_field(name="Geratene Buchstaben", value="Noch keine", inline=False)
 
@@ -140,7 +140,7 @@ class HangmanGameView(View):
         guessed_display = " ".join([l if l in guessed else "⬜" for l in word])
         ascii_art = HANGMAN_PICS[9 - attempts_left]
 
-        embed = discord.Embed(title="Hangman", description=f"{guessed_display}\n{ascii_art}\n`{display}`", color=discord.Color.blurple())
+        embed = discord.Embed(title="Hangman", description=f"{guessed_display}\n{ascii_art}\n`{display}`", color=discord.Color.blue())
         embed.add_field(name="Versuche übrig", value=str(attempts_left), inline=True)
         embed.add_field(name="Geratene Buchstaben", value=" ".join(guessed) if guessed else "Noch keine", inline=False)
 
