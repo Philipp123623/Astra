@@ -583,9 +583,6 @@ async def on_ready():
         activity=discord.Game('Astra V2 out now! 💙'),
         status=discord.Status.online)
     bot.add_view(gw_button())
-    cmds = await bot.tree.fetch_commands()
-    for cmd in cmds:
-        logging.info(f"Command: /{cmd.name} | ID: {cmd.id}")
 
 
 async def funktion2(when: datetime.datetime):
