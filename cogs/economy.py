@@ -298,10 +298,10 @@ class Economy(commands.Cog):
         job_name = user_data[3]
         hours = user_data[4]
 
-        embed = discord.Embed(title=f"{interaction.user}'s Kontostand", color=discord.Color.blue())
+        embed = discord.Embed(title=f"{interaction.user}'s Kontostand", description="> Erhalte Hier Infos über deinen Kontostand und über deinen aktuellen Beruf.", color=discord.Color.blue())
         embed.add_field(name="Barvermögen", value=f"{wallet} <:Coin:1359178077011181811>", inline=True)
         embed.add_field(name="Bank", value=f"{bank} <:Coin:1359178077011181811>", inline=True)
-        embed.add_field(name="Beruf", value=f"{job_name}, <:Astra_time:1141303932061233202> {hours}", inline=True)
+        embed.add_field(name="Beruf", value=f"{job_name}, <:Astra_time:1141303932061233202> {hours} Stunden", inline=True)
         embed.set_thumbnail(url=interaction.user.avatar)
         await interaction.response.send_message(embed=embed)
 

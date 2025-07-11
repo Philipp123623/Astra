@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/cogs/economy.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/economy.py" afterDir="false" />
-    </list>
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -146,7 +144,7 @@
       <workItem from="1752178858091" duration="72000" />
       <workItem from="1752183444896" duration="283000" />
       <workItem from="1752183755357" duration="293000" />
-      <workItem from="1752245124412" duration="1286000" />
+      <workItem from="1752245124412" duration="1624000" />
     </task>
     <servers />
   </component>
