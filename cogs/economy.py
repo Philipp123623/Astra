@@ -144,11 +144,10 @@ class BlackjackView(discord.ui.View):
         dealer_cards_display = self.dealer_hand[0] + " ❓" if not self.stand_called else " ".join(self.dealer_hand)
         dealer_value_display = "?" if not self.stand_called else str(dealer_value)
 
-        embed = discord.Embed(title="🃏 Blackjack", color=discord.Color.blue())
-        embed.set_footer(text="Blackjack • Astra Bot")
+        embed = discord.Embed(title="Blackjack", color=discord.Color.blue())
 
-        embed.add_field(name="👤 Deine Karten:", value=f"```{player_cards}```Wert: **{player_value}**", inline=False)
-        embed.add_field(name="🎲 Karten des Dealers:", value=f"```{dealer_cards_display}```Wert: **{dealer_value_display}**", inline=False)
+        embed.add_field(name="<:Astra_user:1141303940365959241> Deine Karten:", value=f"```{player_cards}```Wert: **{player_value}**", inline=False)
+        embed.add_field(name="<:Astra_dev:1141303833407017001> Karten des Dealers:", value=f"```{dealer_cards_display}```Wert: **{dealer_value_display}**", inline=False)
 
         game_over = False
         result_text = ""
@@ -296,9 +295,9 @@ class Economy(commands.Cog):
         user_data = await self.get_user(interaction.user.id)
         wallet, bank = user_data[1], user_data[2]
 
-        embed = discord.Embed(title="💰 Kontostand", color=discord.Color.blue())
+        embed = discord.Embed(title="Kontostand", color=discord.Color.blue())
         embed.add_field(name="Barvermögen", value=f"{wallet} <:Coin:1359178077011181811>", inline=False)
-        embed.add_field(name="Bank", value=f"{bank} 🏦", inline=False)
+        embed.add_field(name="Bank", value=f"{bank} <:Coin:1359178077011181811>", inline=False)
         await interaction.response.send_message(embed=embed)
 
     @eco.command(name="deposit", description="Zahle Geld auf dein Bankkonto ein.")
@@ -306,28 +305,28 @@ class Economy(commands.Cog):
     async def deposit(self, interaction: discord.Interaction, betrag: int):
         """Zahle Geld auf dein Bankkonto ein."""
         if betrag <= 0:
-            await interaction.response.send_message("Bitte gib einen gültigen Betrag ein.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
 
         user_data = await self.get_user(interaction.user.id)
         if user_data[1] < betrag:
-            await interaction.response.send_message("Du hast nicht genug Geld in deinem Wallet.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast nicht genug Geld in deinem Wallet.", ephemeral=True)
             return
 
         await self.update_balance(interaction.user.id, -betrag, betrag)
-        await interaction.response.send_message(f"Du hast {betrag} <:Coin:1359178077011181811> auf dein Bankkonto eingezahlt.")
+        await interaction.response.send_message(f"Du hast {betrag} <:Coin:1359178077011181811> auf dein Bankkonto eingezahlt.", ephemeral=True)
 
     @eco.command(name="withdraw", description="Hebe Geld von deinem Bankkonto ab.")
     @app_commands.describe(betrag="Der Betrag, den du abheben möchtest.")
     async def withdraw(self, interaction: discord.Interaction, betrag: int):
         """Hebe Geld von deinem Bankkonto ab."""
         if betrag <= 0:
-            await interaction.response.send_message("Bitte gib einen gültigen Betrag ein.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
 
         user_data = await self.get_user(interaction.user.id)
         if user_data[2] < betrag:
-            await interaction.response.send_message("Du hast nicht genug Geld auf deinem Bankkonto.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast nicht genug Geld auf deinem Bankkonto.", ephemeral=True)
             return
 
         await self.update_balance(interaction.user.id, betrag, -betrag)
@@ -346,7 +345,7 @@ class Economy(commands.Cog):
         last_work = user_data[5]
 
         if not job_name:
-            await interaction.response.send_message("Du hast keinen Job. Nutze `/job apply`, um einen Job zu wählen.",
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast keinen Job. Nutze `/job apply`, um einen Job zu wählen.",
                                                     ephemeral=True)
             return
 
@@ -356,7 +355,7 @@ class Economy(commands.Cog):
                 verbleibend = (last_work + timedelta(hours=8)) - now
                 stunden, minuten = divmod(verbleibend.seconds, 3600)[0], divmod(verbleibend.seconds % 3600, 60)[0]
                 await interaction.response.send_message(
-                    f"⏳ Du musst noch {stunden}h {minuten}min warten, bevor du wieder arbeiten kannst.", ephemeral=True)
+                    f"<:Astra_time:1141303932061233202> Du musst noch {stunden}h {minuten}min warten, bevor du wieder arbeiten kannst.", ephemeral=True)
                 return
 
         job = next((j for j in JOBS if j["name"] == job_name), None)
@@ -374,7 +373,7 @@ class Economy(commands.Cog):
                     (earned, datetime.utcnow(), user_id))
 
         await interaction.response.send_message(
-            f"🛠️ Du hast 1 Stunde als **{job_name}** gearbeitet und {earned} <:Coin:1359178077011181811> verdient!")
+            f"<:Astra_time:1141303932061233202> Du hast 1 Stunde als **{job_name}** gearbeitet und {earned} <:Coin:1359178077011181811> verdient!")
 
     @job.command(name="list", description="Zeigt die Jobliste.")
     async def job_list(self, interaction: discord.Interaction):
@@ -400,7 +399,7 @@ class Economy(commands.Cog):
 
         if user_hours < job["req"]:
             await interaction.response.send_message(
-                "⛔ Du hast noch nicht genug Stunden gearbeitet, um diesen Job zu bekommen.", ephemeral=True)
+                "<:Astra_x:1141303954555289600> Du hast noch nicht genug Stunden gearbeitet, um diesen Job zu bekommen.", ephemeral=True)
             return
 
         async with self.bot.pool.acquire() as conn:
@@ -414,14 +413,14 @@ class Economy(commands.Cog):
         """Kündige deinen aktuellen Job."""
         user_data = await self.get_user(interaction.user.id)
         if not user_data[3]:
-            await interaction.response.send_message("Du hast momentan keinen Job.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast momentan keinen Job.", ephemeral=True)
             return
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE economy_users SET job = NULL WHERE user_id = %s", (interaction.user.id,))
 
-        await interaction.response.send_message("👋 Du hast deinen Job erfolgreich gekündigt.")
+        await interaction.response.send_message("<:Astra_accept:1141303821176422460> Du hast deinen Job erfolgreich gekündigt.")
 
     @eco.command(name="beg", description="Bitte um ein kleines Trinkgeld.")
     async def beg(self, interaction: discord.Interaction):
@@ -434,7 +433,7 @@ class Economy(commands.Cog):
         if last_work and now < last_work + timedelta(hours=3):
             remaining = (last_work + timedelta(hours=3)) - now
             mins = divmod(remaining.seconds, 60)[0]
-            await interaction.response.send_message(f"⏳ Du kannst in {mins} Minuten wieder betteln.", ephemeral=True)
+            await interaction.response.send_message(f"<:Astra_time:1141303932061233202> Du kannst in {mins} Minuten wieder betteln.", ephemeral=True)
             return
 
         amount = random.randint(5, 25)
@@ -444,10 +443,10 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE economy_users SET last_work = %s WHERE user_id = %s", (now, user_id))
 
-        await interaction.response.send_message(f"🙏 Du hast {amount} <:Coin:1359178077011181811> von einem freundlichen Fremden erhalten!")
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Du hast {amount} <:Coin:1359178077011181811> von einem freundlichen Fremden erhalten!")
 
     @eco.command(name="slot", description="Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren.")
-    @app_commands.describe(einsatz="Wie viele <:Coin:1359178077011181811> willst du setzen?")
+    @app_commands.describe(einsatz="Wie viele Coins willst du setzen?")
     async def slot(self, interaction: discord.Interaction, einsatz: int):
         """Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren."""
         user_id = interaction.user.id
@@ -483,27 +482,27 @@ class Economy(commands.Cog):
         await self.update_balance(user_id, wallet_change=gewinn)
 
         # Erstellen von Embeds für die Animation
-        embed1 = discord.Embed(colour=discord.Colour.blurple(), description="🎰 Slots - Der Einsatz wird getätigt")
+        embed1 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der Einsatz wird getätigt")
         embed1.add_field(name="Slots:", value=f"[{spin_emoji} {spin_emoji} {spin_emoji}]", inline=False)
-        embed1.add_field(name="💰 Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
+        embed1.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
         embed1.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
         # Embed für den ersten Spin
-        embed2 = discord.Embed(colour=discord.Colour.blurple(), description="🎰 Slots - Der erste Spin")
+        embed2 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der erste Spin")
         embed2.add_field(name="Slots:", value=f"[{result[0]} {spin_emoji} {spin_emoji}]", inline=False)
-        embed2.add_field(name="💰 Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
+        embed2.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
         embed2.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
         # Embed für den zweiten Spin
-        embed3 = discord.Embed(colour=discord.Colour.blurple(), description="🎰 Slots - Der zweite Spin")
+        embed3 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der zweite Spin")
         embed3.add_field(name="Slots:", value=f"[{result[0]} {result[1]} {spin_emoji}]", inline=False)
-        embed3.add_field(name="💰 Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
+        embed3.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
         embed3.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
         # Finales Embed mit den Ergebnissen
-        embed4 = discord.Embed(colour=discord.Colour.blurple(), description="🎰 Slots - Endergebnis")
+        embed4 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_gw1:1141303852889550928> Slots - Endergebnis")
         embed4.add_field(name="Slots:", value=f"[{result[0]} {result[1]} {result[2]}]", inline=False)
-        embed4.add_field(name="💰 Ergebnis", value=f"{'Gewonnen' if win else 'Verloren'} {gewinn} <:Coin:1359178077011181811> !", inline=False)
+        embed4.add_field(name="Ergebnis", value=f"{'Gewonnen' if win else 'Verloren'} {gewinn} <:Coin:1359178077011181811> !", inline=False)
         embed4.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
         # Senden der Embeds mit Animation
@@ -534,11 +533,11 @@ class Economy(commands.Cog):
         elif (choice == "schere" and bot_choice == "papier") or \
                 (choice == "stein" and bot_choice == "schere") or \
                 (choice == "papier" and bot_choice == "stein"):
-            result = "Du hast gewonnen!"
+            result = "<:Astra_gw1:1141303852889550928> Du hast gewonnen!"
         else:
-            result = "Du hast verloren!"
+            result = "<:Astra_x:1141303954555289600> Du hast verloren!"
 
-        embed = discord.Embed(title="🪶 Schere, Stein, Papier", color=discord.Color.blue())
+        embed = discord.Embed(title="Schere, Stein, Papier", color=discord.Color.blue())
         embed.add_field(name="Deine Wahl", value=f"**{choice.capitalize()}**", inline=False)
         embed.add_field(name="Bot's Wahl", value=f"**{bot_choice.capitalize()}**", inline=False)
         embed.add_field(name="Ergebnis", value=result, inline=False)
@@ -574,7 +573,7 @@ class Economy(commands.Cog):
         result = random.choice(["Kopf", "Zahl"])
 
         # Embed erstellen
-        embed = discord.Embed(title="🎲 Münzwurf", color=discord.Color.blue())
+        embed = discord.Embed(title="Münzwurf", color=discord.Color.blue())
         embed.add_field(name="Deine Wahl", value=f"**{guess.capitalize()}**", inline=False)
         embed.add_field(name="Ergebnis", value=f"**{result}**", inline=False)
 
@@ -583,7 +582,7 @@ class Economy(commands.Cog):
             # Nutzer hat gewonnen, Coins zurückgeben + Gewinn
             gewonnen = betrag * 2  # Einfaches Beispiel, doppelter Einsatz bei Gewinn
             await self.update_balance(interaction.user.id, gewonnen, 0)
-            embed.add_field(name="🎉 Glückwunsch!", value=f"Du hast gewonnen! Du erhältst {gewonnen} <:Coin:1359178077011181811>.", inline=False)
+            embed.add_field(name="<:Astra_gw1:1141303852889550928> Glückwunsch!", value=f"Du hast gewonnen! Du erhältst {gewonnen} <:Coin:1359178077011181811>.", inline=False)
         else:
             # Nutzer hat verloren, Coins abziehen
             await self.update_balance(interaction.user.id, -betrag, 0)
@@ -600,7 +599,7 @@ class Economy(commands.Cog):
         target_id = ziel.id
 
         if user_id == target_id:
-            await interaction.response.send_message("Du kannst dich nicht selbst ausrauben.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Du kannst dich nicht selbst ausrauben.", ephemeral=True)
             return
 
         user_data = await self.get_user(user_id)
@@ -609,12 +608,12 @@ class Economy(commands.Cog):
 
         if user_data[5] and now < user_data[5] + timedelta(hours=8):
             remaining = (user_data[5] + timedelta(hours=8)) - now
-            await interaction.response.send_message(f"⏳ Du kannst in {remaining.seconds // 60} Minuten wieder rauben.",
+            await interaction.response.send_message(f"<:Astra_time:1141303932061233202> Du kannst in {remaining.seconds // 60} Minuten wieder rauben.",
                                                     ephemeral=True)
             return
 
         if target_data[1] < 50:
-            await interaction.response.send_message("Ziel hat zu wenig Geld zum Ausrauben.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ziel hat zu wenig Geld zum Ausrauben.", ephemeral=True)
             return
 
         erfolg = random.random() < 0.5
@@ -622,11 +621,11 @@ class Economy(commands.Cog):
             betrag = random.randint(20, min(200, target_data[1]))
             await self.update_balance(user_id, wallet_change=betrag)
             await self.update_balance(target_id, wallet_change=-betrag)
-            msg = f"💰 Du hast erfolgreich {betrag} <:Coin:1359178077011181811>  von {ziel.mention} gestohlen!"
+            msg = f"<:Astra_accept:1141303821176422460> Du hast erfolgreich {betrag} <:Coin:1359178077011181811>  von {ziel.mention} gestohlen!"
         else:
             strafe = random.randint(10, 30)
             await self.update_balance(user_id, wallet_change=-strafe)
-            msg = f"🚨 Du wurdest erwischt! Du zahlst eine Strafe von {strafe} <:Coin:1359178077011181811> ."
+            msg = f"<:Astra_x:1141303954555289600> Du wurdest erwischt! Du zahlst eine Strafe von {strafe} <:Coin:1359178077011181811> ."
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -672,7 +671,7 @@ class Economy(commands.Cog):
 
             # Embed erstellen
             embed = discord.Embed(
-                title="🏆 Rangliste (Global)" if scope == "global" else f"🏆 Rangliste ({interaction.guild.name})",
+                title="<:Astra_users:1141303946602872872> Rangliste (Global)" if scope == "global" else f"<:Astra_users:1141303946602872872> Rangliste ({interaction.guild.name})",
                 color=discord.Color.blue()
             )
 
@@ -688,7 +687,7 @@ class Economy(commands.Cog):
             await interaction.response.send_message(embed=embed)
 
         except Exception as e:
-            await interaction.response.send_message(f"Es gab einen Fehler beim Abrufen der Rangliste: {e}")
+            await interaction.response.send_message(f"<:Astra_x:1141303954555289600> Es gab einen Fehler beim Abrufen der Rangliste: {e}", ephemeral=True)
             print(f"Fehler beim Abrufen der Rangliste: {e}")
 
     @eco.command(name="blackjack", description="Spiele eine Runde Blackjack.")
@@ -713,7 +712,7 @@ class Economy(commands.Cog):
         view = BlackjackView(self.bot, interaction, einsatz, self)  # Übergabe des Economy-Cogs
 
         embed = discord.Embed(
-            title="🎮 Blackjack wird gestartet!",
+            title="Blackjack wird gestartet!",
             description="Ziehe Karten mit `Hit` oder beende mit `Stand`. Ziel: So nah wie möglich an 21!",
             color=discord.Color.blue()
         )
