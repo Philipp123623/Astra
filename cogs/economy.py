@@ -132,6 +132,7 @@ JOBS += [
      "amt": [710, 750]}
 ]
 
+
 # Kartenwert berechnung
 CARD_VALUES = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
