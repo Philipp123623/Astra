@@ -97,7 +97,7 @@ class SnakeGameView(View):
         # Highscore wird immer aus der DB geholt
         highscore = await self.get_highscore(interaction.user.id)
 
-        embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.green())
+        embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.blue())
         embed.add_field(name="Punkte", value=str(snake_game['current_score']))
         embed.add_field(name="Highscore", value=str(highscore))
 
@@ -251,7 +251,7 @@ class SnakeBot(commands.Cog):
                     # Highscore wird immer aus der DB geholt
                     highscore = await view.get_highscore(interaction.user.id)
 
-                    embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.green())
+                    embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.blue())
                     embed.add_field(name="Punkte", value="0")
                     embed.add_field(name="Highscore", value=str(highscore))
 
@@ -276,7 +276,7 @@ class SnakeBot(commands.Cog):
                     # Highscore wird immer aus der DB geholt
                     highscore = await view.get_highscore(interaction.user.id)
 
-                    embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.green())
+                    embed = discord.Embed(title="Snake Spiel", description=plot, color=discord.Color.blue())
                     embed.add_field(name="Punkte", value="0")
                     embed.add_field(name="Highscore", value=str(highscore))
 

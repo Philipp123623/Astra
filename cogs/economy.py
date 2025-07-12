@@ -233,6 +233,8 @@ class JobListView(discord.ui.View):
                 inline=False
             )
 
+        total_pages = (len(self.jobs) + self.items_per_page - 1) // self.items_per_page
+        embed.set_footer(text=f"Seite {self.page + 1} von {total_pages}")
         return embed
 
     @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow_backwards:1392540551546671348>")
