@@ -262,11 +262,14 @@ class JobListView(discord.ui.View):
         super().__init__()
         self.jobs = jobs
         self.user_hours = user_hours
-        self.page = 0  # Aktuelle Seite
+        self.page = 0
         self.items_per_page = 5
 
     def generate_job_embed(self):
-        embed = discord.Embed(title="<:Astra_file1:1141303837181886494> Jobliste", color=discord.Color.blue())
+        embed = discord.Embed(
+            title="<:Astra_file1:1141303837181886494> Jobliste",
+            color=discord.Color.blue()
+        )
         start_idx = self.page * self.items_per_page
         end_idx = start_idx + self.items_per_page
         jobs_to_display = self.jobs[start_idx:end_idx]
@@ -284,35 +287,26 @@ class JobListView(discord.ui.View):
         embed.set_footer(text=f"Seite {self.page + 1} von {total_pages}")
         return embed
 
-    @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow_backwards:1392540551546671348>")
+    @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow_backwards:1392540551546671348>", row=0)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
             embed = self.generate_job_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
 
-            await interaction.response.defer()  # Antwort vorab bestätigen
-            message = await interaction.original_response()  # Abrufen der ursprünglichen Nachricht
-            await message.edit(embed=embed, view=self)
-
-    @discord.ui.button(label="Weiter", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow:1141303823600717885>")
-    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Weiter", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow:1141303823600717885>", row=0)
+    async def next_page_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.jobs):
             self.page += 1
             embed = self.generate_job_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
 
-            await interaction.response.defer()  # Antwort vorab bestätigen
-            message = await interaction.original_response()  # Abrufen der ursprünglichen Nachricht
-            await message.edit(embed=embed, view=self)
-
-    @discord.ui.button(label="🏠", style=discord.ButtonStyle.grey)
-    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.page >= 1:
-            self.page = 1
+    @discord.ui.button(label="🏠", style=discord.ButtonStyle.secondary, row=0)
+    async def go_home(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page != 0:
+            self.page = 0
             embed = self.generate_job_embed()
-
-            await interaction.response.defer()  # Antwort vorab bestätigen
-            message = await interaction.original_response()  # Abrufen der ursprünglichen Nachricht
-            await message.edit(embed=embed, view=self)
+            await interaction.response.edit_message(embed=embed, view=self)
 
 
 class Economy(commands.Cog):
