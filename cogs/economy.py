@@ -304,9 +304,9 @@ class JobListView(discord.ui.View):
             message = await interaction.original_response()  # Abrufen der ursprünglichen Nachricht
             await message.edit(embed=embed, view=self)
 
-    @discord.ui.button(label="🏠", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🏠", style=discord.ButtonStyle.grey)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if (self.page >= 1):
+        if self.page >= 1:
             self.page = 1
             embed = self.generate_job_embed()
 
