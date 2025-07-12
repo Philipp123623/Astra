@@ -86,6 +86,52 @@ JOBS = [{"name": "Küchenhilfe", "req": 0,
          "amt": [330, 400]}
 ]
 
+JOBS += [
+    {"name": "Wissenschaftler", "req": 450,
+     "desc": "\nVerdiene zwischen 410 und 430 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **450** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [410, 430]},
+
+    {"name": "Professor", "req": 500,
+     "desc": "\nVerdiene zwischen 440 und 460 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **500** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [440, 460]},
+
+    {"name": "Pharmaforscher", "req": 550,
+     "desc": "\nVerdiene zwischen 470 und 490 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **550** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [470, 490]},
+
+    {"name": "Bankmanager", "req": 600,
+     "desc": "\nVerdiene zwischen 500 und 530 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **600** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [500, 530]},
+
+    {"name": "Politiker", "req": 650,
+     "desc": "\nVerdiene zwischen 530 und 560 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **650** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [530, 560]},
+
+    {"name": "Unternehmensberater", "req": 700,
+     "desc": "\nVerdiene zwischen 560 und 590 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **700** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [560, 590]},
+
+    {"name": "Chefredakteur", "req": 750,
+     "desc": "\nVerdiene zwischen 590 und 620 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **750** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [590, 620]},
+
+    {"name": "Finanzanalyst", "req": 800,
+     "desc": "\nVerdiene zwischen 620 und 650 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **800** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [620, 650]},
+
+    {"name": "Medienproduzent", "req": 850,
+     "desc": "\nVerdiene zwischen 650 und 680 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **850** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [650, 680]},
+
+    {"name": "Entwicklungsleiter", "req": 900,
+     "desc": "\nVerdiene zwischen 680 und 710 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **900** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [680, 710]},
+
+    {"name": "Regierungsberater", "req": 1000,
+     "desc": "\nVerdiene zwischen 710 und 750 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **1000** Stunden gearbeitet haben, um diesen Job freizuschalten.",
+     "amt": [710, 750]}
+]
+
 # Kartenwert berechnung
 CARD_VALUES = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
@@ -233,6 +279,8 @@ class JobListView(discord.ui.View):
                 inline=False
             )
 
+        total_pages = (len(self.jobs) + self.items_per_page - 1) // self.items_per_page
+        embed.set_footer(text=f"Seite {self.page + 1} von {total_pages}")
         return embed
 
     @discord.ui.button(label="Zurück", style=discord.ButtonStyle.primary, emoji="<:Astra_arrow_backwards:1392540551546671348>")
