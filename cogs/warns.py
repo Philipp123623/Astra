@@ -19,7 +19,7 @@ class Warn(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def add(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], action: Literal['Kick', 'Ban', 'Timeout']):
-        """Richte die Auto Moderation für deinen Server ein."""
+        """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 if action == "Kick":
@@ -46,7 +46,7 @@ class Warn(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def remove(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
-        """Richte die Auto Moderation für deinen Server ein."""
+        """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("DELETE FROM automod WHERE guildID = (%s) and warns = (%s)",
@@ -60,7 +60,7 @@ class Warn(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def show(self, interaction: discord.Interaction):
-        """Richte die Auto Moderation für deinen Server ein."""
+        """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(f"SELECT warns, action FROM automod WHERE guildID = (%s)", interaction.guild.id)

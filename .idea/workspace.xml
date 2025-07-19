@@ -5,7 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/afk.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/afk.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/warns.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/warns.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -107,8 +110,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-09060db00ec0-JavaScript-PY-251.26927.74" />
-        <option value="bundled-python-sdk-657d8234b839-64d779b69b7a-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26927.74" />
+        <option value="bundled-js-predefined-d6986cc7102b-09060db00ec0-JavaScript-PY-251.26927.90" />
+        <option value="bundled-python-sdk-41e8cd69c857-64d779b69b7a-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26927.90" />
       </set>
     </attachedChunks>
   </component>
@@ -150,10 +153,27 @@
       <workItem from="1752249945503" duration="13000" />
       <workItem from="1752250283613" duration="12000" />
       <workItem from="1752270498842" duration="107000" />
+      <workItem from="1752326537669" duration="2667000" />
+      <workItem from="1752359243464" duration="1357000" />
+      <workItem from="1752408212976" duration="1515000" />
+      <workItem from="1752926438570" duration="1049000" />
     </task>
+    <task id="LOCAL-00001" summary="economy cog embed reworks">
+      <option name="closed" value="true" />
+      <created>1752327776920</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1752327776920</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="economy cog embed reworks" />
+    <option name="LAST_COMMIT_MESSAGE" value="economy cog embed reworks" />
   </component>
 </project>

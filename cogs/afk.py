@@ -1,3 +1,5 @@
+from pickle import FALSE
+
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -75,6 +77,7 @@ class afk(commands.Cog):
                             return
 
     @app_commands.command(name="afk")
+    @app_commands.guild_only()
     @app_commands.describe(grund="Warum gehst du genau afk?")
     async def afk(self, interaction: discord.Interaction, grund: str = "AFK"):
         """Setze dich selbst auf AFK!"""
