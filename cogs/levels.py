@@ -318,6 +318,7 @@ class levelsystem(commands.Cog):
 
     @level.command(name="rank", description="Sendet deine Levelcard.")
     @commands.guild_only()
+    @app_commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         user = user or interaction.user
@@ -418,6 +419,7 @@ class levelsystem(commands.Cog):
                 await interaction.followup.send(file=file)
 
     @level.command(name="status")
+    @commands.guild_only()
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
@@ -452,6 +454,7 @@ class levelsystem(commands.Cog):
                         return
 
     @level.command(name="levelupkanal")
+    @commands.guild_only()
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_channels=True)
     async def levelsystem_setchannel(self, interaction: discord.Interaction, arg: Literal[
@@ -518,6 +521,8 @@ class levelsystem(commands.Cog):
                                 "<:Astra_accept:1141303821176422460> **Der Levelupkanal wurde erfolgreich zurückgesetzt.**")
 
     @level.command(name="levelupnachricht")
+    @commands.guild_only()
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_messages=True)
     async def levelsystem_setmessage(self, interaction: discord.Interaction,
                                      arg: Literal['Custom Nachricht', 'Deaktivieren'], message: str = None):
@@ -554,6 +559,8 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Die Level-UP-Nachricht wurde erfolgreich zurückgesetzt.**")
 
     @level.command(name="role")
+    @commands.guild_only()
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_roles=True)
     async def levelsystem_role_add(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int, role: discord.Role):
         """Füge/Entferne Rollen die man ab dem jeweiligem Level bekommt."""
