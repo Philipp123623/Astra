@@ -68,6 +68,7 @@ class guessthenumber(commands.Cog):
                             pass
 
     @app_commands.command(name="guessthenumber")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def guessthenumber(self, interaction: discord.Interaction, modus: Literal['Einschalten', 'Ausschalten'],

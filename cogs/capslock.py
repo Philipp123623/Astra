@@ -96,6 +96,7 @@ class capslock(commands.Cog):
                                 await channel.send(embed=embed)
 
     @app_commands.command(name="capslock")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def capslock(self, interaction: discord.Interaction,

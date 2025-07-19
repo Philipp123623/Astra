@@ -183,6 +183,7 @@ class hangman(commands.Cog):
         self.bot = bot
         
     @app_commands.command(name="hangman", description="Starte ein Hangman-Spiel")
+    @app_commands.guild_only()
     async def hangman(self, interaction: discord.Interaction):
         """Spiele Hangman."""
         if hangman_game["game"]:

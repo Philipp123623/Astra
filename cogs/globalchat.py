@@ -399,6 +399,7 @@ class globalchat(commands.Cog):
             colour=0xF44D4D))
 
     @app_commands.command(name="globalchat")
+    @app_commands.guild_only()
     async def globalchat(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten']):
         """Richte unseren Globalchat für deinen Server ein."""
         if argument == 'Einschalten':

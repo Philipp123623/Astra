@@ -44,6 +44,7 @@ class blacklist(commands.Cog):
                             return
 
     @app_commands.command(name="blacklist")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(argument="Argument", word="Word")

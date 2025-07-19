@@ -83,6 +83,7 @@ class leave(commands.Cog):
                     return
 
     @app_commands.command(name="testleave")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def testleave(self, interaction: discord.Interaction):
@@ -119,6 +120,7 @@ class leave(commands.Cog):
                     return
 
     @app_commands.command(name="leavemsg")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def leavemsg(self, interaction: discord.Interaction, argument: Literal[

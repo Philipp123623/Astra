@@ -210,6 +210,7 @@ class emojiquiz(commands.Cog):
         self.bot.add_view(buttons_emj(bot=self.bot, economy=self.economy))
 
     @app_commands.command(name="emojiquiz")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def emojiquiz(self, interaction: discord.Interaction, arg: Literal['On', 'Off'],
                         channel: discord.TextChannel):

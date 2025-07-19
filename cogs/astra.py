@@ -216,6 +216,7 @@ class astra(commands.Cog):
             pass
 
     @app_commands.command(name="about", description="Zeigt Informationen über den Bot.")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def about(self, interaction: discord.Interaction):
         await interaction.response.defer(thinking=True)
@@ -266,6 +267,7 @@ class astra(commands.Cog):
         os.remove(graph_path)
 
     @app_commands.command(name="invite")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def invite(self, interaction: discord.Interaction):
         """Link um Astra einzuladen."""
@@ -276,6 +278,7 @@ class astra(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="support")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def support(self, interaction: discord.Interaction):
         """Link zu unserem Support Server."""
@@ -297,6 +300,7 @@ class astra(commands.Cog):
         await msg.edit(content=f"```Websocket: {round(self.bot.latency * 1000, 2)} ms\nAntwort: {time_delta} ms```")
 
     @app_commands.command(name="uptime")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def uptime(self, interaction: discord.Interaction):
         """Zeigt wie lang Astra online ist."""

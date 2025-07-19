@@ -58,6 +58,7 @@ class joinrole(commands.Cog):
             pass
 
     @app_commands.command(name="joinrole")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def joinrole(self, interaction: discord.Interaction,

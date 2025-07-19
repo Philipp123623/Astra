@@ -317,7 +317,7 @@ class levelsystem(commands.Cog):
     level = app_commands.Group(name='levelsystem', description="Astra")
 
     @level.command(name="rank", description="Sendet deine Levelcard.")
-    @commands.guild_only()
+    @app_commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         user = user or interaction.user
@@ -633,6 +633,7 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message(embed=embed)
                             
     @app_commands.command(name="xpboost")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_messages=True)
     async def levelsystem_xpboost(self, interaction: discord.Interaction, status: Literal['Aktivieren(x2)', 'Deaktivieren(x1)']):
         """Aktiviere den XP-Boost für deinen Server."""
@@ -662,6 +663,7 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der XP-Boost ist jetzt für diesen Server deaktiviert. User bekommen nun nichtmehr 2x XP**")
 
     @app_commands.command(name="setlevel")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def levelsystem_setlevel(self, interaction: discord.Interaction, member: discord.Member, level: int):
         """Set the level from a user on your server."""

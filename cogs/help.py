@@ -57,6 +57,7 @@ class help(commands.Cog):
         self.uptime = datetime.utcnow()
 
     @app_commands.command(name="help")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def help(self, interaction: discord.Interaction):
         view = View()

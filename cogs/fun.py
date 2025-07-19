@@ -49,6 +49,7 @@ class fun(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="wanted")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def wanted(self, interaction: discord.Interaction, member: discord.Member = None):
         """Erstellt ein 'Gesucht' Plakat mit dem Profilbild eines Users."""
@@ -70,6 +71,7 @@ class fun(commands.Cog):
             os.remove("profile.jpg")
 
     @app_commands.command(name="pix")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def pix(self, interaction: discord.Interaction, member: discord.Member = None):
         """Verpixelt das Profilbild eines Users."""
@@ -91,6 +93,7 @@ class fun(commands.Cog):
             os.remove("pix.png")
 
     @app_commands.command(name="wasted")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def wasted(self, interaction: discord.Interaction, user: discord.Member = None):
         """Sendet ein Profilbild mit Effekten."""
@@ -112,6 +115,7 @@ class fun(commands.Cog):
                     await session.close()
 
     @app_commands.command(name="triggered")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def triggered(self, interaction: discord.Interaction, user: discord.Member = None):
         """Sendet ein Profilbild mit Effekten."""
@@ -133,6 +137,7 @@ class fun(commands.Cog):
                     await session.close()
 
     @app_commands.command(name="color")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def color(self, interaction: discord.Interaction, arg: str):
         """Gebe einen Hex-Code an und schaue dir die Farbe an."""
@@ -149,6 +154,7 @@ class fun(commands.Cog):
             return await interaction.response.send_message("Error loading image.")
 
     @app_commands.command(name="gay")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def gay(self, interaction: discord.Interaction, user: discord.Member = None):
         """Sendet ein Profilbild mit Effekten.."""
@@ -171,6 +177,7 @@ class fun(commands.Cog):
                     await session.close()
 
     @app_commands.command(name="meme", nsfw=True)
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def meme(self, interaction: discord.Interaction):
         """Zeigt lustige Memes."""
@@ -197,6 +204,7 @@ class fun(commands.Cog):
                     await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="qrcode")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def qrcode(self, interaction: discord.Interaction, link: str):
         """Erstelle einen QR-Code für einen Link."""
@@ -215,6 +223,7 @@ class fun(commands.Cog):
             os.remove('qrcode.png')
 
     @app_commands.command(name="lostrate")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def lostrate(self, interaction: discord.Interaction, user: discord.Member = None):
         """Kalkuliert, wie Lost ein user ist."""
@@ -226,6 +235,7 @@ class fun(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="iq")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def iq(self, interaction: discord.Interaction, user: discord.Member = None):
         """Find heraus wie hoch der IQ eines Users ist.."""
@@ -247,6 +257,7 @@ class fun(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="ask")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def ask(self, interaction: discord.Interaction, question: str):
         """Frage berühmte Persöhnlichkeiten."""
@@ -277,6 +288,7 @@ class fun(commands.Cog):
         await interaction.response.send_message(f"**{question}**\n\n{random.choice(all_gifs)}")
 
     @app_commands.command(name="love")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def love(self, interaction: discord.Interaction, u1: discord.Member, u2: discord.Member):
         """Finde heraus, wie sehr sich 2 User lieben."""
@@ -294,7 +306,7 @@ class fun(commands.Cog):
         await asyncio.sleep(3)
 
         # 2. embed
-        embed = discord.Embed(color=discord.Color.orange(),
+        embed2 = discord.Embed(color=discord.Color.orange(),
                               description=f"Sieh an, wie sehr {u1.mention} und {u2.mention} sich gegenseitig lieben ... <3")
         embed2.add_field(name="❤️ Loverator",
                          value=f"{u1.mention} und {u2.mention} lieben sich zu **{love_per}%**.")
@@ -303,6 +315,7 @@ class fun(commands.Cog):
         await message.edit(embed=embed2)
 
     @app_commands.command(name="los")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def los(self, interaction: discord.Interaction, user: discord.Member):
         """Ziehe ein Rubbellos."""
@@ -333,6 +346,7 @@ class fun(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="games")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def games(self, interaction: discord.Interaction):
         """Zeigt alle Spiele an, die grade gespielt werden."""
@@ -350,6 +364,7 @@ class fun(commands.Cog):
 
 
     @app_commands.command(name="password")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def password(self, interaction: discord.Interaction):
         """Generiert ein zufälliges Passwort für dich."""
