@@ -317,7 +317,7 @@ class levelsystem(commands.Cog):
     level = app_commands.Group(name='levelsystem', description="Astra")
 
     @level.command(name="rank", description="Sendet deine Levelcard.")
-    @app_commands.guild_only()
+    @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         user = user or interaction.user
@@ -418,6 +418,7 @@ class levelsystem(commands.Cog):
                 await interaction.followup.send(file=file)
 
     @level.command(name="status")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
         """Lege einen Kanal fest, in den die Level Up Nachrichten gesendet werden."""
@@ -451,6 +452,7 @@ class levelsystem(commands.Cog):
                         return
 
     @level.command(name="levelupkanal")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_channels=True)
     async def levelsystem_setchannel(self, interaction: discord.Interaction, arg: Literal[
         'Kanal des Levelups', 'Bestimmter Kanal(Kanalangabe benötigt)', 'Private Nachricht', 'Deaktivieren'],
