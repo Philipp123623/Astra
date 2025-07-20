@@ -429,14 +429,16 @@ bot = Astra()
 
 @bot.command()
 async def chat(ctx, *, prompt: str):
-    # Erstmal kurze Feedback-Nachricht mit Emoji
     thinking_msg = await ctx.send("🤖 Ich denke nach...")
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
+            # Explizit deutsche Antwort anfordern
+            full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
+
             response = await client.post("http://localhost:11434/api/generate", json={
-                "model": "tinyllama",
-                "prompt": prompt,
+                "model": "llama3",
+                "prompt": full_prompt,
                 "stream": False
             })
 
@@ -444,11 +446,10 @@ async def chat(ctx, *, prompt: str):
             data = response.json()
             antwort = data.get("response", "Entschuldigung, ich habe keine Antwort erhalten.")
 
-            # Schöneres Embed bauen
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
-                colour=discord.Colour.blue()  # Grünton, kann angepasst werden
+                colour=discord.Colour.blue()
             )
             embed.set_footer(text="Astra Bot | Powered by Ollama")
             embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
