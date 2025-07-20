@@ -297,6 +297,8 @@ class meta(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="umfrage")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def poll(self, interaction: discord.Interaction, titel: str, optionen: str):
         """Erstelle eine Umfrage."""
@@ -372,6 +374,7 @@ class meta(commands.Cog):
 
 
     @app_commands.command(name="invites")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def invites(self, interaction: discord.Interaction, user: discord.Member = None):
         """Zeigt die Einladungen eines Users."""

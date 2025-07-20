@@ -289,6 +289,7 @@ class astra(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="ping")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def ping(self, interaction: discord.Interaction):
         """Zeigt den Ping von Astra."""
