@@ -428,12 +428,12 @@ class Astra(commands.Bot):
 bot = Astra()
 
 @bot.command()
-@commands.is_owner()
 async def chat(ctx, *, prompt: str):
-    await ctx.send("🤖 Ich denke nach...")
+    # Erstmal kurze Feedback-Nachricht mit Emoji
+    thinking_msg = await ctx.send("🤖 Ich denke nach...")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post("http://localhost:11434/api/generate", json={
                 "model": "tinyllama",
                 "prompt": prompt,
@@ -442,12 +442,23 @@ async def chat(ctx, *, prompt: str):
 
         if response.status_code == 200:
             data = response.json()
-            antwort = data.get("response", "❌ Keine Antwort erhalten.")
-            await ctx.send(antwort.strip())
+            antwort = data.get("response", "Entschuldigung, ich habe keine Antwort erhalten.")
+
+            # Schöneres Embed bauen
+            embed = discord.Embed(
+                title="🤖 KI-Antwort",
+                description=antwort.strip(),
+                colour=discord.Colour.blue()  # Grünton, kann angepasst werden
+            )
+            embed.set_footer(text="Astra Bot | Powered by Ollama")
+            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+
+            await thinking_msg.edit(content=None, embed=embed)
         else:
-            await ctx.send(f"❌ Fehler bei der KI-Anfrage. Status: {response.status_code}")
+            await thinking_msg.edit(content=f"❌ Fehler bei der KI-Anfrage (Status {response.status_code}).", embed=None)
+
     except Exception as e:
-        await ctx.send(f"❌ Ein Fehler ist aufgetreten: {e}")
+        await thinking_msg.edit(content=f"❌ Fehler: {e}", embed=None)
 
 @bot.event
 async def on_dbl_vote(data):
