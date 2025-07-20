@@ -437,7 +437,7 @@ async def chat(ctx, *, prompt: str):
             full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
 
             response = await client.post("http://localhost:11434/api/generate", json={
-                "model": "tinyllama:latest",
+                "model": "mistral:latest",
                 "prompt": full_prompt,
                 "stream": False
             })
