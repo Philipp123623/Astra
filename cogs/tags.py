@@ -38,20 +38,21 @@ class tags(commands.Cog):
                             await msg.channel.send(embed=embed)
 
     @app_commands.command(name="tags")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def tags(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], name: str, ausgabe: str=None):
         """Erstelle eigene Befehle nur für deinen Server."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 if modus == "Hinzufügen":
                     await cursor.execute("INSERT INTO tags (guildID, tagname, tagoutput) VALUES (%s, %s, %s)",
-                                         (interaction.guild.id, name, output))
+                                         (interaction.guild.id, name, ausgabe))
                     embed = discord.Embed(title="Tag wird erstellt",
                                           description="Der Tag wurde erstellt.",
                                           colour=discord.Colour.blue(), timestamp=discord.utils.utcnow())
                     embed.add_field(name="Name:", value=f"a!{name}")
-                    embed.add_field(name="Ausgabe:", value=f"{output}")
+                    embed.add_field(name="Ausgabe:", value=f"{ausgabe}")
                     embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
                     await interaction.response.send_message(embed=embed, ephemeral=True)
                
@@ -59,7 +60,7 @@ class tags(commands.Cog):
                     await cursor.execute("SELECT tagname FROM tags WHERE tagname = (%s)", (name))
                     result = await cursor.fetchone()
                     if result is None:
-                        await interaction.response.send_message(f"<:Astra_x:1141303954555289600> **Es existiert kein Tag mit dem Namen `{name}`. Füge einen mit `/tag hinzufügen <name> <output>`**", ephemeral=True)
+                        await interaction.response.send_message(f"<:Astra_x:1141303954555289600> **Es existiert kein Tag mit dem Namen `{name}`. Füge einen mit `/tag hinzufügen <name> <ausgabe>`**", ephemeral=True)
                     if result:
                         await cursor.execute("DELETE FROM tags WHERE tagname = (%s)", (name))
                         embed = discord.Embed(title="Tag Entfernt",

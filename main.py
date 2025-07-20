@@ -67,7 +67,6 @@ class Astra(commands.Bot):
         self.pool = None  # Pool-Objekt hier zentral gespeichert
         self.initial_extensions = [
             "cogs.help",
-            "cogs.partner",
             "cogs.emojiquiz",
             "cogs.hangman",
             "cogs.economy",

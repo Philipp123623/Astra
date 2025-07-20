@@ -234,20 +234,15 @@ class ticket_open(discord.ui.View):
                     await cur.execute("UPDATE ticketsystem_channels SET msgID = (%s) WHERE channelID = (%s)",
                                       (msg.id, ticketchannel.id))
 
+@app_commands.guild_only()
+class Ticket(app_commands.Group):
+    def __init__(self):
+        super().__init__(
+            name="ticket",
+            description="Alles rund ums Ticketsystem."
+        )
 
-class ticket(commands.Cog):
-
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.bot.add_view(ticket_open(bot=self.bot))
-        self.bot.add_view(ticket_buttons())
-
-    ticket = Group(name='ticket', description='description')
-
-    @ticket.command(name="setup")
+    @app_commands.command(name="setup")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_setup(self, interaction: discord.Interaction, channel: discord.TextChannel, title: str,
@@ -262,7 +257,8 @@ class ticket(commands.Cog):
                                       description=description,
                                       colour=discord.Colour.blue())
                 embed.set_thumbnail(url=interaction.guild.icon.url)
-                embed.set_footer(text="Klicke auf den Button um ein Ticket zu erstellen!", icon_url=interaction.guild.icon)
+                embed.set_footer(text="Klicke auf den Button um ein Ticket zu erstellen!",
+                                 icon_url=interaction.guild.icon)
                 await channel.send(embed=embed, view=ticket_open(bot=self.bot))
                 em = discord.Embed(title="Ticketsystem", description="Dein Panel wurde erstellt",
                                    colour=discord.Colour.blue())
@@ -274,7 +270,7 @@ class ticket(commands.Cog):
                 await interaction.response.send_message(f"{interaction.user.mention} | Dein Panel wurde erstellt.",
                                                         embed=em, ephemeral=True)
 
-    @ticket.command(name="löschen")
+    @app_commands.command(name="löschen")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_delete(self, interaction: discord.Interaction, channel: discord.TextChannel):
@@ -282,9 +278,10 @@ class ticket(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("DELETE FROM ticketsystem WHERE channelID = (%s)", (channel.id))
-                await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Das Ticket-Panel wurde gelöscht.**", ephemeral=True)
+                await interaction.response.send_message(
+                    "<:Astra_accept:1141303821176422460> **Das Ticket-Panel wurde gelöscht.**", ephemeral=True)
 
-    @ticket.command(name="anzeigen")
+    @app_commands.command(name="anzeigen")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_list(self, interaction: discord.Interaction):
@@ -295,7 +292,9 @@ class ticket(commands.Cog):
                     f"SELECT channelID, thema FROM ticketsystem WHERE guildID = (%s)", (interaction.guild.id,))
                 result = await cursor.fetchall()
                 if not result:
-                    await interaction.response.send_message("<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**", ephemeral=True)
+                    await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**",
+                        ephemeral=True)
                 if result:
 
                     embed = discord.Embed(title="Aktuelle Ticket-Panels",
@@ -309,12 +308,14 @@ class ticket(commands.Cog):
                         try:
                             ch = interaction.guild.get_channel(int(channelID))
                         except:
-                            await interaction.response.send_message("<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**", ephemeral=True)
+                            await interaction.response.send_message(
+                                "<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**",
+                                ephemeral=True)
 
                         embed.add_field(name=ch.mention, value=thema, inline=True)
                     await interaction.response.send_message(embed=embed)
 
-    @ticket.command(name="log")
+    @app_commands.command(name="log")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticketlog(self, interaction: discord.Interaction,
@@ -354,19 +355,35 @@ class ticket(commands.Cog):
                                          (interaction.guild.id))
                     result = await cursor.fetchone()
                     if result is None:
-                        await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**", ephemeral=True)
+                        await interaction.response.send_message(
+                            "<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**",
+                            ephemeral=True)
                     if result is not None:
                         (channelID,) = result
                         if channel.id == channelID:
                             await cursor.execute(
                                 f"DELETE FROM ticketlog WHERE channelID = (%s) AND guildID = (%s)",
                                 (channel.id, interaction.guild.id))
-                            await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**", ephemeral=True)
+                            await interaction.response.send_message(
+                                "<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**",
+                                ephemeral=True)
                         else:
-                            await interaction.response.send_message("<:Astra_x:1141303954555289600> **Der Ticket-Log ist für diesen Server bereits deaktiviert.**",
-                                                                    ephemeral=True)
+                            await interaction.response.send_message(
+                                "<:Astra_x:1141303954555289600> **Der Ticket-Log ist für diesen Server bereits deaktiviert.**",
+                                ephemeral=True)
                             return
+
+class ticket(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        self.bot.add_view(ticket_open(bot=self.bot))
+        self.bot.add_view(ticket_buttons())
 
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ticket(bot))
+    bot.tree.add_command(Ticket())

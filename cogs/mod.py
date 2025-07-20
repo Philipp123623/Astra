@@ -101,6 +101,7 @@ class mod(commands.Cog):
         self.snipe_message_channel = {}
 
     @app_commands.command(name="kick")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(kick_members=True)
     async def kick(self, interaction: discord.Interaction, user: discord.Member, reason: str):
@@ -151,6 +152,7 @@ class mod(commands.Cog):
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
 
     @app_commands.command(name="ban")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     async def ban(self, interaction: discord.Interaction, user: discord.Member, reason: str):
@@ -201,6 +203,7 @@ class mod(commands.Cog):
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
 
     @app_commands.command(name="clear")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
     async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
@@ -236,6 +239,7 @@ class mod(commands.Cog):
         self.snipe_message_channel[message.guild.id] = message.channel
 
     @app_commands.command(name="unban")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     async def unban(self, interaction: discord.Interaction, usertag: str):
@@ -252,6 +256,7 @@ class mod(commands.Cog):
                 
 
     @app_commands.command(name="banlist")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     async def banlist(self, interaction: discord.Interaction):

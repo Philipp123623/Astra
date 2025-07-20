@@ -219,13 +219,15 @@ class SnakeGameView(View):
                 else:
                     return 0
 
-class SnakeBot(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        
-    snake_game = Group(name='snake', description="snake!")
+@app_commands.guild_only()
+class Snake(app_commands.Group):
+    def __init__(self):
+        super().__init__(
+            name="snake",
+            description="snake!"
+        )
 
-    @snake_game.command(name="start", description="Starte Snake!")
+    @app_commands.command(name="start", description="Starte Snake!")
     async def snake(self, interaction: discord.Interaction):
         """Spiele Snake."""
         async with self.bot.pool.acquire() as conn:
@@ -255,7 +257,8 @@ class SnakeBot(commands.Cog):
                     embed.add_field(name="Punkte", value="0")
                     embed.add_field(name="Highscore", value=str(highscore))
 
-                    await cur.execute("INSERT INTO snake (userID, highscore) VALUES (%s, %s)", (interaction.user.id, snake_game['current_score']))
+                    await cur.execute("INSERT INTO snake (userID, highscore) VALUES (%s, %s)",
+                                      (interaction.user.id, snake_game['current_score']))
 
                     await interaction.response.send_message(embed=embed, view=view)
                 else:
@@ -281,8 +284,8 @@ class SnakeBot(commands.Cog):
                     embed.add_field(name="Highscore", value=str(highscore))
 
                     await interaction.response.send_message(embed=embed, view=view)
-                    
-    @snake_game.command(name="highscore", description="Zeige den Highscore eines Spielers")
+
+    @app_commands.command(name="highscore", description="Zeige den Highscore eines Spielers")
     async def highscore(self, interaction: discord.Interaction, player: discord.User = None):
         # Highscore eines anderen Spielers abfragen
         if player is None:
@@ -295,7 +298,8 @@ class SnakeBot(commands.Cog):
         else:
             highscore = await self.get_highscore(player.id)
 
-            embed = discord.Embed(title=f"Highscore von {player.name}", description=f"Der Highscore ist {highscore}", color=discord.Color.blue())
+            embed = discord.Embed(title=f"Highscore von {player.name}", description=f"Der Highscore ist {highscore}",
+                                  color=discord.Color.blue())
             await interaction.response.send_message(embed=embed)
 
     async def spawn_food(self):
@@ -303,7 +307,7 @@ class SnakeBot(commands.Cog):
             food = [random.randint(1, 6), random.randint(1, 6)]
             if food not in snake_game['snake']:
                 return food
-            
+
     async def get_highscore(self, user_id):
         # Highscore aus der DB abfragen
         async with self.bot.pool.acquire() as conn:
@@ -315,5 +319,11 @@ class SnakeBot(commands.Cog):
                 else:
                     return 0
 
+class SnakeBot(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+
 async def setup(bot):
     await bot.add_cog(SnakeBot(bot))
+    bot.tree.add_command(Snake())

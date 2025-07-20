@@ -172,6 +172,8 @@ class ReactionRole(commands.Cog):
         return view
 
     @app_commands.command(name="reactionrole", description="Erstellt eine Reaction Role Nachricht")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def reactionrole(self, interaction: Interaction, style: Literal["buttons", "select"]):
         roles = [role for role in interaction.guild.roles if role.name != "@everyone"]
         view = RoleSelectView(interaction, roles, style)

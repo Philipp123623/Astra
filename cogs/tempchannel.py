@@ -346,8 +346,9 @@ class tempchannel(commands.Cog):
         self.bot.add_view(tempchannel1())
 
     @app_commands.command(name="voicesetup")
+    @app_commands.guild_only()
     @commands.cooldown(1, 5, commands.cooldowns.BucketType.channel)
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def voicesetup(self, interaction: discord.Interaction):
         """Create tempchannels for your server"""
         async with self.bot.pool.acquire() as conn:
