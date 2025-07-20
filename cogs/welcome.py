@@ -84,6 +84,7 @@ class welcome(commands.Cog):
                     return
 
     @app_commands.command(name="testjoin")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def testjoin(self, interaction: discord.Interaction):
@@ -120,6 +121,7 @@ class welcome(commands.Cog):
                     return
 
     @app_commands.command(name="joinmsg")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def joinmsg(self, interaction: discord.Interaction, argument: Literal[

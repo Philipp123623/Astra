@@ -8,24 +8,29 @@ from discord.app_commands import Group
 
 ##########
 
+@app_commands.guild_only()
+class Automod(app_commands.Group):
+    def __init__(self):
+        super().__init__(
+            name="automod",
+            description="Automod Commands"
+        )
 
-class Warn(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-    automod = Group(name='automod', description='Automod Commands')
-
-    @automod.command(name="hinzufügen")
+    @app_commands.command(name="hinzufügen")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def add(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], action: Literal['Kick', 'Ban', 'Timeout']):
+    async def add(self, interaction: discord.Interaction,
+                  warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+                  action: Literal['Kick', 'Ban', 'Timeout']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 if action == "Kick":
                     await cursor.execute("INSERT INTO automod (guildID, warns, action) VALUES (%s, %s, %s)",
                                          (interaction.guild.id, warns, action))
-                    embed = discord.Embed(title="Automod Aktion gesetzt", description=f"Wenn ein User {warns} verwarungen bekommt, wird er gekickt.", colour=discord.Colour.blue())
+                    embed = discord.Embed(title="Automod Aktion gesetzt",
+                                          description=f"Wenn ein User {warns} verwarungen bekommt, wird er gekickt.",
+                                          colour=discord.Colour.blue())
                     await interaction.response.send_message(embed=embed)
                 if action == "Ban":
                     await cursor.execute("INSERT INTO automod (guildID, warns, action) VALUES (%s, %s, %s)",
@@ -42,10 +47,11 @@ class Warn(commands.Cog):
                                           colour=discord.Colour.blue())
                     await interaction.response.send_message(embed=embed)
 
-    @automod.command(name="entfernen")
+    @app_commands.command(name="entfernen")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def remove(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
+    async def remove(self, interaction: discord.Interaction,
+                     warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
@@ -56,7 +62,7 @@ class Warn(commands.Cog):
                                        color=discord.Color.blue())
                 await interaction.response.send_message(embed=embed1)
 
-    @automod.command(name="anzeigen")
+    @app_commands.command(name="anzeigen")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def show(self, interaction: discord.Interaction):
@@ -66,7 +72,8 @@ class Warn(commands.Cog):
                 await cursor.execute(f"SELECT warns, action FROM automod WHERE guildID = (%s)", interaction.guild.id)
                 result = await cursor.fetchall()
                 if result == ():
-                    await interaction.response.send_message("*<:Astra_x:1141303954555289600> *Es sind keine Automod Aktionen aktiv.**", ephemeral=True)
+                    await interaction.response.send_message(
+                        "*<:Astra_x:1141303954555289600> *Es sind keine Automod Aktionen aktiv.**", ephemeral=True)
                 if result:
 
                     embed = discord.Embed(title="Aktuelle Automod Aktionen",
@@ -81,7 +88,13 @@ class Warn(commands.Cog):
 
                     await interaction.response.send_message(embed=embed)
 
+
+class Warn(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
     @app_commands.command(name="warn")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def warn(self, interaction: discord.Interaction, member: discord.Member, reason: str):
@@ -280,6 +293,7 @@ class Warn(commands.Cog):
                                     await member.timeout(timedelta(seconds=30), reason="Automod")
 
     @app_commands.command(name="unwarn")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def unwarn(self, interaction: discord.Interaction, member: discord.Member, warnid: int):
@@ -303,6 +317,7 @@ class Warn(commands.Cog):
                     await interaction.response.send_message(embed=embed2)
 
     @app_commands.command(name="warns")
+    @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def warns(self, interaction: discord.Interaction, member: discord.Member):
@@ -335,3 +350,4 @@ class Warn(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Warn(bot))
+    bot.tree.add_command(Automod())

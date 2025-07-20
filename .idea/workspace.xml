@@ -11,6 +11,8 @@
       <change beforePath="$PROJECT_DIR$/cogs/reactionrole.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/reactionrole.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cogs/snake.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/snake.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cogs/tags.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/tags.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/tempchannel.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/tempchannel.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/ticket.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/ticket.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -161,7 +163,7 @@
       <workItem from="1752408212976" duration="1515000" />
       <workItem from="1752926438570" duration="2847000" />
       <workItem from="1752965368538" duration="786000" />
-      <workItem from="1753008052414" duration="1240000" />
+      <workItem from="1753008052414" duration="1550000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />
