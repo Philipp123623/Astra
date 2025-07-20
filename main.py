@@ -2,6 +2,7 @@ import discord
 import requests
 import json
 import random
+import httpx
 from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError
 from discord import app_commands
@@ -425,6 +426,28 @@ class Astra(commands.Bot):
 
 
 bot = Astra()
+
+@bot.command()
+@commands.is_owner()
+async def chat(ctx, *, prompt: str):
+    await ctx.send("🤖 Ich denke nach...")
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post("http://localhost:11434/api/generate", json={
+                "model": "tinyllama",
+                "prompt": prompt,
+                "stream": False
+            })
+
+        if response.status_code == 200:
+            data = response.json()
+            antwort = data.get("response", "❌ Keine Antwort erhalten.")
+            await ctx.send(antwort.strip())
+        else:
+            await ctx.send(f"❌ Fehler bei der KI-Anfrage. Status: {response.status_code}")
+    except Exception as e:
+        await ctx.send(f"❌ Ein Fehler ist aufgetreten: {e}")
 
 @bot.event
 async def on_dbl_vote(data):
