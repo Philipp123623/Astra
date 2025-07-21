@@ -428,35 +428,55 @@ class Astra(commands.Bot):
 
 bot = Astra()
 
+WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
+
 @bot.command()
 async def chat(ctx, *, prompt: str):
-    thinking_msg = await ctx.send("🧠 Denke nach…")
+    full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten stets kurz und antworte schnell. Du musst auch deine Zeichenanzahl auf 2000 Zeichen begrenzen wegen Discord." + prompt
+    antwort = ""
+    last_update = time.monotonic()
 
-    try:
-        full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten stets kurz und antworte schnell. Du musst auch deine Zeichenanzahl auf 2000 Zeichen begrenzen wegen Discord." + prompt
-        antwort = ""
-        last_update = time.monotonic()
+    async with aiohttp.ClientSession() as session:
+        # Sende initiale Webhook-Nachricht und speichere message ID
+        async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
+            webhook_msg = await resp.json()
+            message_id = webhook_msg["id"]
 
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
-                async with session.post(
-                        "http://localhost:11434/api/generate",
-                        json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
-                ) as resp:
+            # KI-Antwort streamen
+            async with session.post(
+                    "http://localhost:11434/api/generate",
+                    json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
+            ) as resp_stream:
 
-                    async for line in resp.content:
-                        line = line.decode("utf-8").strip()
-                        if not line:
-                            continue
-                        data = json.loads(line)
-                        token = data.get("response", "")
-                        antwort += token
+                async for line in resp_stream.content:
+                    line = line.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    token = data.get("response", "")
+                    antwort += token
 
-                        if time.monotonic() - last_update > 0.4:
-                            await thinking_msg.edit(content=antwort + "▌")
-                            last_update = time.monotonic()
+                    # Alle 0.5 Sek. Nachricht editieren, damit’s lebendig wirkt
+                    if time.monotonic() - last_update > 0.5:
+                        embed = discord.Embed(
+                            title="🤖 KI-Antwort (streaming...)",
+                            description=antwort + "▌",
+                            colour=discord.Colour.blue()
+                        )
+                        embed.set_footer(text="Astra Bot | Powered by Ollama")
+                        embed.set_author(name=ctx.author.display_name,
+                                         icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
 
-            # Finales Embed
+                        await session.patch(
+                            f"{WEBHOOK_URL}/messages/{message_id}",
+                            json={
+                                "embeds": [embed.to_dict()]
+                            }
+                        )
+                        last_update = time.monotonic()
+
+            # Finale Embed-Nachricht senden (ohne Cursor)
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
@@ -466,10 +486,19 @@ async def chat(ctx, *, prompt: str):
             embed.set_author(name=ctx.author.display_name,
                              icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
 
-            await thinking_msg.edit(content=None, embed=embed)
+            await session.patch(
+                f"{WEBHOOK_URL}/messages/{message_id}",
+                json={
+                    "content": None,
+                    "embeds": [embed.to_dict()]
+                }
+            )
 
         except Exception as e:
-            await thinking_msg.edit(content=f"❌ Fehler: {e}")
+            await session.patch(
+                f"{WEBHOOK_URL}/messages/{message_id}",
+                json={"content": f"❌ Fehler: {e}"}
+            )
 
 
 @bot.event
