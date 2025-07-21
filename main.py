@@ -429,10 +429,11 @@ bot = Astra()
 
 @bot.command()
 async def chat(ctx, *, prompt: str):
-    thinking_msg = await ctx.send("🤖 Ich denke nach...")
+    thinking_msg = await ctx.send("💬 _Ich denke nach..._")
 
     try:
         full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
+        antwort = ""
 
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", "http://localhost:11434/api/generate", json={
@@ -441,27 +442,29 @@ async def chat(ctx, *, prompt: str):
                 "stream": True
             }) as response:
 
-                antwort = ""
                 async for line in response.aiter_lines():
                     if line.strip():
                         data = json.loads(line)
-                        antwort += data.get("response", "")
+                        token = data.get("response", "")
+                        antwort += token
 
-        if antwort.strip():
-            embed = discord.Embed(
-                title="🤖 KI-Antwort",
-                description=antwort.strip(),
-                colour=discord.Colour.blue()
-            )
-            embed.set_footer(text="Astra Bot | Powered by Ollama")
-            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+                        # Optional: nur jede 0.5 Sekunde updaten
+                        await thinking_msg.edit(content=antwort + "▌")
+                        await asyncio.sleep(0.05)  # nicht zu schnell updaten
 
-            await thinking_msg.edit(content=None, embed=embed)
-        else:
-            await thinking_msg.edit(content="❌ Leere Antwort von der KI erhalten.", embed=None)
+        # Finales Embed
+        embed = discord.Embed(
+            title="🤖 KI-Antwort",
+            description=antwort.strip(),
+            colour=discord.Colour.blue()
+        )
+        embed.set_footer(text="Astra Bot | Powered by Ollama")
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+
+        await thinking_msg.edit(content=None, embed=embed)
 
     except Exception as e:
-        await thinking_msg.edit(content=f"❌ Fehler: {e}", embed=None)
+        await thinking_msg.edit(content=f"❌ Fehler: {e}")
 
 @bot.event
 async def on_dbl_vote(data):
