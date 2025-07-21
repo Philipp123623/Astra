@@ -433,7 +433,7 @@ async def chat(ctx, *, prompt: str):
     thinking_msg = await ctx.send("🧠 Denke nach…")
 
     try:
-        full_prompt = "Antworte auf Deutsch:\n" + prompt
+        full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten nicht zu lang zu halten und reagiere schnell." + prompt
         antwort = ""
         last_update = time.monotonic()
 
