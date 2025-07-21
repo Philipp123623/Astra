@@ -438,12 +438,13 @@ logging.basicConfig(
 @bot.command()
 async def chat(ctx, *, prompt: str):
     full_prompt = (
-            "Du bist ein freundlicher, lockerer, deutschsprachiger Assistent, "
-            "der natürliche und gut verständliche Antworten gibt. "
-            "Antworte stets kurz, klar und höflich, so als würdest du mit einem guten Freund sprechen. "
-            "Vermeide lange Romane, wenn die Frage einfach ist. "
-            "Beantworte die folgende Frage:\n\n" + prompt
+        "Du bist ein deutscher KI-Assistent. "
+        "Beantworte die folgende Frage so kurz, präzise und hilfreich wie möglich. "
+        "Keine Einleitungen, keine Begrüßung, keine Floskeln. "
+        "Maximal 1-3 klare Sätze bei kleineren Anfragen, höchstens 2000 Zeichen.\n\n"
+        f"Frage: {prompt}\nAntwort:"
     )
+
     antwort = ""
     last_update = time.monotonic()
     start_time = time.monotonic()
@@ -455,7 +456,7 @@ async def chat(ctx, *, prompt: str):
         try:
             async with session.post(
                 "http://localhost:11434/api/generate",
-                json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
+                json={"model": "phi3:mini", "prompt": full_prompt, "stream": True, "temperature": "0,3"}
             ) as resp_stream:
 
                 if resp_stream.status != 200:
