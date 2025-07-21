@@ -432,20 +432,22 @@ async def chat(ctx, *, prompt: str):
     thinking_msg = await ctx.send("🤖 Ich denke nach...")
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            # Explizit deutsche Antwort anfordern
-            full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
+        full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
 
-            response = await client.post("http://localhost:11434/api/generate", json={
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream("POST", "http://localhost:11434/api/generate", json={
                 "model": "mistral:latest",
                 "prompt": full_prompt,
-                "stream": False
-            })
+                "stream": True
+            }) as response:
 
-        if response.status_code == 200:
-            data = response.json()
-            antwort = data.get("response", "Entschuldigung, ich habe keine Antwort erhalten.")
+                antwort = ""
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        data = json.loads(line)
+                        antwort += data.get("response", "")
 
+        if antwort.strip():
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
@@ -456,7 +458,7 @@ async def chat(ctx, *, prompt: str):
 
             await thinking_msg.edit(content=None, embed=embed)
         else:
-            await thinking_msg.edit(content=f"❌ Fehler bei der KI-Anfrage (Status {response.status_code}).", embed=None)
+            await thinking_msg.edit(content="❌ Leere Antwort von der KI erhalten.", embed=None)
 
     except Exception as e:
         await thinking_msg.edit(content=f"❌ Fehler: {e}", embed=None)
