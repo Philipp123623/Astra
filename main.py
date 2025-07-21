@@ -446,30 +446,17 @@ async def chat(ctx, *, prompt: str):
     last_update = time.monotonic()
     start_time = time.monotonic()
 
-    logging.debug(f"Chat command gestartet mit Prompt: {prompt}")
+    # Initiale Nachricht
+    message = await ctx.send("🤖 Ich denke nach...")
 
     async with aiohttp.ClientSession() as session:
-        # Initiale Webhook-Nachricht senden
-        async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
-            if resp.status != 200 and resp.status != 204:
-                logging.error(f"Fehler beim Senden der Webhook-Nachricht: Status {resp.status}")
-                await ctx.send("❌ Fehler beim Senden der Webhook-Nachricht")
-                return
-            try:
-                webhook_msg = await resp.json()
-                message_id = webhook_msg.get("id")
-            except Exception:
-                message_id = None
-
         try:
-            logging.debug("Starte Streaming-Request an KI-Server...")
             async with session.post(
                 "http://localhost:11434/api/generate",
                 json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
             ) as resp_stream:
 
                 if resp_stream.status != 200:
-                    logging.error(f"KI-Server antwortete mit Status {resp_stream.status}")
                     await ctx.send(f"❌ KI-Server Fehler: Status {resp_stream.status}")
                     return
 
@@ -480,7 +467,6 @@ async def chat(ctx, *, prompt: str):
                     if line.startswith("data: "):
                         line = line[6:]
                     if line == "[DONE]":
-                        logging.debug("Streaming abgeschlossen ([DONE] erhalten).")
                         break
 
                     try:
@@ -488,14 +474,14 @@ async def chat(ctx, *, prompt: str):
                         token = data.get("response", "")
                         antwort += token
                     except Exception as e:
-                        logging.error(f"Fehler beim Parsen der Daten: {e} -- Line: {line}")
+                        logging.error(f"Fehler beim Parsen der Daten: {e}")
                         continue
 
                     now = time.monotonic()
-                    if now - last_update > 0.5 and message_id:
+                    if now - last_update > 0.5:
                         elapsed = now - start_time
                         embed = discord.Embed(
-                            title="🤖 KI-Antwort (streaming...)",
+                            title="🤖 KI-Antwort (Streaming...)",
                             description=antwort + "▌",
                             colour=discord.Colour.blue()
                         )
@@ -504,43 +490,26 @@ async def chat(ctx, *, prompt: str):
                             name=ctx.author.display_name,
                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
                         )
-                        await session.patch(
-                            f"{WEBHOOK_URL}/messages/{message_id}",
-                            json={"embeds": [embed.to_dict()]}
-                        )
+                        await message.edit(embed=embed)
                         last_update = now
 
             # Finale Embed-Nachricht
-            if message_id:
-                elapsed = time.monotonic() - start_time
-                embed = discord.Embed(
-                    title="🤖 KI-Antwort",
-                    description=antwort.strip(),
-                    colour=discord.Colour.blue()
-                )
-                embed.set_footer(text=f"Astra Bot | Powered by Ollama | Gesamtzeit: {elapsed:.1f}s")
-                embed.set_author(
-                    name=ctx.author.display_name,
-                    icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
-                )
-                await session.patch(
-                    f"{WEBHOOK_URL}/messages/{message_id}",
-                    json={"content": None, "embeds": [embed.to_dict()]}
-                )
-            else:
-                await ctx.send(antwort.strip())
-
-            logging.debug("Fertig.")
+            elapsed = time.monotonic() - start_time
+            embed = discord.Embed(
+                title="🤖 KI-Antwort",
+                description=antwort.strip(),
+                colour=discord.Colour.blue()
+            )
+            embed.set_footer(text=f"Astra Bot | Powered by Ollama | Gesamtzeit: {elapsed:.1f}s")
+            embed.set_author(
+                name=ctx.author.display_name,
+                icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
+            )
+            await message.edit(embed=embed)
 
         except Exception as e:
             logging.error(f"Fehler im Chat-Command: {e}", exc_info=True)
-            if message_id:
-                await session.patch(
-                    f"{WEBHOOK_URL}/messages/{message_id}",
-                    json={"content": f"❌ Fehler: {e}"}
-                )
-            else:
-                await ctx.send(f"❌ Fehler: {e}")
+            await ctx.send(f"❌ Fehler: {e}")
 
 
 
