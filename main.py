@@ -504,7 +504,7 @@ async def chat(ctx, *, prompt: str):
                 f"{WEBHOOK_URL}/messages/{message_id}",
                 json={"content": f"❌ Fehler: {e}"}
             )
-            print(f"Fehler im Chat-Command: {e}")
+            logging.error(f"Fehler im Chat-Command: {e}")
 
 
 @bot.event
