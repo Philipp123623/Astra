@@ -437,7 +437,7 @@ async def chat(ctx, *, prompt: str):
 
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", "http://localhost:11434/api/generate", json={
-                "model": "mistral:latest",
+                "model": "phi3:mini",
                 "prompt": full_prompt,
                 "stream": True
             }) as response:
