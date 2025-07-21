@@ -18,6 +18,7 @@ import aiomysql
 import jishaku
 import os
 import logging
+import time
 from dotenv import load_dotenv
 import aiohttp
 import datetime
