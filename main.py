@@ -432,32 +432,39 @@ WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E7
 
 @bot.command()
 async def chat(ctx, *, prompt: str):
-    full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten stets kurz und antworte schnell. Du musst auch deine Zeichenanzahl auf 2000 Zeichen begrenzen wegen Discord." + prompt
+    full_prompt = (
+        "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für "
+        "jegliche alltäglichen Fragen aus allen Bereichen. Du antwortest immer freundlich, "
+        "kurz und knapp, max 2000 Zeichen. " + prompt
+    )
     antwort = ""
     last_update = time.monotonic()
 
     async with aiohttp.ClientSession() as session:
-        # Sende initiale Webhook-Nachricht und speichere message ID
         async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
             webhook_msg = await resp.json()
             message_id = webhook_msg["id"]
 
         try:
-            # KI-Antwort streamen
             async with session.post(
-                    "http://localhost:11434/api/generate",
-                    json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
+                "http://localhost:11434/api/generate",
+                json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
             ) as resp_stream:
 
-                async for line in resp_stream.content:
-                    line = line.decode("utf-8").strip()
+                async for raw_line in resp_stream.content:
+                    line = raw_line.decode().strip()
                     if not line:
                         continue
+                    # Falls "data: " prefix vorhanden, entfernen
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line == "[DONE]":
+                        break
+
                     data = json.loads(line)
                     token = data.get("response", "")
                     antwort += token
 
-                    # Alle 0.5 Sek. Nachricht editieren, damit’s lebendig wirkt
                     if time.monotonic() - last_update > 0.5:
                         embed = discord.Embed(
                             title="🤖 KI-Antwort (streaming...)",
@@ -465,33 +472,31 @@ async def chat(ctx, *, prompt: str):
                             colour=discord.Colour.blue()
                         )
                         embed.set_footer(text="Astra Bot | Powered by Ollama")
-                        embed.set_author(name=ctx.author.display_name,
-                                         icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+                        embed.set_author(
+                            name=ctx.author.display_name,
+                            icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
+                        )
 
                         await session.patch(
                             f"{WEBHOOK_URL}/messages/{message_id}",
-                            json={
-                                "embeds": [embed.to_dict()]
-                            }
+                            json={"embeds": [embed.to_dict()]}
                         )
                         last_update = time.monotonic()
 
-            # Finale Embed-Nachricht senden (ohne Cursor)
+            # Finale Nachricht
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
                 colour=discord.Colour.blue()
             )
             embed.set_footer(text="Astra Bot | Powered by Ollama")
-            embed.set_author(name=ctx.author.display_name,
-                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
-
+            embed.set_author(
+                name=ctx.author.display_name,
+                icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
+            )
             await session.patch(
                 f"{WEBHOOK_URL}/messages/{message_id}",
-                json={
-                    "content": None,
-                    "embeds": [embed.to_dict()]
-                }
+                json={"content": None, "embeds": [embed.to_dict()]}
             )
 
         except Exception as e:
@@ -499,6 +504,7 @@ async def chat(ctx, *, prompt: str):
                 f"{WEBHOOK_URL}/messages/{message_id}",
                 json={"content": f"❌ Fehler: {e}"}
             )
+            print(f"Fehler im Chat-Command: {e}")
 
 
 @bot.event
