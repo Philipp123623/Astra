@@ -433,42 +433,43 @@ async def chat(ctx, *, prompt: str):
     thinking_msg = await ctx.send("🧠 Denke nach…")
 
     try:
-        full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten stets kurz und antworte schnell." + prompt
+        full_prompt = "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für jegliche alltäglichen Fragen aus alles bereichen. Du antwortest immer stets freundlich, aber nicht zu verkrampft. Versuche deine Antworten stets kurz und antworte schnell. Du musst auch deine Zeichenanzahl auf 2000 Zeichen begrenzen wegen Discord." + prompt
         antwort = ""
         last_update = time.monotonic()
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            async with client.stream("POST", "http://localhost:11434/api/generate", json={
-                "model": "phi3:mini",
-                "prompt": full_prompt,
-                "stream": True
-            }) as response:
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+                async with session.post(
+                        "http://localhost:11434/api/generate",
+                        json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
+                ) as resp:
 
-                async for line in response.aiter_lines():
-                    if not line.strip():
-                        continue
-                    data = json.loads(line)
-                    token = data.get("response", "")
-                    antwort += token
+                    async for line in resp.content:
+                        line = line.decode("utf-8").strip()
+                        if not line:
+                            continue
+                        data = json.loads(line)
+                        token = data.get("response", "")
+                        antwort += token
 
-                    # Nur alle 0.4 Sekunden editieren
-                    if time.monotonic() - last_update > 0.4:
-                        await thinking_msg.edit(content=antwort + "▌")
-                        last_update = time.monotonic()
+                        if time.monotonic() - last_update > 0.4:
+                            await thinking_msg.edit(content=antwort + "▌")
+                            last_update = time.monotonic()
 
-        # Finales Ergebnis schicken
-        embed = discord.Embed(
-            title="🤖 KI-Antwort",
-            description=antwort.strip(),
-            colour=discord.Colour.blue()
-        )
-        embed.set_footer(text="Astra Bot | Powered by Ollama")
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+            # Finales Embed
+            embed = discord.Embed(
+                title="🤖 KI-Antwort",
+                description=antwort.strip(),
+                colour=discord.Colour.blue()
+            )
+            embed.set_footer(text="Astra Bot | Powered by Ollama")
+            embed.set_author(name=ctx.author.display_name,
+                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
 
-        await thinking_msg.edit(content=None, embed=embed)
+            await thinking_msg.edit(content=None, embed=embed)
 
-    except Exception as e:
-        await thinking_msg.edit(content=f"❌ Fehler: {e}")
+        except Exception as e:
+            await thinking_msg.edit(content=f"❌ Fehler: {e}")
 
 
 @bot.event
