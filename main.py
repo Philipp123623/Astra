@@ -455,7 +455,7 @@ async def chat(ctx, *, prompt: str):
         try:
             async with session.post(
                 "http://localhost:11434/api/generate",
-                json={"model": "tinyllama", "prompt": full_prompt, "stream": True, "temperature": 0.3, "num_predict": 2000}
+                json={"model": "mistral", "prompt": full_prompt, "stream": True, "temperature": 0.3, "num_predict": 2000}
             ) as resp_stream:
 
                 if resp_stream.status != 200:
