@@ -430,6 +430,12 @@ bot = Astra()
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
 
+logging.basicConfig(
+    level=logging.DEBUG,  # Setze DEBUG für sehr detaillierte Logs
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+
 @bot.command()
 async def chat(ctx, *, prompt: str):
     full_prompt = (
@@ -440,30 +446,45 @@ async def chat(ctx, *, prompt: str):
     antwort = ""
     last_update = time.monotonic()
 
-    async with aiohttp.ClientSession() as session:
-        # Initiale Nachricht über Webhook senden
-        async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
-            webhook_msg = await resp.json()
-            message_id = webhook_msg["id"]
+    logging.debug(f"Chat command gestartet mit Prompt: {prompt}")
 
+    async with aiohttp.ClientSession() as session:
         try:
+            logging.debug("Sende initiale Webhook-Nachricht...")
+            async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
+                webhook_msg = await resp.json()
+                message_id = webhook_msg.get("id")
+                logging.debug(f"Webhook-Nachricht gesendet, Message ID: {message_id}")
+
+            logging.debug("Starte Streaming-Request an KI-Server...")
             async with session.post(
                 "http://localhost:11434/api/generate",
                 json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
             ) as resp_stream:
 
-                while True:
-                    raw_line = await resp_stream.content.readline()
-                    if not raw_line:
-                        break
+                if resp_stream.status != 200:
+                    logging.error(f"KI-Server antwortete mit Status {resp_stream.status}")
+                    await ctx.send(f"❌ KI-Server Fehler: Status {resp_stream.status}")
+                    return
+
+                async for raw_line in resp_stream.content:
                     line = raw_line.decode().strip()
                     if not line:
                         continue
-                    data = json.loads(line)
-                    token = data.get("response", "")
-                    antwort += token
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line == "[DONE]":
+                        logging.debug("Streaming abgeschlossen ([DONE] erhalten).")
+                        break
 
-                    # Embed alle 0.5 Sekunden aktualisieren
+                    try:
+                        data = json.loads(line)
+                        token = data.get("response", "")
+                        antwort += token
+                    except Exception as e:
+                        logging.error(f"Fehler beim Parsen der Daten: {e} -- Line: {line}")
+                        continue
+
                     if time.monotonic() - last_update > 0.5:
                         embed = discord.Embed(
                             title="🤖 KI-Antwort (streaming...)",
@@ -475,16 +496,15 @@ async def chat(ctx, *, prompt: str):
                             name=ctx.author.display_name,
                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
                         )
+
+                        logging.debug("Editiere Webhook-Nachricht mit aktuellem Streaming-Text...")
                         await session.patch(
                             f"{WEBHOOK_URL}/messages/{message_id}",
                             json={"embeds": [embed.to_dict()]}
                         )
                         last_update = time.monotonic()
 
-                    if data.get("done", False):
-                        break
-
-            # Finale Nachricht (ohne Cursor)
+            # Finale Nachricht
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
@@ -495,17 +515,22 @@ async def chat(ctx, *, prompt: str):
                 name=ctx.author.display_name,
                 icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
             )
+            logging.debug("Sende finale Embed-Nachricht...")
             await session.patch(
                 f"{WEBHOOK_URL}/messages/{message_id}",
                 json={"content": None, "embeds": [embed.to_dict()]}
             )
+            logging.debug("Fertig.")
 
         except Exception as e:
-            await session.patch(
-                f"{WEBHOOK_URL}/messages/{message_id}",
-                json={"content": f"❌ Fehler: {e}"}
-            )
-            logging.error(f"Fehler im Chat-Command: {e}")
+            logging.error(f"Fehler im Chat-Command: {e}", exc_info=True)
+            if message_id:
+                await session.patch(
+                    f"{WEBHOOK_URL}/messages/{message_id}",
+                    json={"content": f"❌ Fehler: {e}"}
+                )
+            else:
+                await ctx.send(f"❌ Fehler: {e}")
 
 
 @bot.event
