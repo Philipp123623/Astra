@@ -435,7 +435,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-
 @bot.command()
 async def chat(ctx, *, prompt: str):
     full_prompt = (
@@ -449,13 +448,20 @@ async def chat(ctx, *, prompt: str):
     logging.debug(f"Chat command gestartet mit Prompt: {prompt}")
 
     async with aiohttp.ClientSession() as session:
-        try:
-            logging.debug("Sende initiale Webhook-Nachricht...")
-            async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
+        # Initiale Webhook-Nachricht senden
+        async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
+            if resp.status != 200 and resp.status != 204:
+                logging.error(f"Fehler beim Senden der Webhook-Nachricht: Status {resp.status}")
+                await ctx.send("❌ Fehler beim Senden der Webhook-Nachricht")
+                return
+            try:
                 webhook_msg = await resp.json()
                 message_id = webhook_msg.get("id")
-                logging.debug(f"Webhook-Nachricht gesendet, Message ID: {message_id}")
+            except Exception:
+                # Discord gibt bei manchen POSTs 204 No Content ohne JSON zurück
+                message_id = None
 
+        try:
             logging.debug("Starte Streaming-Request an KI-Server...")
             async with session.post(
                 "http://localhost:11434/api/generate",
@@ -485,7 +491,7 @@ async def chat(ctx, *, prompt: str):
                         logging.error(f"Fehler beim Parsen der Daten: {e} -- Line: {line}")
                         continue
 
-                    if time.monotonic() - last_update > 0.5:
+                    if time.monotonic() - last_update > 0.5 and message_id:
                         embed = discord.Embed(
                             title="🤖 KI-Antwort (streaming...)",
                             description=antwort + "▌",
@@ -496,30 +502,32 @@ async def chat(ctx, *, prompt: str):
                             name=ctx.author.display_name,
                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
                         )
-
-                        logging.debug("Editiere Webhook-Nachricht mit aktuellem Streaming-Text...")
                         await session.patch(
                             f"{WEBHOOK_URL}/messages/{message_id}",
                             json={"embeds": [embed.to_dict()]}
                         )
                         last_update = time.monotonic()
 
-            # Finale Nachricht
-            embed = discord.Embed(
-                title="🤖 KI-Antwort",
-                description=antwort.strip(),
-                colour=discord.Colour.blue()
-            )
-            embed.set_footer(text="Astra Bot | Powered by Ollama")
-            embed.set_author(
-                name=ctx.author.display_name,
-                icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
-            )
-            logging.debug("Sende finale Embed-Nachricht...")
-            await session.patch(
-                f"{WEBHOOK_URL}/messages/{message_id}",
-                json={"content": None, "embeds": [embed.to_dict()]}
-            )
+            # Finale Embed-Nachricht
+            if message_id:
+                embed = discord.Embed(
+                    title="🤖 KI-Antwort",
+                    description=antwort.strip(),
+                    colour=discord.Colour.blue()
+                )
+                embed.set_footer(text="Astra Bot | Powered by Ollama")
+                embed.set_author(
+                    name=ctx.author.display_name,
+                    icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
+                )
+                await session.patch(
+                    f"{WEBHOOK_URL}/messages/{message_id}",
+                    json={"content": None, "embeds": [embed.to_dict()]}
+                )
+            else:
+                # Fallback, falls keine Message ID
+                await ctx.send(antwort.strip())
+
             logging.debug("Fertig.")
 
         except Exception as e:
@@ -531,6 +539,8 @@ async def chat(ctx, *, prompt: str):
                 )
             else:
                 await ctx.send(f"❌ Fehler: {e}")
+
+
 
 
 @bot.event
