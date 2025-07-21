@@ -438,9 +438,11 @@ logging.basicConfig(
 @bot.command()
 async def chat(ctx, *, prompt: str):
     full_prompt = (
-        "Du bist ein freundlicher, netter, deutschsprechender Hilfsassistent für "
-        "jegliche alltäglichen Fragen aus allen Bereichen. Du antwortest immer freundlich, "
-        "kurz und knapp, max 2000 Zeichen. " + prompt
+            "Du bist ein freundlicher, lockerer, deutschsprachiger Assistent, "
+            "der natürliche und gut verständliche Antworten gibt. "
+            "Antworte stets kurz, klar und höflich, so als würdest du mit einem guten Freund sprechen. "
+            "Vermeide lange Romane, wenn die Frage einfach ist. "
+            "Beantworte die folgende Frage:\n\n" + prompt
     )
     antwort = ""
     last_update = time.monotonic()
