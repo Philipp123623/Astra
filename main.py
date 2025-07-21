@@ -441,6 +441,7 @@ async def chat(ctx, *, prompt: str):
     last_update = time.monotonic()
 
     async with aiohttp.ClientSession() as session:
+        # Initiale Nachricht über Webhook senden
         async with session.post(WEBHOOK_URL, json={"content": "🤖 Ich denke nach..."}) as resp:
             webhook_msg = await resp.json()
             message_id = webhook_msg["id"]
@@ -451,20 +452,18 @@ async def chat(ctx, *, prompt: str):
                 json={"model": "phi3:mini", "prompt": full_prompt, "stream": True}
             ) as resp_stream:
 
-                async for raw_line in resp_stream.content:
+                while True:
+                    raw_line = await resp_stream.content.readline()
+                    if not raw_line:
+                        break
                     line = raw_line.decode().strip()
                     if not line:
                         continue
-                    # Falls "data: " prefix vorhanden, entfernen
-                    if line.startswith("data: "):
-                        line = line[6:]
-                    if line == "[DONE]":
-                        break
-
                     data = json.loads(line)
                     token = data.get("response", "")
                     antwort += token
 
+                    # Embed alle 0.5 Sekunden aktualisieren
                     if time.monotonic() - last_update > 0.5:
                         embed = discord.Embed(
                             title="🤖 KI-Antwort (streaming...)",
@@ -476,14 +475,16 @@ async def chat(ctx, *, prompt: str):
                             name=ctx.author.display_name,
                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
                         )
-
                         await session.patch(
                             f"{WEBHOOK_URL}/messages/{message_id}",
                             json={"embeds": [embed.to_dict()]}
                         )
                         last_update = time.monotonic()
 
-            # Finale Nachricht
+                    if data.get("done", False):
+                        break
+
+            # Finale Nachricht (ohne Cursor)
             embed = discord.Embed(
                 title="🤖 KI-Antwort",
                 description=antwort.strip(),
