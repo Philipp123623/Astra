@@ -431,7 +431,7 @@ bot = Astra()
 WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
 
 logging.basicConfig(
-    level=logging.DEBUG,  # Setze DEBUG für sehr detaillierte Logs
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
@@ -444,6 +444,7 @@ async def chat(ctx, *, prompt: str):
     )
     antwort = ""
     last_update = time.monotonic()
+    start_time = time.monotonic()
 
     logging.debug(f"Chat command gestartet mit Prompt: {prompt}")
 
@@ -458,7 +459,6 @@ async def chat(ctx, *, prompt: str):
                 webhook_msg = await resp.json()
                 message_id = webhook_msg.get("id")
             except Exception:
-                # Discord gibt bei manchen POSTs 204 No Content ohne JSON zurück
                 message_id = None
 
         try:
@@ -491,13 +491,15 @@ async def chat(ctx, *, prompt: str):
                         logging.error(f"Fehler beim Parsen der Daten: {e} -- Line: {line}")
                         continue
 
-                    if time.monotonic() - last_update > 0.5 and message_id:
+                    now = time.monotonic()
+                    if now - last_update > 0.5 and message_id:
+                        elapsed = now - start_time
                         embed = discord.Embed(
                             title="🤖 KI-Antwort (streaming...)",
                             description=antwort + "▌",
                             colour=discord.Colour.blue()
                         )
-                        embed.set_footer(text="Astra Bot | Powered by Ollama")
+                        embed.set_footer(text=f"Astra Bot | Powered by Ollama | Laufzeit: {elapsed:.1f}s")
                         embed.set_author(
                             name=ctx.author.display_name,
                             icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
@@ -506,16 +508,17 @@ async def chat(ctx, *, prompt: str):
                             f"{WEBHOOK_URL}/messages/{message_id}",
                             json={"embeds": [embed.to_dict()]}
                         )
-                        last_update = time.monotonic()
+                        last_update = now
 
             # Finale Embed-Nachricht
             if message_id:
+                elapsed = time.monotonic() - start_time
                 embed = discord.Embed(
                     title="🤖 KI-Antwort",
                     description=antwort.strip(),
                     colour=discord.Colour.blue()
                 )
-                embed.set_footer(text="Astra Bot | Powered by Ollama")
+                embed.set_footer(text=f"Astra Bot | Powered by Ollama | Gesamtzeit: {elapsed:.1f}s")
                 embed.set_author(
                     name=ctx.author.display_name,
                     icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
@@ -525,7 +528,6 @@ async def chat(ctx, *, prompt: str):
                     json={"content": None, "embeds": [embed.to_dict()]}
                 )
             else:
-                # Fallback, falls keine Message ID
                 await ctx.send(antwort.strip())
 
             logging.debug("Fertig.")
