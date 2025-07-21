@@ -429,11 +429,12 @@ bot = Astra()
 
 @bot.command()
 async def chat(ctx, *, prompt: str):
-    thinking_msg = await ctx.send("💬 _Ich denke nach..._")
+    thinking_msg = await ctx.send("🧠 Denke nach…")
 
     try:
-        full_prompt = "Du bist ein hilfreicher Assistent, der nur auf Deutsch antwortet.\n" + prompt
+        full_prompt = "Antworte auf Deutsch:\n" + prompt
         antwort = ""
+        last_update = time.monotonic()
 
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", "http://localhost:11434/api/generate", json={
@@ -443,16 +444,18 @@ async def chat(ctx, *, prompt: str):
             }) as response:
 
                 async for line in response.aiter_lines():
-                    if line.strip():
-                        data = json.loads(line)
-                        token = data.get("response", "")
-                        antwort += token
+                    if not line.strip():
+                        continue
+                    data = json.loads(line)
+                    token = data.get("response", "")
+                    antwort += token
 
-                        # Optional: nur jede 0.5 Sekunde updaten
+                    # Nur alle 0.4 Sekunden editieren
+                    if time.monotonic() - last_update > 0.4:
                         await thinking_msg.edit(content=antwort + "▌")
-                        await asyncio.sleep(0.05)  # nicht zu schnell updaten
+                        last_update = time.monotonic()
 
-        # Finales Embed
+        # Finales Ergebnis schicken
         embed = discord.Embed(
             title="🤖 KI-Antwort",
             description=antwort.strip(),
@@ -465,6 +468,7 @@ async def chat(ctx, *, prompt: str):
 
     except Exception as e:
         await thinking_msg.edit(content=f"❌ Fehler: {e}")
+
 
 @bot.event
 async def on_dbl_vote(data):
