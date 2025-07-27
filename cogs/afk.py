@@ -28,7 +28,7 @@ class afk(commands.Cog):
                 if result:
                     pinguser = result
                     for eintrag in result:
-                    	memberID = eintrag[0]
+                        memberID = eintrag[0]
                     await cursor.execute(f"SELECT time FROM afk WHERE userID = {memberID}")
                     result3 = await cursor.fetchone()
                     time = result3[0]
@@ -101,7 +101,7 @@ class afk(commands.Cog):
 
                     if interaction.user.id != interaction.guild.owner_id:
                         try:
-                        	await interaction.user.edit(nick='AFK | {}'.format(interaction.user.display_name),
+                            await interaction.user.edit(nick='AFK | {}'.format(interaction.user.display_name),
                                                     reason='Member gone AFK')
                         except:
                             pass

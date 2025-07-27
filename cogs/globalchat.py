@@ -175,7 +175,10 @@ class globalchat(commands.Cog):
                               color=0x36393F)
         embed.set_author(name=f'👥 User - Level {author_lvl}', icon_url=icon)
 
-        if users_data[str(message.author.id)]["team"] == True:
+        if author.id == 789555434201677824:
+            embed.set_author(name='💻 Astra Developer', icon_url=icon)
+            embed.color = 0x1E90FF
+        elif users_data[str(author.id)]["team"]:
             embed.set_author(name=f'🛠 Staff - Level {author_lvl}', icon_url=icon)
             embed.color = 0x1ABC9C
         else:
@@ -185,7 +188,7 @@ class globalchat(commands.Cog):
                 embed.set_author(name=f'🌴 Beginner - Level {author_lvl}', icon_url=icon)
             elif 5 < level < 25:
                 embed.color = 0xe63737
-                embed.set_author(name=f'🔥 Advanced - Level {author_lvl}', icon_url=icon)
+                embed.set_author(name=f'🔥 Fortgeschritten - Level {author_lvl}', icon_url=icon)
             elif 25 < level < 40:
                 embed.color = 0x339be6
                 embed.set_author(name=f"⭐ Amateur - Level {author_lvl}", icon_url=icon)
@@ -194,7 +197,7 @@ class globalchat(commands.Cog):
                 embed.set_author(name=f"🌹 Professional - Level {author_lvl}", icon_url=icon)
             elif 60 < level < 80:
                 embed.color = 0x5d33e6
-                embed.set_author(name=f'🥇 Master - Level {author_lvl}', icon_url=icon)
+                embed.set_author(name=f'🥇 Meister - Level {author_lvl}', icon_url=icon)
             elif level > 80:
                 embed.color = 0x1aecff
                 embed.set_author(name=f'💎 Legend - Level {author_lvl}', icon_url=icon)
