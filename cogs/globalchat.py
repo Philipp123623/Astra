@@ -227,17 +227,8 @@ class globalchat(commands.Cog):
         icon_url = message.guild.icon.url if message.guild.icon else "https://cdn.icon-icons.com/icons2/2108/PNG/512/discord_icon_130958.png"
         embed.set_thumbnail(url=icon_url)
 
-        ASTRA_SUPPORT_GUILD_ID = 1141116981697859736  # Deine Server-ID hier eintragen
-
-        if message.guild.id == ASTRA_SUPPORT_GUILD_ID:
-            online = sum(1 for m in message.guild.members if str(m.status) == 'online')
-            embed.set_footer(
-                text=f"{message.guild.name} (🔋{online} - 👥{len([m for m in message.guild.members if not m.bot])} - 🤖{len([m for m in message.guild.members if m.bot])})\n📦 › Hier bekommst du Hilfe zu Astra, kannst Bugs melden oder neue Features vorschlagen", icon_url=icon_url)
-        else:
-            online = sum(1 for m in message.guild.members if str(m.status) == 'online')
-            embed.set_footer(
-                text=f'{message.guild.name} (🔋{online} - 👥{len([m for m in message.guild.members if not m.bot])} - 🤖{len([m for m in message.guild.members if m.bot])})',
-                icon_url=icon_url)
+        online = sum(1 for m in message.guild.members if str(m.status) == 'online')
+        embed.set_footer(text=f'{message.guild.name} (🔋{online} - 👥{len([m for m in message.guild.members if not m.bot])} - 🤖{len([m for m in message.guild.members if m.bot])})', icon_url=icon_url)
 
         links = f'<:Astra_user:1141303940365959241> [Invite](https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=1899359446&scope=bot%20applications.commands) ║ '
         globalchat = await get_globalChat(message.guild.id, self.bot.pool, message.channel.id)
