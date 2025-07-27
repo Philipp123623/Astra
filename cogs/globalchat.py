@@ -239,7 +239,24 @@ class globalchat(commands.Cog):
         embed.add_field(name='Links', value=links, inline=False)
 
         if attachments:
-            embed.set_image(url=attachments[0].url)
+            allowed_extensions = ['.jpg', '.jpeg', '.png', '.gif']
+            valid_attachments = [
+                attachment for attachment in attachments
+                if any(attachment.filename.lower().endswith(ext) for ext in allowed_extensions)
+            ]
+
+            if valid_attachments:
+                embed.set_image(url=valid_attachments[0].url)
+            else:
+                await message.reply(
+                    embed=discord.Embed(
+                        description="<:Astra_x:1141303954555289600> **Ungültiges Bild-Format**: Bilder können nur im **PNG, JPEG oder GIF-Format** versendet werden! 🧊",
+                        color=0xF44D4D
+                    ),
+                    mention_author=False
+                )
+                await message.delete()
+                return
 
         if author.id in slowmode:
             await message.delete()
