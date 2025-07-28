@@ -24,11 +24,36 @@ import aiohttp
 import datetime
 from typing import Literal
 
+import re
+
+
 
 logging.basicConfig(
     level=logging.INFO,  # oder DEBUG für mehr Details
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+def find_translatable_strings(path):
+    string_regex = re.compile(r'["\'](.*?)["\']')
+    translatable = []
+
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(".py"):
+                with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                    content = f.read()
+                    matches = string_regex.findall(content)
+                    for match in matches:
+                        if any(word in match.lower() for word in ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
+                            translatable.append(match)
+
+    return translatable
+
+# Beispiel aufrufen
+strings = find_translatable_strings(".")
+logging.info(f"{len(strings)} Strings gefunden:")
+for s in strings:
+    logging.info("-", s)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -1655,13 +1680,66 @@ async def sync(ctx, serverid: int = None):
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
 
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.NotOwner):
-        embed = discord.Embed(title="Not Owner", description="❌ You must be a Bot Owner to run this command.",
-                              colour=discord.Colour.red())
-        embed.set_author(name=ctx.author, icon_url=ctx.author.avatar)
-        await ctx.send(embed=embed)
+# Slash-Command Fehlerbehandlung
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    embed = discord.Embed(colour=discord.Colour.red())
+    embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
+
+    if isinstance(error, app_commands.MissingPermissions):
+        embed.title = "Fehlende Berechtigungen"
+        embed.description = "❌ Du hast nicht die nötigen Berechtigungen, um diesen Befehl zu verwenden."
+
+    elif isinstance(error, app_commands.BotMissingPermissions):
+        embed.title = "Bot hat keine Berechtigung"
+        embed.description = "❌ Ich habe nicht die nötigen Berechtigungen, um diesen Befehl auszuführen."
+
+    elif isinstance(error, app_commands.CommandOnCooldown):
+        embed.title = "Cooldown aktiv"
+        embed.description = f"⏳ Bitte warte noch {round(error.retry_after, 2)} Sekunden, bevor du diesen Befehl erneut verwendest."
+
+    elif isinstance(error, app_commands.CommandNotFound):
+        embed.title = "Unbekannter Befehl"
+        embed.description = "❌ Dieser Slash-Command wurde nicht gefunden."
+
+    elif isinstance(error, app_commands.CheckFailure):
+        embed.title = "Zugriff verweigert"
+        embed.description = "❌ Du erfüllst nicht die Voraussetzungen für diesen Befehl."
+
+    elif isinstance(error, app_commands.MissingRole):
+        embed.title = "Fehlende Rolle"
+        embed.description = "❌ Du brauchst eine bestimmte Rolle, um diesen Befehl zu benutzen."
+
+    elif isinstance(error, app_commands.MissingAnyRole):
+        embed.title = "Fehlende Rollen"
+        embed.description = "❌ Du brauchst mindestens eine der benötigten Rollen."
+
+    elif isinstance(error, app_commands.errors.TransformerError):
+        embed.title = "Ungültige Eingabe"
+        embed.description = "❌ Die eingegebenen Argumente sind ungültig oder konnten nicht umgewandelt werden."
+
+    else:
+        # Unbekannter Fehler – an Log-Channel senden
+        embed.title = "Unbekannter Fehler"
+        embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt."
+
+        # Fehler an Log-Channel senden
+        log_channel = bot.get_channel(1141116983815962819)
+        if log_channel:
+            error_embed = discord.Embed(title="SlashCommand Error", colour=discord.Colour.red())
+            error_embed.add_field(name="User", value=f"{interaction.user} ({interaction.user.id})", inline=False)
+            error_embed.add_field(name="Command", value=str(interaction.command), inline=False)
+            error_embed.add_field(name="Error", value=f"```{str(error)}```", inline=False)
+            await log_channel.send(embed=error_embed)
+
+    # Versuche Antwort zu senden
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+    except discord.InteractionResponded:
+        pass
 
 
 async def main():
