@@ -433,27 +433,39 @@ class Astra(commands.Bot):
         string_regex = re.compile(r'["\'](.*?)["\']')
         translatable = []
 
-        for root, dirs, files in os.walk(path):
-            for file in files:
-                if file.endswith(".py"):
-                    with open(os.path.join(root, file), "r", encoding="utf-8") as f:
-                        content = f.read()
-                        matches = string_regex.findall(content)
-                        for match in matches:
-                            if any(word in match.lower() for word in
-                                   ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
-                                translatable.append(match)
+        # Ordner cogs durchsuchen
+        cogs_path = os.path.join(path, "cogs")
+        if os.path.exists(cogs_path):
+            for root, dirs, files in os.walk(cogs_path):
+                for file in files:
+                    if file.endswith(".py"):
+                        with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                            content = f.read()
+                            matches = string_regex.findall(content)
+                            for match in matches:
+                                if any(word in match.lower() for word in
+                                       ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
+                                    translatable.append(match)
+
+        # main.py separat prüfen
+        main_py_path = os.path.join(path, "main.py")
+        if os.path.isfile(main_py_path):
+            with open(main_py_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                matches = string_regex.findall(content)
+                for match in matches:
+                    if any(word in match.lower() for word in
+                           ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
+                        translatable.append(match)
 
         return translatable
 
-    # Beispiel aufrufen
-    strings = find_translatable_strings(".")
-    logging.info(f"{len(strings)} Strings gefunden:")
-    for s in strings:
-        logging.info(f"- {s}")
-
 
 bot = Astra()
+
+# Beispielaufruf
+strings = Astra.find_translatable_strings(".")
+logging.info(f"Insgesamt {len(strings)} Strings gefunden.")
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
 
