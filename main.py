@@ -33,28 +33,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-def find_translatable_strings(path):
-    string_regex = re.compile(r'["\'](.*?)["\']')
-    translatable = []
-
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            if file.endswith(".py"):
-                with open(os.path.join(root, file), "r", encoding="utf-8") as f:
-                    content = f.read()
-                    matches = string_regex.findall(content)
-                    for match in matches:
-                        if any(word in match.lower() for word in ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
-                            translatable.append(match)
-
-    return translatable
-
-# Beispiel aufrufen
-strings = find_translatable_strings(".")
-logging.info(f"{len(strings)} Strings gefunden:")
-for s in strings:
-    logging.info(f"- {s}")
-
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -449,6 +427,29 @@ class Astra(commands.Bot):
             embed.set_thumbnail(url=msg.guild.icon)
             await msg.channel.send(embed=embed)
             await bot.process_commands(msg)
+
+    async def find_translatable_strings(self, path):
+        string_regex = re.compile(r'["\'](.*?)["\']')
+        translatable = []
+
+        for root, dirs, files in os.walk(path):
+            for file in files:
+                if file.endswith(".py"):
+                    with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                        content = f.read()
+                        matches = string_regex.findall(content)
+                        for match in matches:
+                            if any(word in match.lower() for word in
+                                   ["du", "bitte", "nicht", "kannst", "coin", "rolle", "hilfe", "server"]):
+                                translatable.append(match)
+
+        return translatable
+
+    # Beispiel aufrufen
+    strings = find_translatable_strings(".")
+    logging.info(f"{len(strings)} Strings gefunden:")
+    for s in strings:
+        logging.info(f"- {s}")
 
 
 bot = Astra()
