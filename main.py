@@ -428,7 +428,8 @@ class Astra(commands.Bot):
             await msg.channel.send(embed=embed)
             await bot.process_commands(msg)
 
-    async def find_translatable_strings(self, path):
+    @staticmethod
+    def find_translatable_strings(path):
         string_regex = re.compile(r'["\'](.*?)["\']')
         translatable = []
 
