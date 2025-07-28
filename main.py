@@ -53,7 +53,7 @@ def find_translatable_strings(path):
 strings = find_translatable_strings(".")
 logging.info(f"{len(strings)} Strings gefunden:")
 for s in strings:
-    logging.info("-", s)
+    logging.info(f"- {s}")
 
 intents = discord.Intents.default()
 intents.message_content = True
