@@ -71,7 +71,7 @@ class DevTools(commands.Cog):
             self.bot.load_extension(cog)
             await ctx.send(f"Cog `{cog}` geladen.")
         except Exception as e:
-            await ctx.send(f"Fehler beim Laden:\n```py\n{e}```")
+            await ctx.send(f"Fehler beim Laden des Cogs {cog}:\n```py\n{e}```")
 
     @commands.command(name="unload")
     @commands.is_owner()
@@ -81,7 +81,7 @@ class DevTools(commands.Cog):
             self.bot.unload_extension(cog)
             await ctx.send(f"Cog `{cog}` entladen.")
         except Exception as e:
-            await ctx.send(f"Fehler beim Entladen:\n```py\n{e}```")
+            await ctx.send(f"Fehler beim Entladen des Cogs {cog}:\n```py\n{e}```")
 
     @commands.command(name="reload")
     @commands.is_owner()
@@ -91,7 +91,7 @@ class DevTools(commands.Cog):
             self.bot.reload_extension(cog)
             await ctx.send(f"Cog `{cog}` neu geladen.")
         except Exception as e:
-            await ctx.send(f"Fehler beim Neuladen:\n```py\n{e}```")
+            await ctx.send(f"Fehler beim Neuladen des Cogs {cog}:\n```py\n{e}```")
 
     @commands.command(name="source")
     @commands.is_owner()
