@@ -26,6 +26,7 @@ class DevTools(commands.Cog):
         return output
 
     @commands.command(name="eval")
+    @commands.is_owner()
     async def eval_code(self, ctx, *, code: str):
         """Führt Python-Code aus."""
         self.commands_run += 1
@@ -48,6 +49,7 @@ class DevTools(commands.Cog):
         await ctx.send(f"```py\n{self.format_output(output)}```")
 
     @commands.command(name="shell")
+    @commands.is_owner()
     async def shell_command(self, ctx, *, command: str):
         """Führt Shell-Befehl aus."""
         self.commands_run += 1
@@ -62,6 +64,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Exception: {e}")
 
     @commands.command(name="load")
+    @commands.is_owner()
     async def load_cog(self, ctx, cog: str):
         self.commands_run += 1
         try:
@@ -71,6 +74,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Fehler beim Laden:\n```py\n{e}```")
 
     @commands.command(name="unload")
+    @commands.is_owner()
     async def unload_cog(self, ctx, cog: str):
         self.commands_run += 1
         try:
@@ -80,6 +84,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Fehler beim Entladen:\n```py\n{e}```")
 
     @commands.command(name="reload")
+    @commands.is_owner()
     async def reload_cog(self, ctx, cog: str):
         self.commands_run += 1
         try:
@@ -89,6 +94,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Fehler beim Neuladen:\n```py\n{e}```")
 
     @commands.command(name="source")
+    @commands.is_owner()
     async def source(self, ctx, *, command_name: str = None):
         """Zeigt den Quellcode eines Slash-Commands oder des gesamten Cogs."""
         self.commands_run += 1
@@ -122,6 +128,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Fehler beim Abrufen des Quellcodes: {e}")
 
     @commands.command(name="memory")
+    @commands.is_owner()
     async def memory(self, ctx):
         """Zeigt Speicherverbrauch des Bots."""
         self.commands_run += 1
@@ -133,6 +140,7 @@ class DevTools(commands.Cog):
             await ctx.send(f"Fehler: {e}")
 
     @commands.command(name="stats")
+    @commands.is_owner()
     async def stats(self, ctx):
         """Zeigt ein paar Bot-Statistiken."""
         self.commands_run += 1
@@ -145,14 +153,8 @@ class DevTools(commands.Cog):
         embed.set_footer(text=f"Deine ID: {self.owner_id}")
         await ctx.send(embed=embed)
 
-    @commands.command(name="ping")
-    async def ping(self, ctx):
-        """Zeigt die Latenz."""
-        self.commands_run += 1
-        latency = round(self.bot.latency * 1000)
-        await ctx.send(f"Pong! Latenz: {latency}ms")
-
     @commands.command(name="restart")
+    @commands.is_owner()
     async def restart(self, ctx):
         """Startet den Bot-Service neu via systemctl."""
         await ctx.send("🔁 Starte Bot-Service neu...")
@@ -161,6 +163,7 @@ class DevTools(commands.Cog):
         await self.bot.close()
 
     @commands.command(name="logs")
+    @commands.is_owner()
     async def logs(self, ctx, lines: int = 20):
         """Zeigt die letzten X Zeilen des systemd-Service-Logs."""
         proc = subprocess.run(
@@ -178,19 +181,32 @@ class DevTools(commands.Cog):
         """Führt git pull im /root/Astra Verzeichnis aus."""
         await ctx.send("🔄 Ziehe Updates vom Git-Repo in /root/Astra...")
 
-        proc = subprocess.run(
-            "cd /root/Astra && /usr/bin/git pull",  # <-- absoluter Pfad zu git
-            shell=True,
-            capture_output=True,
-            text=True
-        )
+        try:
+            proc = subprocess.run(
+                "/usr/bin/git -C /root/Astra pull",
+                shell=True,
+                capture_output=True,
+                text=True,
+                executable="/bin/bash",
+                timeout=15  # optional: damit es nicht ewig hängt
+            )
 
-        output = proc.stdout + proc.stderr
-        if len(output) > 1900:
-            output = output[:1900] + "\n... (gekürzt)"
-        await ctx.send(f"```bash\n{output}```")
+            output = proc.stdout + proc.stderr
+            if not output.strip():
+                output = "⚠️ Keine Ausgabe von `git pull` erhalten."
+
+            if len(output) > 1900:
+                output = output[:1900] + "\n... (gekürzt)"
+
+            await ctx.send(f"```bash\n{output}```")
+
+        except subprocess.TimeoutExpired:
+            await ctx.send("⏱️ `git pull` hat zu lange gedauert und wurde abgebrochen.")
+        except Exception as e:
+            await ctx.send(f"❌ Fehler beim Ausführen von `git pull`: `{e}`")
 
     @commands.command(name="sysinfo")
+    @commands.is_owner()
     async def sysinfo(self, ctx):
         """Zeigt CPU- und RAM-Auslastung des Servers."""
         cpu = psutil.cpu_percent(interval=1)
