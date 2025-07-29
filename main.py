@@ -725,7 +725,6 @@ async def on_ready():
                     channelCount INT
                 )
             """)
-            await conn.commit()
 
             # Prüfen, ob Zeile mit id=1 existiert
             await cur.execute("SELECT id FROM website_stats WHERE id=1")
@@ -743,7 +742,6 @@ async def on_ready():
                     "UPDATE website_stats SET servercount=%s, usercount=%s, commandCount=%s, channelCount=%s WHERE id=1",
                     (servercount, usercount, commandCount, channelCount)
                 )
-            await conn.commit()
 
             # Dein bisheriger Präsenz- und Command-Teil
             await bot.change_presence(
