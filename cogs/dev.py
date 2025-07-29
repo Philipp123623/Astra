@@ -47,6 +47,32 @@ class CodeScroller(discord.ui.View):
         else:
             await interaction.response.defer()
 
+def find_app_command(bot, name: str):
+    """
+    Sucht nach einem App-Command (auch Subcommand!), z.B. 'levelsystem rank'
+    """
+    name = name.replace("/", " ").replace(".", " ").strip().lower()
+
+    def gather(cmd, parent=""):
+        results = []
+        qn = (parent + " " + cmd.name).strip()
+        if hasattr(cmd, "commands") and cmd.commands:
+            for sub in cmd.commands:
+                results += gather(sub, qn)
+        else:
+            results.append((qn.lower(), cmd))
+        return results
+
+    # Alle globalen Commands durchsuchen
+    all_cmds = bot.tree.get_commands()
+    commands = []
+    for cmd in all_cmds:
+        commands += gather(cmd)
+    # Suchen
+    for qname, cmd in commands:
+        if qname == name:
+            return cmd
+    return None
 
 class DevTools(commands.Cog):
     def __init__(self, bot, owner_id):
@@ -134,9 +160,7 @@ class DevTools(commands.Cog):
     @commands.command(name="source")
     @commands.is_owner()
     async def source(self, ctx, *, command_name: str = None):
-        """Zeigt den Quellcode eines Slash-Commands oder des gesamten Cogs."""
-        self.commands_run += 1
-
+        """Zeigt den Quellcode eines Slash-Commands (auch Subcommands wie /levelsystem rank) oder des gesamten Cogs."""
         if command_name is None:
             # Quellcode des gesamten Cogs anzeigen
             try:
@@ -152,13 +176,7 @@ class DevTools(commands.Cog):
                 await ctx.send(f"Fehler: {e}")
             return
 
-        # Slash-Command suchen im bot.tree
-        cmd = None
-        for command in self.bot.tree.get_commands():
-            if command.name == command_name:
-                cmd = command
-                break
-
+        cmd = find_app_command(self.bot, command_name)
         if not cmd:
             await ctx.send(f"Slash Command `{command_name}` nicht gefunden.")
             return
