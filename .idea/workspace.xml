@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/cogs/dev.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/dev.py" afterDir="false" />
-    </list>
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -164,7 +162,7 @@
       <workItem from="1753709690893" duration="3135000" />
       <workItem from="1753762105575" duration="6022000" />
       <workItem from="1753785424739" duration="741000" />
-      <workItem from="1753802170454" duration="3406000" />
+      <workItem from="1753802170454" duration="3743000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />
