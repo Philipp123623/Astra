@@ -325,7 +325,6 @@ class DevTools(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    # Ersetze hier deine User-ID!
     owner_id = 789555434201677824
     bot.add_view(CodeScroller(ctx=None, code_chunks=["Dummy"]))
     await bot.add_cog(DevTools(bot, owner_id))

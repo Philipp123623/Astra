@@ -464,9 +464,6 @@ class Astra(commands.Bot):
 
 bot = Astra()
 
-# Beispielaufruf
-strings = Astra.find_translatable_strings(".")
-logging.info(f"Insgesamt {len(strings)} Strings gefunden.")
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
 
