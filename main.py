@@ -706,11 +706,28 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     await msg.add_reaction(heart)
 
+def all_app_commands(bot):
+    global_commands = bot.tree.get_commands()
+    from itertools import chain
+    guild_commands = chain.from_iterable(bot.tree._guild_commands.values())
+    all_commands = list(global_commands) + list(guild_commands)
+    # Optional unique machen:
+    seen = set()
+    unique = []
+    for cmd in all_commands:
+        sig = (cmd.name, getattr(cmd, "type", None))
+        if sig not in seen:
+            seen.add(sig)
+            unique.append(cmd)
+    return unique
+
+
+
 @bot.event
 async def on_ready():
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
-    commandCount = len(bot.tree.get_commands())  # <-- Hier!
+    commandCount = len(all_app_commands(bot))
     channelCount = sum(len(guild.channels) for guild in bot.guilds)
 
     async with bot.pool.acquire() as conn:
