@@ -715,6 +715,7 @@ async def on_ready():
 
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
+            await cur.execute("DROP TABLE website_stats;")
             # Tabelle erstellen, falls sie noch nicht existiert
             await cur.execute("""
                 CREATE TABLE IF NOT EXISTS website_stats (
