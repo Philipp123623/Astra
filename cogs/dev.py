@@ -10,9 +10,19 @@ import io
 import asyncio
 import time
 
-def chunk_code(source, chunk_size=1900):
-    """Teilt Code in Discord-gerechte Stücke auf."""
-    return [source[i:i+chunk_size] for i in range(0, len(source), chunk_size)]
+def chunk_code_lines(source, chunk_size=1900):
+    lines = source.splitlines(keepends=True)
+    chunks = []
+    current = ""
+    for line in lines:
+        if len(current) + len(line) > chunk_size:
+            chunks.append(current)
+            current = ""
+        current += line
+    if current:
+        chunks.append(current)
+    return chunks
+
 
 class CodeScroller(discord.ui.View):
     def __init__(self, ctx, code_chunks, current=0):
@@ -162,16 +172,15 @@ class DevTools(commands.Cog):
     async def source(self, ctx, *, command_name: str = None):
         """Zeigt den Quellcode eines Slash-Commands (auch Subcommands wie /levelsystem rank) oder des gesamten Cogs."""
         if command_name is None:
-            # Quellcode des gesamten Cogs anzeigen
             try:
                 source = inspect.getsource(self.__class__)
-                code_chunks = chunk_code(source)
+                code_chunks = chunk_code_lines(source)
                 if len(code_chunks) == 1:
-                    await ctx.send(f"```py\n{code_chunks[0]}```")
+                    await ctx.send(f"```python\n{code_chunks[0]}```")
                 else:
                     view = CodeScroller(ctx, code_chunks)
                     await ctx.send(
-                        f"```py\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
+                        f"```python\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
             except Exception as e:
                 await ctx.send(f"Fehler: {e}")
             return
@@ -183,13 +192,13 @@ class DevTools(commands.Cog):
 
         try:
             source = inspect.getsource(cmd.callback)
-            code_chunks = chunk_code(source)
+            code_chunks = chunk_code_lines(source)
             if len(code_chunks) == 1:
-                await ctx.send(f"```py\n{code_chunks[0]}```")
+                await ctx.send(f"```python\n{code_chunks[0]}```")
             else:
                 view = CodeScroller(ctx, code_chunks)
                 await ctx.send(
-                    f"```py\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
+                    f"```python\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
         except Exception as e:
             await ctx.send(f"Fehler beim Abrufen des Quellcodes: {e}")
 
