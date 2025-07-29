@@ -163,6 +163,7 @@ class DevTools(commands.Cog):
         await self.bot.close()
 
     @commands.command(name="logs")
+    @commands.is_owner()
     async def logs(self, ctx, live: bool = False):
         """
         Zeigt Logs an.
@@ -211,6 +212,7 @@ class DevTools(commands.Cog):
                     await process.wait()
 
     @commands.command(name="update")
+    @commands.is_owner()
     async def update(self, ctx):
         """Führt git pull im /root/Astra Verzeichnis aus."""
         await ctx.send("Ziehe Updates vom Git-Repo in /root/Astra...")
