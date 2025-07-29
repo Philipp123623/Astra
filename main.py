@@ -405,7 +405,7 @@ class Astra(commands.Bot):
                 logging.info(f"✅ Erfolgreich geladen: {ext}")
             except Exception:
                 fehler += 1
-                logging.error(f'❌ Fehler beim Laden von: {ext}', file=sys.stderr)
+                logging.error(f'❌ Fehler beim Laden von: {ext}')
                 traceback.print_exc()
                 logging.info('---------------------------------------------')
 
