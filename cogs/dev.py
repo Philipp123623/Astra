@@ -26,7 +26,7 @@ def chunk_code_lines(source, chunk_size=1900):
 
 class CodeScroller(discord.ui.View):
     def __init__(self, ctx, code_chunks):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)
         self.ctx = ctx
         self.code_chunks = code_chunks
         self.current = 0
