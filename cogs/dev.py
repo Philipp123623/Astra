@@ -173,16 +173,18 @@ class DevTools(commands.Cog):
         await ctx.send(f"```bash\n{output}```")
 
     @commands.command(name="update")
+    @commands.is_owner()
     async def update(self, ctx):
         """Führt git pull im /root/Astra Verzeichnis aus."""
-        await ctx.send("Ziehe Updates vom Git-Repo in /root/Astra...")
-        # cd /root/Astra && git pull
+        await ctx.send("🔄 Ziehe Updates vom Git-Repo in /root/Astra...")
+
         proc = subprocess.run(
-            "cd /root/Astra && git pull",
+            "cd /root/Astra && /usr/bin/git pull",  # <-- absoluter Pfad zu git
             shell=True,
             capture_output=True,
             text=True
         )
+
         output = proc.stdout + proc.stderr
         if len(output) > 1900:
             output = output[:1900] + "\n... (gekürzt)"
