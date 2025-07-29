@@ -164,7 +164,7 @@ class DevTools(commands.Cog):
     async def logs(self, ctx, lines: int = 20):
         """Zeigt die letzten X Zeilen des systemd-Service-Logs."""
         proc = subprocess.run(
-            ["journalctl", "-u", "astrabot.service", f"-n{lines}", "--no-pager"],
+            ["/bin/journalctl", "-u", "astrabot.service", f"-n{lines}", "--no-pager"],
             capture_output=True, text=True
         )
         output = proc.stdout
