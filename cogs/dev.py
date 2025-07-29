@@ -10,6 +10,44 @@ import io
 import asyncio
 import time
 
+def chunk_code(source, chunk_size=1900):
+    """Teilt Code in Discord-gerechte Stücke auf."""
+    return [source[i:i+chunk_size] for i in range(0, len(source), chunk_size)]
+
+class CodeScroller(discord.ui.View):
+    def __init__(self, ctx, code_chunks, current=0):
+        super().__init__(timeout=None)  # << persistent!
+        self.ctx = ctx
+        self.code_chunks = code_chunks
+        self.current = current
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message("Nur der Owner darf hier blättern!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, custom_id="source_prev")
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current > 0:
+            self.current -= 1
+            await interaction.response.edit_message(
+                content=f"```py\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
+                view=self)
+        else:
+            await interaction.response.defer()
+
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, custom_id="source_next")
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current < len(self.code_chunks) - 1:
+            self.current += 1
+            await interaction.response.edit_message(
+                content=f"```py\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
+                view=self)
+        else:
+            await interaction.response.defer()
+
+
 class DevTools(commands.Cog):
     def __init__(self, bot, owner_id):
         self.bot = bot
@@ -103,7 +141,13 @@ class DevTools(commands.Cog):
             # Quellcode des gesamten Cogs anzeigen
             try:
                 source = inspect.getsource(self.__class__)
-                await ctx.send(f"```py\n{source}```")
+                code_chunks = chunk_code(source)
+                if len(code_chunks) == 1:
+                    await ctx.send(f"```py\n{code_chunks[0]}```")
+                else:
+                    view = CodeScroller(ctx, code_chunks)
+                    await ctx.send(
+                        f"```py\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
             except Exception as e:
                 await ctx.send(f"Fehler: {e}")
             return
@@ -121,9 +165,13 @@ class DevTools(commands.Cog):
 
         try:
             source = inspect.getsource(cmd.callback)
-            if len(source) > 1900:
-                source = source[:1900] + "\n# ... (gekürzt)"
-            await ctx.send(f"```py\n{source}```")
+            code_chunks = chunk_code(source)
+            if len(code_chunks) == 1:
+                await ctx.send(f"```py\n{code_chunks[0]}```")
+            else:
+                view = CodeScroller(ctx, code_chunks)
+                await ctx.send(
+                    f"```py\n{code_chunks[0]}```\nSeite 1/{len(code_chunks)}", view=view)
         except Exception as e:
             await ctx.send(f"Fehler beim Abrufen des Quellcodes: {e}")
 
@@ -245,4 +293,5 @@ class DevTools(commands.Cog):
 async def setup(bot: commands.Bot) -> None:
     # Ersetze hier deine User-ID!
     owner_id = 789555434201677824
+    bot.add_view(CodeScroller(ctx=None, code_chunks=["Dummy"]))
     await bot.add_cog(DevTools(bot, owner_id))
