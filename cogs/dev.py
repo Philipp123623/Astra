@@ -163,17 +163,52 @@ class DevTools(commands.Cog):
         await self.bot.close()
 
     @commands.command(name="logs")
-    @commands.is_owner()
-    async def logs(self, ctx, lines: int = 20):
-        """Zeigt die letzten X Zeilen des systemd-Service-Logs."""
-        proc = subprocess.run(
-            ["/bin/journalctl", "-u", "astrabot.service", f"-n{lines}", "--no-pager"],
-            capture_output=True, text=True
-        )
-        output = proc.stdout
-        if len(output) > 1900:
-            output = output[-1900:]  # letzte 1900 Zeichen
-        await ctx.send(f"```bash\n{output}```")
+    async def logs(self, ctx, live: bool = False):
+        """
+        Zeigt Logs an.
+        live=True -> live stream mit Nachricht bearbeiten.
+        live=False -> einmaligen Output senden.
+        """
+        if not live:
+            # Einmaligen Log-Output holen (z.B. 50 Zeilen)
+            proc = await asyncio.create_subprocess_exec(
+                "/usr/bin/journalctl", "-u", "astrabot.service", "-n", "50",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            output = stdout.decode() + stderr.decode()
+            if len(output) > 1900:
+                output = output[-1900:]  # letzten 1900 Zeichen
+            await ctx.send(f"```bash\n{output}```")
+        else:
+            # Live-Streaming starten
+            message = await ctx.send("Starte Live-Log-Stream...")
+
+            process = await asyncio.create_subprocess_exec(
+                "/usr/bin/journalctl", "-u", "astrabot.service", "-f", "-n", "10",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            logs = ""
+            try:
+                async for line in process.stdout:
+                    line_decoded = line.decode("utf-8").rstrip()
+                    logs += line_decoded + "\n"
+
+                    if len(logs) > 1800:
+                        # Nur letzte 10 Zeilen behalten
+                        logs = "\n".join(logs.split("\n")[-10:])
+                    await message.edit(content=f"```bash\n{logs}```")
+                    await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                process.kill()
+                await process.wait()
+            finally:
+                if process.returncode is None:
+                    process.kill()
+                    await process.wait()
 
     @commands.command(name="update")
     async def update(self, ctx):
