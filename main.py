@@ -708,12 +708,51 @@ async def on_dbl_test(data):
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(
-        activity=discord.Game('Astra V2 out now! 💙'),
-        status=discord.Status.online)
-    bot.add_view(gw_button())
-    bot.tree.add_command(Giveaway())
-    bot.tree.add_command(Reminder())
+    servercount = len(bot.guilds)
+    usercount = sum(guild.member_count for guild in bot.guilds)
+    commandCount = len(bot.commands)
+    channelCount = sum(len(guild.channels) for guild in bot.guilds)
+
+    async with bot.pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            # Tabelle erstellen, falls sie noch nicht existiert
+            await cur.execute("""
+                CREATE TABLE IF NOT EXISTS website_stats (
+                    id INT PRIMARY KEY,
+                    servercount INT,
+                    usercount INT,
+                    commandCount INT,
+                    channelCount INT
+                )
+            """)
+            await conn.commit()
+
+            # Prüfen, ob Zeile mit id=1 existiert
+            await cur.execute("SELECT id FROM website_stats WHERE id=1")
+            result = await cur.fetchone()
+
+            if result is None:
+                # Wenn nicht, initialen Datensatz anlegen
+                await cur.execute(
+                    "INSERT INTO website_stats (id, servercount, usercount, commandCount, channelCount) VALUES (1, %s, %s, %s, %s)",
+                    (servercount, usercount, commandCount, channelCount)
+                )
+            else:
+                # Ansonsten updaten
+                await cur.execute(
+                    "UPDATE website_stats SET servercount=%s, usercount=%s, commandCount=%s, channelCount=%s WHERE id=1",
+                    (servercount, usercount, commandCount, channelCount)
+                )
+            await conn.commit()
+
+            # Dein bisheriger Präsenz- und Command-Teil
+            await bot.change_presence(
+                activity=discord.Game('Astra V2 out now! 💙'),
+                status=discord.Status.online
+            )
+            bot.add_view(gw_button())
+            bot.tree.add_command(Giveaway())
+            bot.tree.add_command(Reminder())
 
 
 async def funktion2(when: datetime.datetime):
