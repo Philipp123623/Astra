@@ -710,7 +710,7 @@ async def on_dbl_test(data):
 async def on_ready():
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
-    commandCount = len(bot.commands)
+    commandCount = len(bot.tree.get_commands())  # <-- Hier!
     channelCount = sum(len(guild.channels) for guild in bot.guilds)
 
     async with bot.pool.acquire() as conn:
