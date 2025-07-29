@@ -25,37 +25,44 @@ def chunk_code_lines(source, chunk_size=1900):
 
 
 class CodeScroller(discord.ui.View):
-    def __init__(self, ctx, code_chunks, current=0):
-        super().__init__(timeout=None)  # << persistent!
+    def __init__(self, ctx, code_chunks):
+        super().__init__(timeout=300)
         self.ctx = ctx
         self.code_chunks = code_chunks
-        self.current = current
+        self.current = 0
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Nur Owner darf Buttons benutzen
         if interaction.user.id != self.ctx.author.id:
             await interaction.response.send_message("Nur der Owner darf hier blättern!", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, custom_id="source_prev")
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.current > 0:
             self.current -= 1
             await interaction.response.edit_message(
-                content=f"```py\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
+                content=f"```python\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
                 view=self)
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, custom_id="source_next")
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.current < len(self.code_chunks) - 1:
             self.current += 1
             await interaction.response.edit_message(
-                content=f"```py\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
+                content=f"```python\n{self.code_chunks[self.current]}```\nSeite {self.current+1}/{len(self.code_chunks)}",
                 view=self)
         else:
             await interaction.response.defer()
+
+    @discord.ui.button(label="❌", style=discord.ButtonStyle.danger, row=0)
+    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Löscht die Nachricht sofort
+        await interaction.message.delete()
+        self.stop()
 
 def find_app_command(bot, name: str):
     """
