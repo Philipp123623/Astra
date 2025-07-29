@@ -157,7 +157,7 @@ class DevTools(commands.Cog):
     @commands.is_owner()
     async def restart(self, ctx):
         """Startet den Bot-Service neu via systemctl."""
-        await ctx.send("🔁 Starte Bot-Service neu...")
+        await ctx.send("🔁 Astra wird neugestartet...")
         # Starte den Service neu über den absoluten Pfad
         subprocess.Popen(["/usr/bin/systemctl", "restart", "astrabot.service"])
         await self.bot.close()
