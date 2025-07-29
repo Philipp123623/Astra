@@ -176,34 +176,21 @@ class DevTools(commands.Cog):
         await ctx.send(f"```bash\n{output}```")
 
     @commands.command(name="update")
-    @commands.is_owner()
     async def update(self, ctx):
         """Führt git pull im /root/Astra Verzeichnis aus."""
-        await ctx.send("🔄 Ziehe Updates vom Git-Repo in /root/Astra...")
+        await ctx.send("Ziehe Updates vom Git-Repo in /root/Astra...")
 
-        try:
-            proc = subprocess.run(
-                "/usr/bin/git -C /root/Astra pull",
-                shell=True,
-                capture_output=True,
-                text=True,
-                executable="/bin/bash",
-                timeout=15  # optional: damit es nicht ewig hängt
-            )
+        proc = subprocess.run(
+            ["/usr/bin/git", "-C", "/root/Astra", "pull"],
+            capture_output=True,
+            text=True,
+            timeout=30  # Timeout setzen, z.B. 30 Sekunden
+        )
 
-            output = proc.stdout + proc.stderr
-            if not output.strip():
-                output = "⚠️ Keine Ausgabe von `git pull` erhalten."
-
-            if len(output) > 1900:
-                output = output[:1900] + "\n... (gekürzt)"
-
-            await ctx.send(f"```bash\n{output}```")
-
-        except subprocess.TimeoutExpired:
-            await ctx.send("⏱️ `git pull` hat zu lange gedauert und wurde abgebrochen.")
-        except Exception as e:
-            await ctx.send(f"❌ Fehler beim Ausführen von `git pull`: `{e}`")
+        output = proc.stdout + proc.stderr
+        if len(output) > 1900:
+            output = output[:1900] + "\n... (gekürzt)"
+        await ctx.send(f"```bash\n{output}```")
 
     @commands.command(name="sysinfo")
     @commands.is_owner()
