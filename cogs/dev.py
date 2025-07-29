@@ -32,13 +32,12 @@ class CodeScroller(discord.ui.View):
         self.current = 0
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Nur Owner darf Buttons benutzen
         if interaction.user.id != self.ctx.author.id:
             await interaction.response.send_message("Nur der Owner darf hier blättern!", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary, custom_id="codescroller_prev")
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.current > 0:
             self.current -= 1
@@ -48,7 +47,7 @@ class CodeScroller(discord.ui.View):
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary, custom_id="codescroller_next")
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.current < len(self.code_chunks) - 1:
             self.current += 1
@@ -58,9 +57,8 @@ class CodeScroller(discord.ui.View):
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="❌", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="❌", style=discord.ButtonStyle.danger, row=0, custom_id="codescroller_delete")
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Löscht die Nachricht sofort
         await interaction.message.delete()
         self.stop()
 
