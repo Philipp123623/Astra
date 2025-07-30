@@ -607,7 +607,7 @@ async def on_dbl_vote(data):
 
             # Wenn die angegebene ID, dann Count auf Wert setzen (z.B. 0 oder ein anderer Wert)
             if int(data["user"]) == 789555434201677824:
-                reset_count = 0  # <- Hier kannst du den Wert setzen, z.B. 0 oder 14 etc.
+                reset_count = 6  # <- Hier kannst du den Wert setzen, z.B. 0 oder 14 etc.
                 await cur.execute("UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
                                   (reset_count, this_month, int(data["user"])))
                 result = (reset_count, this_month)  # Update local result, falls später noch genutzt
