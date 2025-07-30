@@ -1704,14 +1704,12 @@ async def serverlist(ctx):
 async def advert(ctx):
     embed = discord.Embed(title="`🎃` Astra x Astra Support",
                           url="https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands",
-                          description="Astra is the only Bot you need, to manage your whole server. There are many servers who use Astra. Maybe you will be the next one?\n\n> __**What do we offer?**__\n・<:Astra_ticket:1141833836204937347> Public Ticketsystem for your server\n・<:Astra_time:1141303932061233202> Automoderation\n・<:Astra_messages:1141303867850641488> Welcome/Leave Messages\n・<:Astra_settings:1141303908778639490> Joinrole&Botrole\n・<:Astra_herz:1141303857855594527> reactionroles\n・<:Astra_global1:1141303843993436200> Globalchat\n\n\n> __**Useful Links:**__\n・[Invite Astra ➚](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n・[Get Support ➚](https://discord.gg/vwh2raq2Xu)",
-                          colour=discord.Colour.blue())
+                          description="Astra ist der einzige Bot, den Sie zur Verwaltung Ihres gesamten Servers benötigen. Es gibt viele Server, die Astra verwenden. Vielleicht sind Sie der Nächste?\n\n> __**Was bieten wir an?**__\n・<:Astra_ticket:1141833836204937347> Öffentliches Ticketsystem für Ihren Server\n・<:Astra_time:1141303932061233202> Automatische Moderation\n・<:Astra_messages:1141303867850641488> Willkommen/Nachrichten hinterlassen\n・<:Astra_settings:1141303908778639490> Joinrole&Botrole\n・<:Astra_herz:1141303857855594527> Reaktionsrollen\n・<:Astra_global1:1141303843993436200> Globalchat\n\n\n> __**Nützliche Links:**__\n・[Astra einladen ➚](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n・[Support erhalten ➚](https://discord.gg/vwh2raq2Xu)",colour=discord.Colour.blue())
     embed.set_image(
         url="https://cdn.discordapp.com/attachments/842039934142513152/879880068262940672/Astra-premium3.gif")
     embed.set_thumbnail(url=ctx.guild.icon.url)
     msg = await ctx.send("https://discord.gg/vwh2raq2Xu", embed=embed)
     await ctx.message.delete()
-    await msg.publish()
 
 
 @bot.command()
