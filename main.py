@@ -688,7 +688,7 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
-    commands = [
+    cmds = [
         # Moderation
         {"name": "kick", "description": "Kicke einen User.", "type": 1},
         {"name": "ban", "description": "Banne einen User.", "type": 1},
@@ -796,7 +796,7 @@ async def on_ready():
         "Authorization": f"Bot eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0IjoxLCJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJpYXQiOjE3NTM5MTY4NTN9.4zBDA0ZYb1PLFDBFg4Ybt81qMqOYp3FxbhmEoAnabCQ",
         "Content-Type": "application/json"
     }
-    response = requests.post(url, json=commands, headers=headers)
+    response = requests.post(url, json=cmds, headers=headers)
 
     if response.status_code == 200:
         logging.info("✅ Commands erfolgreich hochgeladen!")
