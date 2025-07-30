@@ -187,7 +187,7 @@ class astra(commands.Cog):
                                     value=f"Prefix: `/`",
                                     inline=False)
                     embed.add_field(name="Links",
-                                    value="**[Support server](https://discord.gg/vwh2raq2Xu) | [Invite](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)**",
+                                    value="**[Support server](https://discord.gg/eatdJPfjWc) | [Invite](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)**",
                                     inline=False)
                     embed.set_footer(text=guild.name, icon_url=guild.icon)
                     embed.set_author(name="TDanke fürs Einladen!",
