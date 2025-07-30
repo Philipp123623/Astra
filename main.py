@@ -553,29 +553,12 @@ async def chat(ctx, *, prompt: str):
 
 @bot.event
 async def on_dbl_vote(data):
+    logging.info("on_dbl_vote ausgelöst für User:", data["user"])
+
     """An event that is called whenever someone votes for the bot on Top.gg."""
     member_votes_first = 0
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            # ---- SETUP: Tabellen und Spalte einmalig anlegen ----
-            try:
-                await cur.execute("""
-                    ALTER TABLE topgg ADD COLUMN last_reset DATE DEFAULT NULL;
-                """)
-            except Exception:
-                pass  # Ignoriere Fehler, falls Spalte schon existiert
-
-            try:
-                await cur.execute("""
-                    CREATE TABLE IF NOT EXISTS monthly_votes (
-                        month DATE PRIMARY KEY,
-                        votes INT NOT NULL
-                    );
-                """)
-            except Exception:
-                pass  # Ignoriere Fehler, falls Tabelle schon existiert
-            # ---- ENDE SETUP ----
-
             if data["type"] == "test":
                 return bot.dispatch('dbl_test', data)
 
