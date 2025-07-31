@@ -7,7 +7,7 @@ from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError
 from discord import app_commands
 from discord.app_commands import Group
-from flask import Flask
+from flask import Flask, request, jsonify
 from topgg import WebhookManager
 import math
 import sys
@@ -465,7 +465,23 @@ class Astra(commands.Bot):
 bot = Astra()
 
 
-WEBHOOK_URL = "https://discord.com/api/webhooks/1396880253019754566/sJoWfEMzs5E77UNDVVkFS9gQsiR_WfgJaMWgw8J4kUUNRPg19SGchS9fa3s_Vp9hndiB"
+app = Flask(__name__)
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
+
+@app.route("/dblwebhook", methods=["POST"])
+def dbl_vote():
+    auth = request.headers.get("Authorization")
+    if auth != WEBHOOK_SECRET:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.json
+    print("Vote von:", data)
+    return jsonify({"success": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+
 
 logging.basicConfig(
     level=logging.DEBUG,
