@@ -208,18 +208,17 @@ class mod(commands.Cog):
     @app_commands.checks.has_permissions(manage_messages=True)
     async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
         """Löscht eine Bestimmte Anzahl an Nachrichten."""
-        if int(amount) < 300:
-            await interaction.response.send_message(f"Nachrichten werden gelöscht...", ephemeral=True)
+        if amount < 300:
+            await interaction.response.send_message("Nachrichten werden gelöscht...", ephemeral=True)
             deleted = await channel.purge(limit=amount + 1)
             embed = discord.Embed(colour=discord.Colour.green(),
-                                  description=f"{len(deleted) - 1} Nachricht{'' if (len(deleted) -1) == 1 else 'en'} gelöscht.")
+                                  description=f"{len(deleted) - 1} Nachricht{'' if (len(deleted) - 1) == 1 else 'en'} gelöscht.")
             embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-            message = await interaction.original_message()
-            await message.edit(embed=embed, content=None)
-
-        if int(amount) >= 300:
+            # Editiere die ursprüngliche Ephemeral-Antwort:
+            await interaction.edit_original_response(embed=embed, content=None)
+        else:
             embed = discord.Embed(colour=discord.Colour.red(),
-                                  description="❌ Your number cannot be greater than 300.",
+                                  description="❌ Deine Zahl darf nicht größer als 300 sein.",
                                   timestamp=datetime.utcnow())
             embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
             await interaction.response.send_message(embed=embed, ephemeral=True)
