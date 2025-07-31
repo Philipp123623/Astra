@@ -549,15 +549,15 @@ async def chat(ctx, *, prompt: str):
             logging.error(f"Fehler im Chat-Command: {e}", exc_info=True)
             await ctx.send(f"❌ Fehler: {e}")
 
-class VoteView(View):
+class VoteView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(
-            Button(
+            discord.ui.Button(
                 style=discord.ButtonStyle.link,
                 label="Auch Voten",
                 url="https://top.gg/bot/1113403511045107773/vote",
-                emoji="<:Herz:1361007251434901664>"
+                emoji=discord.PartialEmoji(name="Herz", id=1361007251434901664)
             )
         )
 
