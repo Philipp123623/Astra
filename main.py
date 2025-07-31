@@ -588,13 +588,6 @@ async def on_dbl_vote(data):
             await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (int(data["user"]),))
             result = await cur.fetchone()
 
-            # Wenn die angegebene ID, dann Count auf Wert setzen (z.B. 0 oder ein anderer Wert)
-            if int(data["user"]) == 789555434201677824:
-                reset_count = 6  # <- Hier kannst du den Wert setzen, z.B. 0 oder 14 etc.
-                await cur.execute("UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
-                                  (reset_count, this_month, int(data["user"])))
-                result = (reset_count, this_month)  # Update local result, falls später noch genutzt
-
             # USER NOCH NICHT IN DB
             if not result:
                 member_votes_first2 = member_votes_first + vote_increase
@@ -626,7 +619,6 @@ async def on_dbl_vote(data):
                 description=(
                     f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
                     f"Wir haben nun ``{votes}`` Votes diesen Monat (Top.gg).\n"
-                    f"Insgesamt wurden diesen Monat bereits **{monthly_total}** Votes abgegeben.\n"
                     f"Du hast diesen Monat bereits ``{member_votes_first2}`` Mal gevotet.\n\n"
                     f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
@@ -688,122 +680,6 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
-    cmds = [
-        # Moderation
-        {"name": "kick", "description": "Kicke einen User.", "type": 1},
-        {"name": "ban", "description": "Banne einen User.", "type": 1},
-        {"name": "unban", "description": "Entbanne einen User.", "type": 1},
-        {"name": "banlist", "description": "Liste gebannter User.", "type": 1},
-        {"name": "clear", "description": "Nachrichten löschen.", "type": 1},
-
-        # Levelsystem
-        {"name": "levelsystem rank", "description": "Zeigt dein Level an.", "type": 1},
-        {"name": "levelsystem status", "description": "System an/aus.", "type": 1},
-        {"name": "levelsystem levelupkanal", "description": "Lege den Level-Channel fest.", "type": 1},
-        {"name": "levelsystem levelupnachricht", "description": "Custom Nachricht.", "type": 1},
-        {"name": "levelsystem role", "description": "Levelrollen einstellen.", "type": 1},
-        {"name": "xpboost", "description": "XP Boost aktivieren.", "type": 1},
-        {"name": "setlevel", "description": "Level eines Users setzen.", "type": 1},
-
-        # Giveaways
-        {"name": "gewinnspiel starten", "description": "Starte ein Gewinnspiel.", "type": 1},
-        {"name": "gewinnspiel verwalten", "description": "Verwalte die Gewinnspiele.", "type": 1},
-
-        # Settings & Setup
-        {"name": "afk", "description": "Setze dich auf AFK.", "type": 1},
-        {"name": "erinnerung erstellen", "description": "Erstelle Reminder.", "type": 1},
-        {"name": "erinnerung anzeigen", "description": "Zeige dir alle Reminder an.", "type": 1},
-        {"name": "erinnerung löschen", "description": "Lösche Reminder.", "type": 1},
-        {"name": "joinrole", "description": "Setze Joinrollen.", "type": 1},
-        {"name": "botrole", "description": "Setze Botrollen.", "type": 1},
-        {"name": "voicesetup", "description": "Voice Setup einrichten.", "type": 1},
-        {"name": "reactionrole", "description": "Reactionroles einrichten.", "type": 1},
-        {"name": "globalchat", "description": "Globalchat einrichten.", "type": 1},
-
-        # Tickets
-        {"name": "ticket setup", "description": "Ticket-Panel erstellen.", "type": 1},
-        {"name": "ticket löschen", "description": "Ticket-Panel löschen.", "type": 1},
-        {"name": "ticket anzeigen", "description": "Ticket-Panels anzeigen.", "type": 1},
-        {"name": "ticket log", "description": "Ticket-Log einrichten.", "type": 1},
-
-        # Automod
-        {"name": "warn", "description": "User verwarnen.", "type": 1},
-        {"name": "unwarn", "description": "Warn entfernen.", "type": 1},
-        {"name": "warns", "description": "Warnliste eines Users.", "type": 1},
-        {"name": "automod hinzufügen", "description": "Automod einrichten.", "type": 1},
-        {"name": "automod entfernen", "description": "Automod löschen.", "type": 1},
-        {"name": "automod anzeigen", "description": "Automod anzeigen.", "type": 1},
-        {"name": "modlog", "description": "Modlog setzen.", "type": 1},
-        {"name": "capslock", "description": "Capslock-Schutz.", "type": 1},
-        {"name": "blacklist", "description": "Wörter auf Blacklist setzen.", "type": 1},
-
-        # Information
-        {"name": "help", "description": "Hilfe anzeigen.", "type": 1},
-        {"name": "about", "description": "Infos über Astra.", "type": 1},
-        {"name": "invite", "description": "Bot einladen.", "type": 1},
-        {"name": "support", "description": "Supportserver joinen.", "type": 1},
-        {"name": "ping", "description": "Bot-Ping.", "type": 1},
-        {"name": "uptime", "description": "Bot-Uptime.", "type": 1},
-        {"name": "info kanal", "description": "Kanalinformationen abrufen.", "type": 1},
-        {"name": "info server", "description": "Serverinformationen abrufen.", "type": 1},
-        {"name": "info servericon", "description": "Servericon abrufen.", "type": 1},
-        {"name": "info rolle", "description": "Rolleninformationen abrufen.", "type": 1},
-        {"name": "info user", "description": "Userinformationen abrufen.", "type": 1},
-        {"name": "info wetter", "description": "Wetterinformationen abrufen.", "type": 1},
-
-        # Fun
-        {"name": "wanted", "description": "Wanted Poster erstellen.", "type": 1},
-        {"name": "pix", "description": "Profilbild pixeln.", "type": 1},
-        {"name": "wasted", "description": "Wasted Effekt.", "type": 1},
-        {"name": "triggered", "description": "Triggered Effekt.", "type": 1},
-        {"name": "gay", "description": "Gay Effekt.", "type": 1},
-        {"name": "color", "description": "Farbe anzeigen.", "type": 1},
-        {"name": "meme", "description": "Meme anzeigen.", "type": 1},
-        {"name": "qrcode", "description": "QR-Code erstellen.", "type": 1},
-
-        # Economy
-        {"name": "economy balance", "description": "Balance einsehen.", "type": 1},
-        {"name": "economy deposit", "description": "Geld aufs Konto einzahlen.", "type": 1},
-        {"name": "economy withdraw", "description": "Geld abheben.", "type": 1},
-        {"name": "economy leaderboard", "description": "Liste der reichsten Spieler eines Servers.", "type": 1},
-        {"name": "economy beg", "description": "Bettel um Geld.", "type": 1},
-        {"name": "economy rob", "description": "Beraube einen Spieler.", "type": 1},
-        {"name": "economy rps", "description": "Spiele Schere, Stein, Papier.", "type": 1},
-        {"name": "economy slot", "description": "Spiele Slot-Maschinen.", "type": 1},
-        {"name": "economy coinflip", "description": "Wirf eine Münze.", "type": 1},
-        {"name": "economy blackjack", "description": "Spiele Blackjack.", "type": 1},
-        {"name": "job list", "description": "Liste aller verfügbaren Jobs.", "type": 1},
-        {"name": "job apply", "description": "Nehme einen Job an.", "type": 1},
-        {"name": "job quit", "description": "Kündige deinen Job.", "type": 1},
-        {"name": "job work", "description": "Arbeite in deinem Job.", "type": 1},
-
-        # Nachrichten
-        {"name": "joinmsg", "description": "Join-Message festlegen.", "type": 1},
-        {"name": "leavemsg", "description": "Leave-Message festlegen.", "type": 1},
-        {"name": "autoreact", "description": "Auto-Reaction setzen.", "type": 1},
-        {"name": "embedfy", "description": "Embed erstellen.", "type": 1},
-
-        # Minispiele
-        {"name": "hangman", "description": "Hangman spielen.", "type": 1},
-        {"name": "snake start", "description": "Snake spielen.", "type": 1},
-        {"name": "snake highscore", "description": "Zeigt den Highscore anderer Spieler an.", "type": 1},
-        {"name": "guessthenumber", "description": "Guess the Number.", "type": 1},
-        {"name": "counting", "description": "Counting Channel.", "type": 1},
-    ]
-
-    url = f"https://discordbotlist.com/api/v1/bots/1113403511045107773/commands"
-    headers = {
-        "Authorization": f"Bot eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0IjoxLCJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJpYXQiOjE3NTM5MTY4NTN9.4zBDA0ZYb1PLFDBFg4Ybt81qMqOYp3FxbhmEoAnabCQ",
-        "Content-Type": "application/json"
-    }
-    response = requests.post(url, json=cmds, headers=headers)
-
-    if response.status_code == 200:
-        logging.info("✅ Commands erfolgreich hochgeladen!")
-    else:
-        logging.info(f"❌ Fehler: {response.status_code}")
-        logging.info(response.text)
-
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
