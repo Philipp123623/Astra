@@ -2,6 +2,7 @@ import discord
 import requests
 import json
 import random
+import threading
 import httpx
 from discord.ext import commands, tasks
 from discord.app_commands import AppCommandError
@@ -463,24 +464,6 @@ class Astra(commands.Bot):
 
 
 bot = Astra()
-
-
-app = Flask(__name__)
-
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
-
-@app.route("/dblwebhook", methods=["POST"])
-def dbl_vote():
-    auth = request.headers.get("Authorization")
-    if auth != WEBHOOK_SECRET:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = request.json
-    print("Vote von:", data)
-    return jsonify({"success": True})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
 
 
 logging.basicConfig(
@@ -1781,8 +1764,27 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         pass
 
 
+app = Flask(__name__)
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
+
+@app.route("/dblwebhook", methods=["POST"])
+def dbl_vote():
+    auth = request.headers.get("Authorization")
+    if auth != WEBHOOK_SECRET:
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.json
+    print("Vote von:", data)
+    return jsonify({"success": True})
+
 async def main():
     async with bot:
         await bot.start(TOKEN)
 
-asyncio.run(main())
+def run_flask():
+    app.run(host="0.0.0.0", port=5000)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_flask, daemon=True).start()
+    asyncio.run(main())
