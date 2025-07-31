@@ -617,8 +617,6 @@ async def on_dbl_vote(data):
                 title="Danke fürs Voten von Astra",
                 description=(
                     f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun ``{votes}`` Votes diesen Monat (Top.gg).\n"
-                    f"Du hast diesen Monat bereits ``{member_votes_first2}`` Mal gevotet.\n\n"
                     f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
                 colour=discord.Colour.blue(),
@@ -1766,7 +1764,23 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 async def send_vote_dm(user_id, username):
     try:
         user = await bot.fetch_user(user_id)
-        await user.send(f"🎉 Danke fürs Voten, {username}!\nDu hast unseren Bot unterstützt.")
+        embed = discord.Embed(
+            title="Danke fürs Voten von Astra",
+            description=(
+                f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
+                f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
+            ),
+            colour=discord.Colour.blue(),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        embed.set_thumbnail(
+            url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+        )
+        embed.set_footer(
+            text="Danke für deinen Support",
+            icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+        )
+        await user.send(embed=embed)
         logging.info(f"DM an {username} ({user_id}) gesendet.")
     except Exception as e:
         logging.error(f"Fehler beim Senden der DM an {user_id}: {e}")
