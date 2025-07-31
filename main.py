@@ -1763,6 +1763,14 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except discord.InteractionResponded:
         pass
 
+async def send_vote_dm(user_id, username):
+    try:
+        user = await bot.fetch_user(user_id)
+        await user.send(f"🎉 Danke fürs Voten, {username}!\nDu hast unseren Bot unterstützt.")
+        logging.info(f"DM an {username} ({user_id}) gesendet.")
+    except Exception as e:
+        logging.error(f"Fehler beim Senden der DM an {user_id}: {e}")
+
 
 app = Flask(__name__)
 
@@ -1770,14 +1778,21 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
 
 @app.route("/dblwebhook", methods=["POST"])
 def dbl_vote():
-    logging.info("Header Authorization: %r", request.headers.get("Authorization"))
-    logging.info("WEBHOOK_SECRET from env: %r", WEBHOOK_SECRET)
     auth = request.headers.get("Authorization")
     if auth != WEBHOOK_SECRET:
         return jsonify({"error": "unauthorized"}), 401
 
     data = request.json
-    print("Vote von:", data)
+    user_id = int(data.get("id"))
+    username = data.get("username", "Unbekannt")
+
+    # Jetzt DM senden (async aus Flask!)
+    asyncio.run_coroutine_threadsafe(
+        send_vote_dm(user_id, username),
+        bot.loop
+    )
+
+    logging.info(f"Vote von: {username} ({user_id})")
     return jsonify({"success": True})
 
 async def main():
