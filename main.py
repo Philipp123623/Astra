@@ -1770,6 +1770,8 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
 
 @app.route("/dblwebhook", methods=["POST"])
 def dbl_vote():
+    logging.info("Header Authorization: %r", request.headers.get("Authorization"))
+    logging.info("WEBHOOK_SECRET from env: %r", WEBHOOK_SECRET)
     auth = request.headers.get("Authorization")
     if auth != WEBHOOK_SECRET:
         return jsonify({"error": "unauthorized"}), 401
