@@ -5,7 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/Astra Repo.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Astra Repo.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -78,7 +80,7 @@
       <recent name="C:\Users\psstu\PycharmProjects\Astra Repo\cogs\fonts" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Flask server.Astra Repo">
     <configuration name="Astra Repo" type="Python.DjangoServer" factoryName="Django server">
       <module name="Astra Repo" />
       <option name="ENV_FILES" value="" />
@@ -101,6 +103,22 @@
       <option name="runNoReload" value="false" />
       <option name="useCustomRunCommand" value="false" />
       <option name="customRunCommand" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Astra Repo" type="Python.FlaskServer">
+      <module name="Astra Repo" />
+      <option name="target" value="$PROJECT_DIR$/main.py" />
+      <option name="targetType" value="PATH" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="launchJavascriptDebuger" value="false" />
       <method v="2" />
     </configuration>
   </component>
@@ -166,7 +184,8 @@
       <workItem from="1753785424739" duration="741000" />
       <workItem from="1753802170454" duration="4985000" />
       <workItem from="1753886122091" duration="8326000" />
-      <workItem from="1753951718787" duration="6710000" />
+      <workItem from="1753951718787" duration="12473000" />
+      <workItem from="1754064118679" duration="324000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />

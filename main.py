@@ -1821,6 +1821,11 @@ def dbl_vote():
     logging.info(f"Vote von: {username} ({user_id})")
     return jsonify({"success": True})
 
+
+@app.route('/status')
+def status():
+    return jsonify(online=True)
+
 async def main():
     async with bot:
         await bot.start(TOKEN)
