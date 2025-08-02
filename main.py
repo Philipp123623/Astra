@@ -144,14 +144,6 @@ class Astra(commands.Bot):
         """Initialisiert Tabellen und startet Tasks"""
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT 1, 2, 3")
-                result = await cur.fetchall()
-                logging.info(result)
-                for eintrag in result:
-                    logging.info(eintrag[0])
-                    logging.info(eintrag[1])
-                    logging.info(eintrag[2])
-
                 # Tabellen erstellen
 
                 await cur.execute("DROP TABLE IF EXISTS reactionrole_entries")
