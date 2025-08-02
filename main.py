@@ -146,11 +146,11 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 await cur.execute("SELECT 1, 2, 3")
                 result = await cur.fetchall()
-                print(result)
+                logging.info(result)
                 for eintrag in result:
-                    print(eintrag[0])
-                    print(eintrag[1])
-                    print(eintrag[2])
+                    logging.info(eintrag[0])
+                    logging.info(eintrag[1])
+                    logging.info(eintrag[2])
 
                 # Tabellen erstellen
 
