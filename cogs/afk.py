@@ -14,6 +14,7 @@ class afk(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+
         if message.author.bot:
             return
         if not message.guild:
