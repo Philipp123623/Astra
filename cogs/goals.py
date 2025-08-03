@@ -334,7 +334,7 @@ class CommunityGoalsCog(commands.Cog):
                 )
                 return bool(await cur.fetchone())
 
-    # Fortschrittstracking Listener etc... (wie gehabt!)
+    # Fortschrittstracking Listener etc...
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.guild or message.author.bot:
@@ -342,7 +342,8 @@ class CommunityGoalsCog(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "SELECT id, reward FROM community_goals WHERE guild_id=%s AND active=1 LIMIT 1", (message.guild.id,)
+                    "SELECT id, reward FROM community_goals WHERE guild_id=%s AND active=1 LIMIT 1",
+                    (message.guild.id,)
                 )
                 res = await cur.fetchone()
                 if not res:
@@ -355,6 +356,8 @@ class CommunityGoalsCog(commands.Cog):
                         channel_limit = int(match.group(1))
                 if channel_limit and message.channel.id != channel_limit:
                     return  # Nachricht in anderem Kanal ignorieren
+
+                # Progress capped!
                 await cur.execute("""
                                   SELECT target, progress
                                   FROM community_goal_conditions
@@ -367,7 +370,7 @@ class CommunityGoalsCog(commands.Cog):
                     if progress < target:
                         await cur.execute("""
                                           UPDATE community_goal_conditions
-                                          SET progress = progress + 1
+                                          SET progress = LEAST(progress + 1, target)
                                           WHERE goal_id = %s
                                             AND type = 'messages'
                                           """, (goal_id,))
@@ -392,24 +395,34 @@ class CommunityGoalsCog(commands.Cog):
                     async with self.bot.pool.acquire() as conn:
                         async with conn.cursor() as cur:
                             await cur.execute("""
-                                SELECT g.id FROM community_goals g
-                                JOIN community_goal_conditions c ON g.id = c.goal_id
-                                WHERE g.guild_id=%s AND g.active=1 AND c.type='voice_minutes' LIMIT 1
-                            """, (guild_id,))
+                                              SELECT g.id
+                                              FROM community_goals g
+                                                       JOIN community_goal_conditions c ON g.id = c.goal_id
+                                              WHERE g.guild_id = %s
+                                                AND g.active = 1
+                                                AND c.type = 'voice_minutes'
+                                              LIMIT 1
+                                              """, (guild_id,))
                             goal = await cur.fetchone()
                             if goal:
                                 await cur.execute("""
-                                    SELECT target, progress FROM community_goal_conditions
-                                    WHERE goal_id=%s AND type='voice_minutes'
-                                """, (goal[0],))
+                                                  SELECT target, progress
+                                                  FROM community_goal_conditions
+                                                  WHERE goal_id = %s
+                                                    AND type = 'voice_minutes'
+                                                  """, (goal[0],))
                                 cond = await cur.fetchone()
-                                if cond and cond[1] < cond[0]:
-                                    add_minutes = min(minutes, cond[0] - cond[1])
-                                    await cur.execute("""
-                                        UPDATE community_goal_conditions SET progress = progress + %s
-                                        WHERE goal_id=%s AND type='voice_minutes'
-                                    """, (add_minutes, goal[0]))
-                                    await conn.commit()
+                                if cond:
+                                    target, progress = cond
+                                    if progress < target:
+                                        add_minutes = min(minutes, target - progress)
+                                        await cur.execute("""
+                                                          UPDATE community_goal_conditions
+                                                          SET progress = LEAST(progress + %s, target)
+                                                          WHERE goal_id = %s
+                                                            AND type = 'voice_minutes'
+                                                          """, (add_minutes, goal[0]))
+                                        await conn.commit()
                 del self.voice_time[guild_id][user_id]
 
     @commands.Cog.listener()
@@ -419,68 +432,98 @@ class CommunityGoalsCog(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT g.id FROM community_goals g
-                    JOIN community_goal_conditions c ON g.id = c.goal_id
-                    WHERE g.guild_id=%s AND g.active=1 AND c.type='commands_used' LIMIT 1
-                """, (interaction.guild.id,))
+                                  SELECT g.id
+                                  FROM community_goals g
+                                           JOIN community_goal_conditions c ON g.id = c.goal_id
+                                  WHERE g.guild_id = %s
+                                    AND g.active = 1
+                                    AND c.type = 'commands_used'
+                                  LIMIT 1
+                                  """, (interaction.guild.id,))
                 goal = await cur.fetchone()
                 if goal:
                     await cur.execute("""
-                        SELECT target, progress FROM community_goal_conditions
-                        WHERE goal_id=%s AND type='commands_used'
-                    """, (goal[0],))
+                                      SELECT target, progress
+                                      FROM community_goal_conditions
+                                      WHERE goal_id = %s
+                                        AND type = 'commands_used'
+                                      """, (goal[0],))
                     cond = await cur.fetchone()
-                    if cond and cond[1] < cond[0]:
-                        await cur.execute("""
-                            UPDATE community_goal_conditions SET progress = progress + 1
-                            WHERE goal_id=%s AND type='commands_used'
-                        """, (goal[0],))
-                        await conn.commit()
+                    if cond:
+                        target, progress = cond
+                        if progress < target:
+                            await cur.execute("""
+                                              UPDATE community_goal_conditions
+                                              SET progress = LEAST(progress + 1, target)
+                                              WHERE goal_id = %s
+                                                AND type = 'commands_used'
+                                              """, (goal[0],))
+                            await conn.commit()
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT g.id FROM community_goals g
-                    JOIN community_goal_conditions c ON g.id = c.goal_id
-                    WHERE g.guild_id=%s AND g.active=1 AND c.type='new_users' LIMIT 1
-                """, (member.guild.id,))
+                                  SELECT g.id
+                                  FROM community_goals g
+                                           JOIN community_goal_conditions c ON g.id = c.goal_id
+                                  WHERE g.guild_id = %s
+                                    AND g.active = 1
+                                    AND c.type = 'new_users'
+                                  LIMIT 1
+                                  """, (member.guild.id,))
                 goal = await cur.fetchone()
                 if goal:
                     await cur.execute("""
-                        SELECT target, progress FROM community_goal_conditions
-                        WHERE goal_id=%s AND type='new_users'
-                    """, (goal[0],))
+                                      SELECT target, progress
+                                      FROM community_goal_conditions
+                                      WHERE goal_id = %s
+                                        AND type = 'new_users'
+                                      """, (goal[0],))
                     cond = await cur.fetchone()
-                    if cond and cond[1] < cond[0]:
-                        await cur.execute("""
-                            UPDATE community_goal_conditions SET progress = progress + 1
-                            WHERE goal_id=%s AND type='new_users'
-                        """, (goal[0],))
-                        await conn.commit()
+                    if cond:
+                        target, progress = cond
+                        if progress < target:
+                            await cur.execute("""
+                                              UPDATE community_goal_conditions
+                                              SET progress = LEAST(progress + 1, target)
+                                              WHERE goal_id = %s
+                                                AND type = 'new_users'
+                                              """, (goal[0],))
+                            await conn.commit()
 
     async def count_levelup(self, guild_id):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    SELECT g.id FROM community_goals g
-                    JOIN community_goal_conditions c ON g.id = c.goal_id
-                    WHERE g.guild_id=%s AND g.active=1 AND c.type='levelups' LIMIT 1
-                """, (guild_id,))
+                                  SELECT g.id
+                                  FROM community_goals g
+                                           JOIN community_goal_conditions c ON g.id = c.goal_id
+                                  WHERE g.guild_id = %s
+                                    AND g.active = 1
+                                    AND c.type = 'levelups'
+                                  LIMIT 1
+                                  """, (guild_id,))
                 goal = await cur.fetchone()
                 if goal:
                     await cur.execute("""
-                        SELECT target, progress FROM community_goal_conditions
-                        WHERE goal_id=%s AND type='levelups'
-                    """, (goal[0],))
+                                      SELECT target, progress
+                                      FROM community_goal_conditions
+                                      WHERE goal_id = %s
+                                        AND type = 'levelups'
+                                      """, (goal[0],))
                     cond = await cur.fetchone()
-                    if cond and cond[1] < cond[0]:
-                        await cur.execute("""
-                            UPDATE community_goal_conditions SET progress = progress + 1
-                            WHERE goal_id=%s AND type='levelups'
-                        """, (goal[0],))
-                        await conn.commit()
+                    if cond:
+                        target, progress = cond
+                        if progress < target:
+                            await cur.execute("""
+                                              UPDATE community_goal_conditions
+                                              SET progress = LEAST(progress + 1, target)
+                                              WHERE goal_id = %s
+                                                AND type = 'levelups'
+                                              """, (goal[0],))
+                            await conn.commit()
 
 async def setup(bot):
     cog = CommunityGoalsCog(bot)
