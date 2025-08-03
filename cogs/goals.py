@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta
+from typing import Optional, Literal
+from discord import app_commands
 import asyncio
 
 GOAL_TYPES = {
@@ -242,11 +244,9 @@ class CommunityGoalsGroup(app_commands.Group):
         super().__init__(name="communitygoals", description="Communityziele!")
         self.cog = cog
 
-    from typing import Optional
-    from discord import app_commands
 
     # ... GOAL_TYPES, progress_bar usw. bleiben wie vorher ...
-
+    @app_commands.guild_only()
     class CommunityGoalsGroup(app_commands.Group):
         def __init__(self, cog: CommunityGoalsCog):
             super().__init__(name="communitygoals", description="Communityziele!")
@@ -256,7 +256,6 @@ class CommunityGoalsGroup(app_commands.Group):
             name="set",
             description="Setzt ein neues Communityziel mit frei wählbaren Bedingungen."
         )
-        @app_commands.guild_only()
         @app_commands.describe(
             ends_in_days="Wie viele Tage soll das Ziel laufen? (1–60)",
             reward="Belohnung (Text, Rolle, Emoji etc.)",
@@ -335,7 +334,6 @@ class CommunityGoalsGroup(app_commands.Group):
             return None
 
     @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
-    @app_commands.guild_only()
     async def status(self, interaction: discord.Interaction):
         async with self.cog.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
