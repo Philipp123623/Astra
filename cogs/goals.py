@@ -58,7 +58,7 @@ class CommunityGoalsGroup(app_commands.Group):
 
     @app_commands.command(
         name="erstellen",
-        description="Setzt ein neues Communityziel mit frei wählbaren Bedingungen. Ergebnis wird in den gewählten Channel gepostet."
+        description="Setzt ein neues Communityziel mit Bedingungen im gewählten Channel."
     )
     @app_commands.describe(
         dauer="Wie viele Tage soll das Ziel laufen? (1–60)",
