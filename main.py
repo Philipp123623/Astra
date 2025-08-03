@@ -147,6 +147,7 @@ class Astra(commands.Bot):
 
                 await cur.execute("DROP TABLE community_goal_conditions;")
                 await cur.execute("DROP TABLE community_goals;")
+                await cur.execute("DROP TABLE goal_bans;")
 
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, reward TEXT, active BOOLEAN DEFAULT 1)")
