@@ -1753,6 +1753,11 @@ app = Flask(__name__)
 @app.route('/status')
 def status():
     return jsonify(online=True)
+def run_flask():
+    app.run(host="0.0.0.0", port=5000)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Flask läuft im Hintergrund
+    threading.Thread(target=run_flask, daemon=True).start()
+    # Discord-Bot läuft normal
+    bot.run(TOKEN)
