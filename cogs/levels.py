@@ -420,8 +420,14 @@ class levelsystem(commands.Cog):
                                         await cur.execute(
                                             "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
                                             (0 + 1, msg.author.id, msg.guild.id))
+
+                                        # --- CommunityGoal: Levelup-Progress inkrementieren ---
+                                        cog = self.bot.get_cog("CommunityGoalsCog")
+                                        if cog:
+                                            await cog.count_levelup(msg.guild.id)
+
                                         await cur.execute("SELECT type FROM levelchannel WHERE guildID = (%s)",
-                                                          (msg.guild.id))
+                                                          (msg.guild.id,))
                                         result6 = await cur.fetchone()
                                         if not result6:
                                             await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)",
