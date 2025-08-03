@@ -145,7 +145,7 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
-                await cur.execute("DROP TABLE community_goals_conditions;")
+                await cur.execute("DROP TABLE community_goal_conditions;")
                 await cur.execute("DROP TABLE community_goals;")
 
                 await cur.execute("""
