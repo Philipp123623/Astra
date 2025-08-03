@@ -310,7 +310,8 @@ class JobListView(discord.ui.View):
 
 @app_commands.guild_only()
 class Eco(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="eco",
             description="Alles rund um Economy."
@@ -670,7 +671,8 @@ class Eco(app_commands.Group):
 
 @app_commands.guild_only()
 class Job(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="job",
             description="Alles rund um deinen Job"
@@ -896,5 +898,5 @@ class Economy(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
-    bot.tree.add_command(Eco())
-    bot.tree.add_command(Job())
+    bot.tree.add_command(Eco(bot))
+    bot.tree.add_command(Job(bot))

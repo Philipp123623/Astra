@@ -221,7 +221,8 @@ class SnakeGameView(View):
 
 @app_commands.guild_only()
 class Snake(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="snake",
             description="snake!"
@@ -326,4 +327,4 @@ class SnakeBot(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(SnakeBot(bot))
-    bot.tree.add_command(Snake())
+    bot.tree.add_command(Snake(bot))

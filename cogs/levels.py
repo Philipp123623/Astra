@@ -16,7 +16,8 @@ from cogs.ticket import Ticket
 ##########
 @app_commands.guild_only()
 class Level(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="levelsystem",
             description="Alles rund ums Levelsystem."
@@ -740,4 +741,4 @@ class levelsystem(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(levelsystem(bot))
-    bot.tree.add_command(Level())
+    bot.tree.add_command(Level(bot))

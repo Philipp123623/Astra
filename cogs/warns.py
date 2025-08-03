@@ -10,7 +10,8 @@ from discord.app_commands import Group
 
 @app_commands.guild_only()
 class Automod(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="automod",
             description="Automod Commands"
@@ -350,4 +351,4 @@ class Warn(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Warn(bot))
-    bot.tree.add_command(Automod())
+    bot.tree.add_command(Automod(bot))

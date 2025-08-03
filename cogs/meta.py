@@ -25,7 +25,8 @@ def convert(time):
 
 @app_commands.guild_only()
 class InfoGroup(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="info",
             description="Informationen über den Server"
@@ -394,4 +395,4 @@ class meta(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(meta(bot))
-    bot.tree.add_command(InfoGroup())
+    bot.tree.add_command(InfoGroup(bot))

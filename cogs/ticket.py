@@ -236,7 +236,8 @@ class ticket_open(discord.ui.View):
 
 @app_commands.guild_only()
 class Ticket(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot  # <--- Hinzufügen!
         super().__init__(
             name="ticket",
             description="Alles rund ums Ticketsystem."
@@ -386,4 +387,4 @@ class ticket(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ticket(bot))
-    bot.tree.add_command(Ticket())
+    bot.tree.add_command(Ticket(bot))

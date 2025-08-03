@@ -17,7 +17,8 @@ COMMUNITY_GOAL_TYPES = {
 @app_commands.guild_only()
 @app_commands.checks.has_permissions(manage_guild=True)
 class Goals(app_commands.Group):
-    def __init__(self):
+    def __init__(self, bot):
+        self.bot = bot   # <--- Hinzufügen!
         super().__init__(
             name="communitygoals",
             description="Alles rund um Communitygoals."
@@ -287,4 +288,4 @@ class CommunityGoalCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(CommunityGoalCog(bot))
-    bot.tree.add_command(Goals())
+    bot.tree.add_command(Goals(bot))
