@@ -144,10 +144,21 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
-                await cur.execute("DROP TABLE IF EXISTS reactionrole_entries")
-                await cur.execute("DROP TABLE IF EXISTS reactionrole_messages")
+                await cur.execute("""
+                                  CREATE TABLE IF NOT EXISTS community_goals
+                                  (
+                                      id         INT PRIMARY KEY AUTO_INCREMENT,
+                                      guild_id   BIGINT   NOT NULL,
+                                      started_at DATETIME NOT NULL,
+                                      ends_at    DATETIME,
+                                      reward     VARCHAR(255),
+                                      active     BOOLEAN DEFAULT 1
+                                  )
+                                  """)
 
-                # Reaction Role Nachricht mit Bezug auf den Server (guild_id)
+                await cur.execute("""CREATE TABLE IF NOT EXISTS community_goal_conditions(id INT PRIMARY KEY AUTO_INCREMENT, goal_id INT, type VARCHAR(23), target INT, progress INT DEFAULT 0, UNIQUE (goal_id, type)""")
+
+
                 await cur.execute("""
                 CREATE TABLE IF NOT EXISTS reactionrole_messages (
                     message_id BIGINT PRIMARY KEY,
