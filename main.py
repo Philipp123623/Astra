@@ -623,7 +623,6 @@ async def on_dbl_vote(data):
                 if member.id == user.id:
                     await member.add_roles(voterole, reason="Voterole")
             msg = await channel.send(embed=embed, view=VoteView())
-            await msg.add_reaction(heart)
             return None
 
 
@@ -1751,66 +1750,4 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except discord.InteractionResponded:
         pass
 
-async def send_vote_dm(user_id, username):
-    try:
-        user = await bot.fetch_user(user_id)
-        embed = discord.Embed(
-            title="Danke fürs Voten von Astra",
-            description=(
-                f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
-                f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
-            ),
-            colour=discord.Colour.blue(),
-            timestamp=datetime.datetime.now(datetime.UTC)
-        )
-        embed.set_thumbnail(
-            url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-        )
-        embed.set_footer(
-            text="Danke für deinen Support",
-            icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-        )
-        await user.send(embed=embed)
-        logging.info(f"DM an {username} ({user_id}) gesendet.")
-    except Exception as e:
-        logging.error(f"Fehler beim Senden der DM an {user_id}: {e}")
-
-
-app = Flask(__name__)
-
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # Holt sich das Secret aus .env
-
-@app.route("/dblwebhook", methods=["POST"])
-def dbl_vote():
-    auth = request.headers.get("Authorization")
-    if auth != WEBHOOK_SECRET:
-        return jsonify({"error": "unauthorized"}), 401
-
-    data = request.json
-    user_id = int(data.get("id"))
-    username = data.get("username", "Unbekannt")
-
-    # Jetzt DM senden (async aus Flask!)
-    asyncio.run_coroutine_threadsafe(
-        send_vote_dm(user_id, username),
-        bot.loop
-    )
-
-    logging.info(f"Vote von: {username} ({user_id})")
-    return jsonify({"success": True})
-
-
-@app.route('/status')
-def status():
-    return jsonify(online=True)
-
-async def main():
-    async with bot:
-        await bot.start(TOKEN)
-
-def run_flask():
-    app.run(host="0.0.0.0", port=5000)
-
-if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    asyncio.run(main())
+bot.run(TOKEN)
