@@ -629,6 +629,9 @@ async def on_dbl_vote(data):
                 title="Danke fürs Voten von Astra",
                 description=(
                     f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
+                    f"Wir haben nun **{monthly_total}** Votes diesen Monat.\n"
+                    f"Insgesamt wurden diesen Monat bereits **{vote_increase}** Votes abgegeben.\n"
+                    f"Du hast diesen Monat bereits **{member_votes_first2}** Mal gevotet.\n\n"
                     f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
                 colour=discord.Colour.blue(),
@@ -638,7 +641,7 @@ async def on_dbl_vote(data):
                 url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
             )
             embed.set_footer(
-                text="Danke für deinen Support",
+                text=f"Danke für deinen Support • {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}",
                 icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
             )
 
@@ -646,7 +649,6 @@ async def on_dbl_vote(data):
                 if member.id == user.id:
                     await member.add_roles(voterole, reason="Voterole")
             msg = await channel.send(embed=embed, view=VoteView())
-            await msg.add_reaction(heart)
             return None
 
 
