@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 import asyncio
 import re
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 GOAL_TYPES = {
     "messages": ("Nachrichten", "💬"),
@@ -29,7 +31,7 @@ def format_goal_embed(conds, reward, ends, finished, total, reward_role: Optiona
                       status: Optional[str] = None):
     embed = discord.Embed(
         title="🎯 Community Goal" if not status else status,
-        description=f"Läuft noch bis **{ends.strftime('%d.%m.%Y, %H:%M')}**" if not status else None,
+        description=f"Läuft noch bis **{ends.astimezone(ZoneInfo('Europe/Berlin')).strftime('%d.%m.%Y, %H:%M')} Uhr (MESZ)**" if not status else None,
         color=discord.Color.blurple() if not status else (
             discord.Color.green() if status.startswith("🏁") else discord.Color.red()
         )
@@ -110,7 +112,7 @@ class CommunityGoalsGroup(app_commands.Group):
                 color=discord.Color.red()
             )
             return await interaction.followup.send(embed=embed)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ends = now + timedelta(days=dauer)
 
         # --- Belohnung: Support für Rollenextraktion (@Rolle im belohnung-Text)
@@ -195,6 +197,8 @@ class CommunityGoalsGroup(app_commands.Group):
                 reward = goal[4]
                 ends = goal[3]
                 reward_role = None
+                if ends.tzinfo is None:
+                    ends = ends.replace(tzinfo=timezone.utc)
                 role_mention_match = re.search(r"<@&(\d+)>", reward or "")
                 if role_mention_match:
                     reward_role_id = int(role_mention_match.group(1))
@@ -251,12 +255,14 @@ class CommunityGoalsCog(commands.Cog):
         def all_done_checker(condlist):
             return all(val >= target for _, target, val in condlist)
 
-        now = datetime.utcnow()
+        # Sicherstellen, dass ends_at UTC-aware ist!
+        if ends_at.tzinfo is None:
+            ends_at = ends_at.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
         channel_id = None
         msg_id = None
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Hole Channel und Message-ID
                 await cur.execute("SELECT channel_id, msg_id FROM community_goals WHERE id=%s", (goal_id,))
                 channel_row = await cur.fetchone()
                 if channel_row:
@@ -272,13 +278,18 @@ class CommunityGoalsCog(commands.Cog):
                         condlist.append((typ, target, value))
                     if all_done_checker(condlist):
                         break
-                    sleep_time = (ends_at - datetime.utcnow()).total_seconds()
+                    sleep_time = (ends_at - datetime.now(timezone.utc)).total_seconds()
                     if sleep_time < 1:
                         break
                     await asyncio.sleep(min(30, sleep_time))
                 # Beende das Ziel
                 await cur.execute("SELECT started_at, ends_at FROM community_goals WHERE id=%s", (goal_id,))
                 started_at, ends_at_db = await cur.fetchone()
+                # Absichern:
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                if ends_at_db.tzinfo is None:
+                    ends_at_db = ends_at_db.replace(tzinfo=timezone.utc)
                 await cur.execute("UPDATE community_goals SET active=0 WHERE id=%s", (goal_id,))
                 await cur.execute("SELECT reward FROM community_goals WHERE id=%s", (goal_id,))
                 reward = (await cur.fetchone() or [None])[0]
