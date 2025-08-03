@@ -145,6 +145,9 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
+                await cur.execute("DROP TABLE community_goals_conditions;")
+                await cur.execute("DROP TABLE community_goals;")
+
                 await cur.execute("""
                                   CREATE TABLE IF NOT EXISTS community_goals
                                   (
@@ -156,23 +159,17 @@ class Astra(commands.Bot):
                                       active     BOOLEAN DEFAULT 1
                                   )
                                   """)
-
-                await cur.execute("""CREATE TABLE IF NOT EXISTS community_goal_conditions(id INT PRIMARY KEY AUTO_INCREMENT, goal_id INT, type VARCHAR(23), target INT, progress INT DEFAULT 0, UNIQUE (goal_id, type))""")
-
-
                 await cur.execute("""
-                CREATE TABLE IF NOT EXISTS reactionrole_messages (
-                    message_id BIGINT PRIMARY KEY,
-                    guild_id BIGINT NOT NULL,
-                    channel_id BIGINT NOT NULL,
-                    style VARCHAR(10) NOT NULL,
-                    embed_title VARCHAR(256) NOT NULL,
-                    embed_description TEXT NOT NULL,
-                    embed_color VARCHAR(6) NOT NULL,
-                    embed_image TEXT,
-                    embed_thumbnail TEXT
-                )
-                """)
+                                  CREATE TABLE IF NOT EXISTS community_goal_conditions
+                                  (
+                                      id       INT PRIMARY KEY AUTO_INCREMENT,
+                                      goal_id  INT,
+                                      type     VARCHAR(32),
+                                      target   INT,
+                                      progress INT DEFAULT 0,
+                                      UNIQUE (goal_id, type)
+                                  )
+                                  """)
 
                 # Einzelne Reaktionsrollen, pro Nachricht – keine Änderung nötig, aber hier zur Vollständigkeit:
                 await cur.execute("""

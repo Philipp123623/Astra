@@ -2,9 +2,9 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta
+import asyncio
 
-# Emoji-Codes kannst du durch eigene ersetzen
-COMMUNITY_GOAL_TYPES = {
+GOAL_TYPES = {
     "messages":      ("Nachrichten", "💬"),
     "voice_minutes": ("Voice-Minuten", "🔊"),
     "xp":            ("XP", "✨"),
@@ -21,171 +21,102 @@ def progress_bar(current, target, length=18):
     bar = "█" * filled + "░" * empty
     return f"`{bar}`"
 
-@app_commands.guild_only()
-@app_commands.checks.has_permissions(manage_guild=True)
-class Goals(app_commands.Group):
-    def __init__(self, bot):
-        self.bot = bot
-        super().__init__(
-            name="communitygoals",
-            description="Alles rund um Communitygoals."
-        )
+def parse_goal_conditions(text: str):
+    result = {}
+    if not text:
+        return result
+    for pair in text.split(","):
+        if ":" not in pair:
+            continue
+        typ, amount = pair.split(":", 1)
+        typ, amount = typ.strip(), amount.strip()
+        if typ in GOAL_TYPES and amount.isdigit() and int(amount) > 0:
+            result[typ] = int(amount)
+    return result
 
-    @app_commands.command(name="set", description="Setzt ein neues Communityziel mit mehreren Bedingungen.")
-    @app_commands.describe(
-        ends_in_days="Wie viele Tage soll das Ziel laufen?",
-        reward="Textliche Belohnung (z.B. Rolle, Text, Emoji ...)",
-        messages="Ziel: Anzahl Nachrichten",
-        voice_minutes="Ziel: Voice-Minuten (gesamt)",
-        xp="Ziel: XP gesamt (Levelsystem!)",
-        levelups="Ziel: Anzahl Level-Ups (Levelsystem!)",
-        new_users="Ziel: Neue User",
-        ban_free_days="Ziel: Ban-freie Tage",
-        commands_used="Ziel: Befehle genutzt"
+def format_goal_embed(conds, reward, ends, finished):
+    embed = discord.Embed(
+        title="🎯 Community Goal",
+        description=f"Läuft noch bis **{ends.strftime('%d.%m.%Y, %H:%M')}**",
+        color=discord.Color.blurple()
     )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def set(
-        self,
-        interaction: discord.Interaction,
-        ends_in_days: int,
-        reward: str = None,
-        messages: int = None,
-        voice_minutes: int = None,
-        xp: int = None,
-        levelups: int = None,
-        new_users: int = None,
-        ban_free_days: int = None,
-        commands_used: int = None
-    ):
-        # Bedingungen prüfen
-        conditions = []
-        for typ, val in [
-            ("messages", messages),
-            ("voice_minutes", voice_minutes),
-            ("xp", xp),
-            ("levelups", levelups),
-            ("new_users", new_users),
-            ("ban_free_days", ban_free_days),
-            ("commands_used", commands_used)
-        ]:
-            if val is not None and val > 0:
-                conditions.append((typ, val))
-        if not conditions:
-            embed = discord.Embed(
-                title="🚫 Fehler",
-                description="Mindestens eine Bedingung mit Wert > 0 angeben.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        now = datetime.utcnow()
-        ends = now + timedelta(days=ends_in_days)
-
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                # Vorheriges Ziel beenden
-                await cur.execute("UPDATE community_goals SET active=0 WHERE guild_id=%s", (interaction.guild.id,))
-                await cur.execute(
-                    "INSERT INTO community_goals (guild_id, started_at, ends_at, reward, active) VALUES (%s, %s, %s, %s, 1)",
-                    (interaction.guild.id, now, ends, reward)
-                )
-                goal_id = cur.lastrowid
-                for typ, val in conditions:
-                    await cur.execute(
-                        "INSERT INTO community_goal_conditions (goal_id, type, target, progress) VALUES (%s, %s, %s, %s)",
-                        (goal_id, typ, val, 0)
-                    )
-                await conn.commit()
-
-        cond_lines = "\n".join(
-            f"{COMMUNITY_GOAL_TYPES[typ][1]} **{COMMUNITY_GOAL_TYPES[typ][0]}:** `{val:,}`"
-            for typ, val in conditions
+    for typ, target, value in conds:
+        name, icon = GOAL_TYPES.get(typ, (typ, "❔"))
+        bar = progress_bar(value, target)
+        percent = min(value / target * 100, 100) if target else 0
+        embed.add_field(
+            name=f"{icon} **{name}**",
+            value=f"{bar}\n**{value:,} / {target:,}** (`{percent:.1f}%`)",
+            inline=False
         )
-        embed = discord.Embed(
-            title="🎯 Neues Community Goal erstellt!",
-            description=f"Läuft **{ends_in_days}** Tage\n\n{cond_lines}",
-            color=discord.Color.blurple()
-        )
-        if reward:
-            embed.add_field(name="🎁 Belohnung", value=reward, inline=False)
-        await interaction.response.send_message(embed=embed)
+    embed.add_field(
+        name="🎁 Belohnung",
+        value=reward or "*Keine Belohnung angegeben*",
+        inline=False
+    )
+    embed.set_footer(text=f"{finished}/{len(conds)} Ziele erfüllt")
+    return embed
 
-    @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
-    async def status(self, interaction: discord.Interaction):
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "SELECT * FROM community_goals WHERE guild_id=%s AND active=1 LIMIT 1", (interaction.guild.id,)
-                )
-                goal = await cur.fetchone()
-                if not goal:
-                    embed = discord.Embed(
-                        title="🚫 Kein aktives Community Goal",
-                        description="Momentan läuft kein Ziel. Erstelle eines mit `/communitygoals set`.",
-                        color=discord.Color.red()
-                    )
-                    return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-                goal_id = goal[0]
-                reward = goal[4]
-                ends = goal[3]
-
-                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
-                conds = await cur.fetchall()
-
-                embed = discord.Embed(
-                    title="🎯 Community Goal",
-                    description=f"Läuft noch bis **{ends.strftime('%d.%m.%Y, %H:%M')}**",
-                    color=discord.Color.blurple()
-                )
-                finished = 0
-
-                for typ, target, progress in conds:
-                    if typ == "xp":
-                        await cur.execute(
-                            "SELECT SUM(user_xp) FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,)
-                        )
-                        sum_xp = await cur.fetchone()
-                        value = sum_xp[0] if sum_xp and sum_xp[0] else 0
-                    elif typ == "levelups":
-                        value = progress
-                    elif typ == "new_users":
-                        value = interaction.guild.member_count
-                    else:
-                        value = progress
-
-                    percent = min(value / target * 100, 100) if target else 0
-                    name, icon = COMMUNITY_GOAL_TYPES.get(typ, (typ, ""))
-                    bar = progress_bar(value, target)
-                    embed.add_field(
-                        name=f"{icon} **{name}**",
-                        value=f"{bar}\n**{value:,} / {target:,}** (`{percent:.1f}%`)",
-                        inline=False
-                    )
-                    if value >= target:
-                        finished += 1
-
-                embed.add_field(
-                    name="🎁 Belohnung",
-                    value=reward or "*Keine Belohnung angegeben*",
-                    inline=False
-                )
-                embed.set_footer(
-                    text=f"{finished}/{len(conds)} Ziele erfüllt"
-                )
-                await interaction.response.send_message(embed=embed)
-
-# COG für automatische Fortschritt-Listener
-class CommunityGoalCog(commands.Cog):
+class CommunityGoalsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_time = {}  # {guild_id: {user_id: join_timestamp}}
+        self.goal_tasks_started = False
+        bot.loop.create_task(self.schedule_goal_end_tasks())
         self.check_ban_free_days.start()
 
-    def cog_unload(self):
-        self.check_ban_free_days.cancel()
+    async def schedule_goal_end_tasks(self):
+        await self.bot.wait_until_ready()
+        if self.goal_tasks_started:
+            return
+        self.goal_tasks_started = True
 
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT id, guild_id, ends_at FROM community_goals WHERE active=1 AND ends_at > NOW()")
+                entries = await cur.fetchall()
+                for goal_id, guild_id, ends_at in entries:
+                    ends_at_dt = ends_at if isinstance(ends_at, datetime) else datetime.strptime(str(ends_at), "%Y-%m-%d %H:%M:%S")
+                    self.bot.loop.create_task(self.goal_end_task(goal_id, guild_id, ends_at_dt))
+
+    async def goal_end_task(self, goal_id, guild_id, ends_at):
+        now = datetime.utcnow()
+        sleep_seconds = (ends_at - now).total_seconds()
+        if sleep_seconds > 0:
+            await asyncio.sleep(sleep_seconds)
+        # Goal als beendet markieren und Ergebnis posten
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE community_goals SET active=0 WHERE id=%s", (goal_id,))
+                await cur.execute("SELECT reward FROM community_goals WHERE id=%s", (goal_id,))
+                reward = (await cur.fetchone() or [None])[0]
+                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
+                conds = await cur.fetchall()
+                finished = sum(1 for _, target, value in conds if value >= target)
+        guild = self.bot.get_guild(int(guild_id))
+        if guild and guild.system_channel:
+            embed = discord.Embed(
+                title="🏁 Community Goal abgeschlossen!",
+                description=f"Ergebnisse nach {finished}/{len(conds)} erfüllten Zielen:",
+                color=discord.Color.green() if finished == len(conds) else discord.Color.orange()
+            )
+            for typ, target, value in conds:
+                name, icon = GOAL_TYPES.get(typ, (typ, "❔"))
+                bar = progress_bar(value, target)
+                percent = min(value / target * 100, 100) if target else 0
+                embed.add_field(
+                    name=f"{icon} **{name}**",
+                    value=f"{bar}\n**{value:,} / {target:,}** (`{percent:.1f}%`)",
+                    inline=False
+                )
+            embed.add_field(
+                name="🎁 Belohnung",
+                value=reward or "*Keine Belohnung angegeben*",
+                inline=False
+            )
+            await guild.system_channel.send(embed=embed)
+
+    # Fortschrittstracking Listener
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.guild or message.author.bot:
@@ -239,7 +170,6 @@ class CommunityGoalCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction, command):
-        # Besser: Nur echte Userbefehle zählen, nicht jede Systemaktion
         if not interaction.guild or interaction.user.bot:
             return
         async with self.bot.pool.acquire() as conn:
@@ -278,7 +208,6 @@ class CommunityGoalCog(commands.Cog):
     async def check_ban_free_days(self):
         await self.bot.wait_until_ready()
         for guild in self.bot.guilds:
-            # Hier solltest du wirklich auf echte Bans prüfen!
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("""
@@ -288,14 +217,12 @@ class CommunityGoalCog(commands.Cog):
                     """, (guild.id,))
                     goal = await cur.fetchone()
                     if goal:
-                        # Optional: Nur +1, wenn kein Ban
                         await cur.execute("""
                             UPDATE community_goal_conditions SET progress = progress + 1
                             WHERE goal_id=%s AND type='ban_free_days'
                         """, (goal[0],))
                         await conn.commit()
 
-    # Das hier bitte im Levelsystem bei jedem Levelup aufrufen!
     async def count_levelup(self, guild_id):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -312,6 +239,99 @@ class CommunityGoalCog(commands.Cog):
                     """, (goal[0],))
                     await conn.commit()
 
+# ------------- COMMANDS als Subcommands einer Group -------------
+
+class CommunityGoalsGroup(app_commands.Group):
+    def __init__(self, cog: CommunityGoalsCog):
+        super().__init__(name="communitygoals", description="Communityziele!")
+        self.cog = cog
+
+    @app_commands.command(name="set", description="Setzt ein neues Communityziel mit beliebigen Bedingungen.")
+    @app_commands.describe(
+        ends_in_days="Wie viele Tage soll das Ziel laufen?",
+        reward="Textliche Belohnung (z.B. Rolle, Text, Emoji ...)",
+        conditions="Ziele, z.B.: messages:100,voice_minutes:3000,xp:5000"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.guild_only()
+    async def set(self, interaction: discord.Interaction, ends_in_days: app_commands.Range[int, 1, 60], reward: str = None, conditions: str = None):
+        await interaction.response.defer(ephemeral=True)
+        conds = parse_goal_conditions(conditions)
+        if not conds:
+            embed = discord.Embed(
+                title="🚫 Fehler",
+                description="Bitte Ziele in der Form `messages:50,voice_minutes:1000,levelups:3` angeben.",
+                color=discord.Color.red()
+            )
+            return await interaction.followup.send(embed=embed)
+        now = datetime.utcnow()
+        ends = now + timedelta(days=ends_in_days)
+        async with self.cog.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE community_goals SET active=0 WHERE guild_id=%s", (interaction.guild.id,))
+                await cur.execute(
+                    "INSERT INTO community_goals (guild_id, started_at, ends_at, reward, active) VALUES (%s, %s, %s, %s, 1)",
+                    (interaction.guild.id, now, ends, reward)
+                )
+                goal_id = cur.lastrowid
+                for typ, val in conds.items():
+                    await cur.execute(
+                        "INSERT INTO community_goal_conditions (goal_id, type, target, progress) VALUES (%s, %s, %s, %s)",
+                        (goal_id, typ, val, 0)
+                    )
+                await conn.commit()
+        self.cog.bot.loop.create_task(self.cog.goal_end_task(goal_id, interaction.guild.id, ends))
+        cond_lines = "\n".join(
+            f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** `{val:,}`"
+            for typ, val in conds.items()
+        )
+        embed = discord.Embed(
+            title="🎯 Neues Community Goal erstellt!",
+            description=f"Läuft **{ends_in_days}** Tage\n\n{cond_lines}",
+            color=discord.Color.blurple()
+        )
+        if reward:
+            embed.add_field(name="🎁 Belohnung", value=reward, inline=False)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
+    @app_commands.guild_only()
+    async def status(self, interaction: discord.Interaction):
+        async with self.cog.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT * FROM community_goals WHERE guild_id=%s AND active=1 LIMIT 1", (interaction.guild.id,)
+                )
+                goal = await cur.fetchone()
+                if not goal:
+                    embed = discord.Embed(
+                        title="🚫 Kein aktives Community Goal",
+                        description="Momentan läuft kein Ziel. Erstelle eines mit `/communitygoals set`.",
+                        color=discord.Color.red()
+                    )
+                    return await interaction.response.send_message(embed=embed, ephemeral=True)
+                goal_id = goal[0]
+                reward = goal[4]
+                ends = goal[3]
+                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
+                conds_db = await cur.fetchall()
+                conds = []
+                finished = 0
+                for typ, target, progress in conds_db:
+                    value = progress
+                    if typ == "xp":
+                        await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
+                        sum_xp = await cur.fetchone()
+                        value = sum_xp[0] if sum_xp and sum_xp[0] else 0
+                    elif typ == "new_users":
+                        value = interaction.guild.member_count
+                    if value >= target:
+                        finished += 1
+                    conds.append((typ, target, value))
+                embed = format_goal_embed(conds, reward, ends, finished)
+                await interaction.response.send_message(embed=embed)
+
 async def setup(bot):
-    await bot.add_cog(CommunityGoalCog(bot))
-    bot.tree.add_command(Goals(bot))
+    cog = CommunityGoalsCog(bot)
+    await bot.add_cog(cog)
+    bot.tree.add_command(CommunityGoalsGroup(cog))
