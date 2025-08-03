@@ -148,180 +148,78 @@ class Astra(commands.Bot):
                 await cur.execute("DROP TABLE community_goal_conditions;")
                 await cur.execute("DROP TABLE community_goals;")
                 await cur.execute("DROP TABLE goal_bans;")
-
                 await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, reward TEXT, active BOOLEAN DEFAULT 1)")
+                    "CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, reward TEXT, active BOOLEAN DEFAULT 1, channel_id BIGINT, msg_id BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target INT NOT NULL, progress INT NOT NULL DEFAULT 0)")
+
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS goal_bans (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, mod_id BIGINT, time DATETIME NOT NULL)")
 
-                # Einzelne Reaktionsrollen, pro Nachricht – keine Änderung nötig, aber hier zur Vollständigkeit:
-                await cur.execute("""
-                CREATE TABLE IF NOT EXISTS reactionrole_entries(
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    message_id BIGINT NOT NULL,
-                    role_id BIGINT NOT NULL,
-                    label VARCHAR(100) NOT NULL,
-                    emoji VARCHAR(100),
-                    FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE
-                )
-                """)
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS reactionrole_entries (id INT AUTO_INCREMENT PRIMARY KEY, message_id BIGINT NOT NULL, role_id BIGINT NOT NULL, label VARCHAR(100) NOT NULL, emoji VARCHAR(100), FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS gc_users (id BIGINT PRIMARY KEY, lvl_points INT NOT NULL DEFAULT 0, team BOOLEAN NOT NULL DEFAULT FALSE, banned BOOLEAN NOT NULL DEFAULT FALSE)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS gc_servers (id INT AUTO_INCREMENT PRIMARY KEY, guildid BIGINT NOT NULL, channelid BIGINT NOT NULL, invite VARCHAR(255))")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS reactionrole_messages (message_id BIGINT PRIMARY KEY, guild_id BIGINT NOT NULL, channel_id BIGINT NOT NULL, style VARCHAR(10) NOT NULL, embed_title VARCHAR(256) NOT NULL, embed_description TEXT NOT NULL, embed_color INT NOT NULL)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS reactionrole_entries (message_id BIGINT NOT NULL, role_id BIGINT NOT NULL, label VARCHAR(100) NOT NULL, emoji VARCHAR(100), FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS emojiquiz_quizzez (question TEXT, answer VARCHAR(255), hint TEXT)")
+                await cur.execute(
+                    "INSERT INTO emojiquiz_quizzez (question, answer, hint) VALUES ('🎬🚗👻', 'Ghostbusters', 'Ein Film über Geisterjäger'), ('🦇👨‍👩‍👧‍👦', 'Batman', 'Ein Superheld, der Gotham City beschützt'), ('🔗🌳🛤️', 'Linkin Park', 'Eine US-Rockband mit elektronischen Elementen, bekannt durch Songs wie \"In the End\"'), ('🤠🎸🌾', 'Country', 'Ein Musikgenre mit ländlichen Themen'), ('🔴🔵🟡', 'Twister', 'Ein Spiel, bei dem man Körperteile auf Farbpunkte legt'), ('🚀👾', 'E.T.', 'Ein Außerirdischer wird von Kindern gefunden'), ('🕵️‍♂️🔍', 'Sherlock Holmes', 'Ein berühmter Detektiv mit messerscharfem Verstand'), ('🦁👑', 'Der König der Löwen', 'Ein Zeichentrickfilm über Tiere in der Savanne'), ('🧙‍♂️⚡', 'Harry Potter', 'Ein Zauberer erlebt Abenteuer in einer magischen Welt'), ('🌌🚀', 'Star Wars', 'Eine epische Weltraumsaga zwischen Gut und Böse'), ('🍫🏭', 'Charlie und die Schokoladenfabrik', 'Ein Junge gewinnt eine Tour durch eine Fabrik'), ('🎤🐠', 'Findet Nemo', 'Ein Clownfisch sucht seinen Sohn'), ('🌈🍭', 'Der Zauberer von Oz', 'Ein Mädchen sucht einen Zauberer in einer Fantasiewelt'), ('🧛‍♂️🦇', 'Dracula', 'Ein Vampir, der nachts Blut trinkt'), ('🚶‍♂️👨‍🚀', 'Der Marsianer', 'Ein Astronaut kämpft ums Überleben auf dem Mars'), ('🏹👧', 'Die Tribute von Panem', 'Ein Mädchen wird zu einem tödlichen Spiel gezwungen'), ('🚢🌊', 'Titanic', 'Ein Liebesdrama auf einem berühmten Schiff'), ('🧊⛄', 'Die Eiskönigin', 'Eine Prinzessin mit Eiskräften'), ('🧟‍♂️🧟‍♀️', 'The Walking Dead', 'Eine Serie über eine Zombieapokalypse'), ('🐶🐱', 'Haustiere', 'Tiere, die oft als Begleiter gehalten werden'), ('🍎🍌', 'Früchte', 'Gesundes, essbares Obst'), ('☀️🌈', 'Regenbogen', 'Ein farbenfrohes Wetterphänomen'), ('📚📖', 'Bücher', 'Gedruckte oder digitale Literaturwerke'), ('🍕🍔', 'Fast Food', 'Schnell zubereitetes Essen zum Mitnehmen'), ('🚗🚦', 'Verkehr', 'Transportmittel und Straßenschilder'), ('🌳🌺', 'Natur', 'Die belebte und unbelebte Umwelt'), ('👶🍼', 'Baby', 'Ein neugeborenes oder kleines Kind'), ('🌞🏖️', 'Strand', 'Ein Ort mit Sand und Wasser'), ('🎮🕹️', 'Videospiele', 'Elektronische Spiele auf Bildschirmen'), ('🌙🌠', 'Nachthimmel', 'Der Himmel mit Mond und Sternen'), ('🎨🖌️', 'Malerei', 'Künstlerische Darstellung mit Farben'), ('🍲🥗', 'Essen', 'Verschiedene Arten von Gerichten'), ('📺🎬', 'Fernsehen', 'Sendungen und Filme auf dem Bildschirm'), ('📱📞', 'Handy', 'Ein Kommunikationsgerät'), ('📆⏰', 'Zeit', 'Messung von Momenten und Abläufen'), ('👩‍🍳🍳', 'Kochen', 'Zubereitung von Mahlzeiten'), ('🚴‍♂️🚶‍♀️', 'Aktivitäten', 'Was du draußen machst, wenn dir langweilig ist'), ('🎈🥳', 'Party', 'Ein soziales Treffen zum Feiern'), ('❤️🌹', 'Liebe', 'Ein starkes Gefühl der Zuneigung'), ('🌞🌻', 'Sonnenblume', 'Eine fröhliche, helle Blume'), ('📚✏️', 'Schule', 'Ein Ort zum Lernen'), ('🐶🏠', 'Hundehütte', 'Ein Unterschlupf für Hunde'), ('📆🎂', 'Jahrestag', 'Jährliche Feier eines Ereignisses'), ('🚴‍♀️🚴', 'Fahrrad', 'Ein zweirädriges Fortbewegungsmittel'), ('🏀👟', 'Basketball', 'Ein Mannschaftssport mit zwei Teams'), ('🛒🛍️', 'Einkaufen', 'Kleidung und andere Dinge kaufen'), ('🎭🤡', 'Zirkus', 'Reisende Künstler mit Akrobatik und Clowns'), ('🌧️🌈', 'Wetter', 'Meteorologische Erscheinungen'), ('🐍⚡🏰', 'Slytherin', 'Ein Haus in Hogwarts – grün, ehrgeizig, listig'), ('🐵🪄', 'Dschungelbuch', 'Ein Junge wächst im Urwald mit Tieren auf'), ('🕸️🕷️', 'Spider-Man', 'Ein Superheld mit Spinnenkräften'), ('🍔👨‍🍳', 'Burger King', 'Ein Fast-Food-Restaurant mit königlichem Namen'), ('👓⚗️', 'Chemie', 'Eine Naturwissenschaft mit Formeln und Reaktionen'), ('🎤🎶', 'Musik', 'Etwas, das du hörst und fühlst'), ('🗺️🧭', 'Abenteuer', 'Eine spannende Reise ins Unbekannte'), ('💻⌨️', 'Computer', 'Ein digitales Gerät für alles Mögliche'), ('👽🔭', 'Außerirdischer', 'Ein Wesen nicht von dieser Welt')")
 
-                # Users-Tabelle erstellen
-                await cur.execute("""
-                CREATE TABLE IF NOT EXISTS gc_users (
-                    id BIGINT PRIMARY KEY,
-                    lvl_points INT NOT NULL DEFAULT 0,
-                    team BOOLEAN NOT NULL DEFAULT FALSE,
-                    banned BOOLEAN NOT NULL DEFAULT FALSE
-                )
-                """)
+                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz (guildID BIGINT, channelID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_lsg (guildID BIGINT, lösung TEXT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS snake (userID BIGINT, highscore BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS topgg (userID BIGINT, count BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS website_stats (servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS afk (guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS autoreact (guildID BIGINT, channelID BIGINT, emoji TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS blacklist (serverID BIGINT, word TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS botrole (roleID BIGINT, guildID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS joinrole (roleID BIGINT, guildID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS capslock (guildID BIGINT, percent BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS counter (guildID BIGINT, channelID BIGINT, number BIGINT, lastuserID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS leavemsg (guildID BIGINT, channelID BIGINT, msg TEXT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS guessthenumber (guildID BIGINT, channelID BIGINT, number BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS automod (guildID BIGINT, warns BIGINT, action TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS modlog (serverID BIGINT, channelID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS tags (guildID BIGINT, tagname BIGINT, tagoutput BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS tempchannels (guild_id BIGINT, channel_id BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS welcome (guildID BIGINT, channelID BIGINT, msg TEXT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS ticketsystem_channels (guildID BIGINT, channelID BIGINT, msgID BIGINT, opened BIGINT, claimed TEXT, closed TEXT, time TEXT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS usertempchannels (guildID BIGINT, userID BIGINT, channelID BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS ticketsystem (guildID BIGINT, channelID BIGINT, categoryID BIGINT, roleID BIGINT, thema TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS ticketlog (guildID BIGINT, channelID BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS reminder (userID BIGINT, grund TEXT, time TEXT, remindID BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS levelsystem (user_xp BIGINT, user_level BIGINT, client_id TEXT, guild_id TEXT, enabled BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS levelchannel (guildID BIGINT, type TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS levelmsg (guildID BIGINT, message TEXT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS levelxp (guildID BIGINT, xp BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS levelroles (guildID BIGINT, roleID BIGINT, levelreq BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS giveaway_active (guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS giveway_ids (guildID BIGINT, gwID BIGINT, messageID BIGINT)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS giveaway_entrys (guildID BIGINT, channelID BIGINT, messageID BIGINT, userID BIGINT)")
+                await cur.execute("CREATE TABLE IF NOT EXISTS voterole (userID BIGINT, time TEXT)")
 
-
-                # Servers-Tabelle erstellen
-                await cur.execute("""
-                CREATE TABLE IF NOT EXISTS gc_servers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    guildid BIGINT NOT NULL,
-                    channelid BIGINT NOT NULL,
-                    invite VARCHAR(255)
-                )
-                """)
-
-
-                await cur.execute("""
-                    CREATE TABLE IF NOT EXISTS reactionrole_messages (
-                        message_id BIGINT PRIMARY KEY,
-                        guild_id BIGINT NOT NULL,
-                        channel_id BIGINT NOT NULL,
-                        style VARCHAR(10) NOT NULL, -- "Button" oder "Select"
-                        embed_title VARCHAR(256) NOT NULL,
-                        embed_description TEXT NOT NULL,
-                        embed_color INT NOT NULL
-                    )
-                """)
-                # reactionrole_entries Tabelle
-                await cur.execute("""
-                    CREATE TABLE IF NOT EXISTS reactionrole_entries (
-                        message_id BIGINT NOT NULL,
-                        role_id BIGINT NOT NULL,
-                        label VARCHAR(100) NOT NULL,
-                        emoji VARCHAR(100),
-                        FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE
-                    )
-                """)
-
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS emojiquiz_quizzez(question TEXT, answer VARCHAR(255), hint TEXT)")
-                await cur.execute("""
-                                    INSERT INTO emojiquiz_quizzez (question, answer, hint) VALUES 
-                                    ('🎬🚗👻', 'Ghostbusters', 'Ein Film über Geisterjäger'),
-                                    ('🦇👨‍👩‍👧‍👦', 'Batman', 'Ein Superheld, der Gotham City beschützt'),
-                                    ('🔗🌳🛤️', 'Linkin Park', 'Eine US-Rockband mit elektronischen Elementen, bekannt durch Songs wie "In the End"'),
-                                    ('🤠🎸🌾', 'Country', 'Ein Musikgenre mit ländlichen Themen'),
-                                    ('🔴🔵🟡', 'Twister', 'Ein Spiel, bei dem man Körperteile auf Farbpunkte legt'),
-                                    ('🚀👾', 'E.T.', 'Ein Außerirdischer wird von Kindern gefunden'),
-                                    ('🕵️‍♂️🔍', 'Sherlock Holmes', 'Ein berühmter Detektiv mit messerscharfem Verstand'),
-                                    ('🦁👑', 'Der König der Löwen', 'Ein Zeichentrickfilm über Tiere in der Savanne'),
-                                    ('🧙‍♂️⚡', 'Harry Potter', 'Ein Zauberer erlebt Abenteuer in einer magischen Welt'),
-                                    ('🌌🚀', 'Star Wars', 'Eine epische Weltraumsaga zwischen Gut und Böse'),
-                                    ('🍫🏭', 'Charlie und die Schokoladenfabrik', 'Ein Junge gewinnt eine Tour durch eine Fabrik'),
-                                    ('🎤🐠', 'Findet Nemo', 'Ein Clownfisch sucht seinen Sohn'),
-                                    ('🌈🍭', 'Der Zauberer von Oz', 'Ein Mädchen sucht einen Zauberer in einer Fantasiewelt'),
-                                    ('🧛‍♂️🦇', 'Dracula', 'Ein Vampir, der nachts Blut trinkt'),
-                                    ('🚶‍♂️👨‍🚀', 'Der Marsianer', 'Ein Astronaut kämpft ums Überleben auf dem Mars'),
-                                    ('🏹👧', 'Die Tribute von Panem', 'Ein Mädchen wird zu einem tödlichen Spiel gezwungen'),
-                                    ('🚢🌊', 'Titanic', 'Ein Liebesdrama auf einem berühmten Schiff'),
-                                    ('🧊⛄', 'Die Eiskönigin', 'Eine Prinzessin mit Eiskräften'),
-                                    ('🧟‍♂️🧟‍♀️', 'The Walking Dead', 'Eine Serie über eine Zombieapokalypse'),
-                                    ('🐶🐱', 'Haustiere', 'Tiere, die oft als Begleiter gehalten werden'),
-                                    ('🍎🍌', 'Früchte', 'Gesundes, essbares Obst'),
-                                    ('☀️🌈', 'Regenbogen', 'Ein farbenfrohes Wetterphänomen'),
-                                    ('📚📖', 'Bücher', 'Gedruckte oder digitale Literaturwerke'),
-                                    ('🍕🍔', 'Fast Food', 'Schnell zubereitetes Essen zum Mitnehmen'),
-                                    ('🚗🚦', 'Verkehr', 'Transportmittel und Straßenschilder'),
-                                    ('🌳🌺', 'Natur', 'Die belebte und unbelebte Umwelt'),
-                                    ('👶🍼', 'Baby', 'Ein neugeborenes oder kleines Kind'),
-                                    ('🌞🏖️', 'Strand', 'Ein Ort mit Sand und Wasser'),
-                                    ('🎮🕹️', 'Videospiele', 'Elektronische Spiele auf Bildschirmen'),
-                                    ('🌙🌠', 'Nachthimmel', 'Der Himmel mit Mond und Sternen'),
-                                    ('🎨🖌️', 'Malerei', 'Künstlerische Darstellung mit Farben'),
-                                    ('🍲🥗', 'Essen', 'Verschiedene Arten von Gerichten'),
-                                    ('📺🎬', 'Fernsehen', 'Sendungen und Filme auf dem Bildschirm'),
-                                    ('📱📞', 'Handy', 'Ein Kommunikationsgerät'),
-                                    ('📆⏰', 'Zeit', 'Messung von Momenten und Abläufen'),
-                                    ('👩‍🍳🍳', 'Kochen', 'Zubereitung von Mahlzeiten'),
-                                    ('🚴‍♂️🚶‍♀️', 'Aktivitäten', 'Was du draußen machst, wenn dir langweilig ist'),
-                                    ('🎈🥳', 'Party', 'Ein soziales Treffen zum Feiern'),
-                                    ('❤️🌹', 'Liebe', 'Ein starkes Gefühl der Zuneigung'),
-                                    ('🌞🌻', 'Sonnenblume', 'Eine fröhliche, helle Blume'),
-                                    ('📚✏️', 'Schule', 'Ein Ort zum Lernen'),
-                                    ('🐶🏠', 'Hundehütte', 'Ein Unterschlupf für Hunde'),
-                                    ('📆🎂', 'Jahrestag', 'Jährliche Feier eines Ereignisses'),
-                                    ('🚴‍♀️🚴', 'Fahrrad', 'Ein zweirädriges Fortbewegungsmittel'),
-                                    ('🏀👟', 'Basketball', 'Ein Mannschaftssport mit zwei Teams'),
-                                    ('🛒🛍️', 'Einkaufen', 'Kleidung und andere Dinge kaufen'),
-                                    ('🎭🤡', 'Zirkus', 'Reisende Künstler mit Akrobatik und Clowns'),
-                                    ('🌧️🌈', 'Wetter', 'Meteorologische Erscheinungen'),
-                                    ('🐍⚡🏰', 'Slytherin', 'Ein Haus in Hogwarts – grün, ehrgeizig, listig'),
-                                    ('🐵🪄', 'Dschungelbuch', 'Ein Junge wächst im Urwald mit Tieren auf'),
-                                    ('🕸️🕷️', 'Spider-Man', 'Ein Superheld mit Spinnenkräften'),
-                                    ('🍔👨‍🍳', 'Burger King', 'Ein Fast-Food-Restaurant mit königlichem Namen'),
-                                    ('👓⚗️', 'Chemie', 'Eine Naturwissenschaft mit Formeln und Reaktionen'),
-                                    ('🎤🎶', 'Musik', 'Etwas, das du hörst und fühlst'),
-                                    ('🗺️🧭', 'Abenteuer', 'Eine spannende Reise ins Unbekannte'),
-                                    ('💻⌨️', 'Computer', 'Ein digitales Gerät für alles Mögliche'),
-                                    ('👽🔭', 'Außerirdischer', 'Ein Wesen nicht von dieser Welt');
-                                    """)
-
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz(guildID BIGINT, channelID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_lsg(guildID BIGINT, lösung TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS snake(userID BIGINT, highscore BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS topgg(userID BIGINT, count BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS website_stats(servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS afk(guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS autoreact(guildID BIGINT, channelID BIGINT, emoji TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS blacklist(serverID BIGINT, word TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS botrole(roleID BIGINT, guildID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS joinrole(roleID BIGINT, guildID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS capslock(guildID BIGINT, percent BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS counter(guildID BIGINT, channelID BIGINT, number BIGINT, lastuserID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS leavemsg(guildID BIGINT, channelID BIGINT, msg TEXT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS guessthenumber(guildID BIGINT, channelID BIGINT, number BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS automod(guildID BIGINT, warns BIGINT, action TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS modlog(serverID BIGINT, channelID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS tags(guildID BIGINT, tagname BIGINT, tagoutput BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS tempchannels(guild_id BIGINT, channel_id BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS welcome(guildID BIGINT, channelID BIGINT, msg TEXT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS ticketsystem_channels(guildID BIGINT, channelID BIGINT, msgID BIGINT, opened BIGINT, claimed TEXT, closed TEXT, time TEXT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS usertempchannels(guildID BIGINT, userID BIGINT, channelID BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS ticketsystem(guildID BIGINT, channelID BIGINT, categoryID BIGINT, roleID BIGINT, thema TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS ticketlog(guildID BIGINT, channelID BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS reminder(userID BIGINT, grund TEXT, time TEXT, remindID BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS levelsystem(user_xp BIGINT, user_level BIGINT, client_id TEXT, guild_id TEXT, enabled BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelchannel(guildID BIGINT, type TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelmsg(guildID BIGINT, message TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelxp(guildID BIGINT, xp BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS levelroles(guildID BIGINT, roleID BIGINT, levelreq BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS giveaway_active(guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS giveway_ids(guildID BIGINT, gwID BIGINT, messageID BIGINT)")
-                await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS giveaway_entrys(guildID BIGINT, channelID BIGINT, messageID BIGINT, userID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS voterole(userID BIGINT, time TEXT)")
                 # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
 
                 logging.info("✅ Tables Erfolgreich geladen")
