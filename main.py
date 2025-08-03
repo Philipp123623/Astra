@@ -27,8 +27,6 @@ from typing import Literal
 
 import re
 
-
-
 logging.basicConfig(
     level=logging.INFO,  # oder DEBUG für mehr Details
     format="%(asctime)s - %(levelname)s - %(message)s"
@@ -1730,7 +1728,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     else:
         # Unbekannter Fehler – an Log-Channel senden
         embed.title = "Unbekannter Fehler"
-        embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt."
+        embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt!"
 
         # Fehler an Log-Channel senden
         log_channel = bot.get_channel(1141116983815962819)
