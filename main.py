@@ -566,17 +566,14 @@ class VoteView(discord.ui.View):
 async def on_dbl_vote(data):
     logging.info("on_dbl_vote ausgelöst für User:", data["user"])
 
-    """An event that is called whenever someone votes for the bot on Top.gg."""
-    member_votes_first = 0
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
             if data["type"] == "test":
                 return bot.dispatch('dbl_test', data)
 
-            votedata = await bot.topggpy.get_bot_info()
-            heart = bot.get_emoji(1361007251434901664)
-            votes = int(votedata["monthly_points"])
             user = bot.get_user(int(data["user"]))
+            votedata = await bot.topggpy.get_bot_info()
+            votes = int(votedata["monthly_points"])
             guild = bot.get_guild(1141116981697859736)
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
@@ -585,53 +582,30 @@ async def on_dbl_vote(data):
             this_month = today.replace(day=1)
             vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
 
-            # Monats-Gesamtvotes aktualisieren oder anlegen
-            await cur.execute("SELECT votes FROM monthly_votes WHERE month = %s", (this_month,))
-            monthly_result = await cur.fetchone()
-            if monthly_result:
-                monthly_total = monthly_result[0] + vote_increase
-                await cur.execute("UPDATE monthly_votes SET votes = %s WHERE month = %s", (monthly_total, this_month))
-            else:
-                monthly_total = vote_increase
-                await cur.execute("INSERT INTO monthly_votes (month, votes) VALUES (%s, %s)", (this_month, monthly_total))
-
-            # Count und last_reset holen
+            # User-Votes auslesen und ggf. resetten
             await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (int(data["user"]),))
             result = await cur.fetchone()
-
-            # USER NOCH NICHT IN DB
             if not result:
-                member_votes_first2 = member_votes_first + vote_increase
+                member_votes = vote_increase
                 await cur.execute("INSERT INTO topgg (userID, count, last_reset) VALUES (%s, %s, %s)",
-                                  (int(data["user"]), member_votes_first2, this_month))
+                                  (int(data["user"]), member_votes, this_month))
             else:
                 votes_member, last_reset = result
-                # Prüfe, ob Monatswechsel -> Reset
                 if not last_reset or last_reset < this_month:
                     votes_member = 0
                     await cur.execute("UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
                                       (votes_member, this_month, int(data["user"])))
-                member_votes = int(votes_member + vote_increase)
+                member_votes = votes_member + vote_increase
                 await cur.execute("UPDATE topgg SET count = %s WHERE userID = %s",
                                   (member_votes, int(data["user"])))
-                member_votes_first2 = member_votes
 
-            # Zeitberechnung und Rollen-Handling wie gehabt
-            time = "12h"
-            time1 = convert(time)
-            t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-            t2 = datetime.datetime.fromtimestamp(int(t1))
-            asyncio.create_task(funktion2(t2))
-            await cur.execute("INSERT INTO voterole(userID, time) VALUES(%s, %s)",
-                              (int(data["user"]), t1))
-
+            # Embed nur mit User-Votes
             embed = discord.Embed(
                 title="Danke fürs Voten von Astra",
                 description=(
-                    f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun **{monthly_total}** Votes diesen Monat.\n"
-                    f"Insgesamt wurden diesen Monat bereits **{vote_increase}** Votes abgegeben.\n"
-                    f"Du hast diesen Monat bereits **{member_votes_first2}** Mal gevotet.\n\n"
+                    f"<:Astra_boost:1141303827107164270> `philu2005({user.id})` hat für **Astra** gevotet.\n"
+                    f"Wir haben nun `{votes}` diesen Monat."
+                    f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
                     f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
                 colour=discord.Colour.blue(),
@@ -649,7 +623,9 @@ async def on_dbl_vote(data):
                 if member.id == user.id:
                     await member.add_roles(voterole, reason="Voterole")
             msg = await channel.send(embed=embed, view=VoteView())
+            await msg.add_reaction(heart)
             return None
+
 
 
 @bot.event
