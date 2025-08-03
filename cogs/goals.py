@@ -248,8 +248,7 @@ class CommunityGoalsGroup(app_commands.Group):
     # ... GOAL_TYPES, progress_bar usw. bleiben wie vorher ...
     @app_commands.guild_only()
     class CommunityGoalsGroup(app_commands.Group):
-        def __init__(self, cog: CommunityGoalsCog, bot):
-            self.bot = bot
+        def __init__(self, cog: CommunityGoalsCog):
             super().__init__(name="communitygoals", description="Communityziele!")
             self.cog = cog
 
@@ -375,4 +374,4 @@ class CommunityGoalsGroup(app_commands.Group):
 async def setup(bot):
     cog = CommunityGoalsCog(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(CommunityGoalsGroup(cog, bot))
+    bot.tree.add_command(CommunityGoalsGroup(cog))
