@@ -242,83 +242,97 @@ class CommunityGoalsGroup(app_commands.Group):
         super().__init__(name="communitygoals", description="Communityziele!")
         self.cog = cog
 
-    @app_commands.command(name="set", description="Setzt ein neues Communityziel mit auswählbaren Bedingungen.")
-    @app_commands.guild_only()
-    @app_commands.describe(
-        ends_in_days="Wie viele Tage soll das Ziel laufen?",
-        reward="Belohnung (Text, Rolle etc.)",
-        nachrichten="Ziel: Anzahl Nachrichten",
-        voice_minuten="Ziel: Voice-Minuten (gesamt)",
-        xp="Ziel: XP gesamt",
-        levelups="Ziel: Anzahl Level-Ups",
-        neue_user="Ziel: Neue User",
-        ban_free_days="Ziel: Ban-freie Tage",
-        befehle="Ziel: Befehle genutzt"
-    )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def set(
-        self, interaction: discord.Interaction,
-        ends_in_days: app_commands.Range[int, 1, 60],
-        reward: str = None,
-        nachrichten: int = None,
-        voice_minuten: int = None,
-        xp: int = None,
-        levelups: int = None,
-        neue_user: int = None,
-        ban_free_days: int = None,
-        befehle: int = None
-    ):
-        await interaction.response.defer(ephemeral=True)
-        conds = []
-        # Klar zugeordnet zu DB-Namen:
-        mapping = [
-            ("messages", nachrichten),
-            ("voice_minutes", voice_minuten),
-            ("xp", xp),
-            ("levelups", levelups),
-            ("new_users", neue_user),
-            ("ban_free_days", ban_free_days),
-            ("commands_used", befehle),
-        ]
-        for key, val in mapping:
-            if val is not None and val > 0:
-                conds.append((key, val))
-        if not conds:
-            embed = discord.Embed(
-                title="🚫 Fehler",
-                description="Mindestens eine Bedingung mit Wert > 0 angeben.",
-                color=discord.Color.red()
-            )
-            return await interaction.followup.send(embed=embed)
-        now = datetime.utcnow()
-        ends = now + timedelta(days=ends_in_days)
-        async with self.cog.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("UPDATE community_goals SET active=0 WHERE guild_id=%s", (interaction.guild.id,))
-                await cur.execute(
-                    "INSERT INTO community_goals (guild_id, started_at, ends_at, reward, active) VALUES (%s, %s, %s, %s, 1)",
-                    (interaction.guild.id, now, ends, reward)
+    from typing import Optional
+    from discord import app_commands
+
+    # ... GOAL_TYPES, progress_bar usw. bleiben wie vorher ...
+
+    class CommunityGoalsGroup(app_commands.Group):
+        def __init__(self, cog: CommunityGoalsCog):
+            super().__init__(name="communitygoals", description="Communityziele!")
+            self.cog = cog
+
+        @app_commands.command(
+            name="set",
+            description="Setzt ein neues Communityziel mit frei wählbaren Bedingungen."
+        )
+        @app_commands.guild_only()
+        @app_commands.describe(
+            ends_in_days="Wie viele Tage soll das Ziel laufen? (1–60)",
+            reward="Belohnung (Text, Rolle, Emoji etc.)",
+            nachrichten="Wie viele Nachrichten sollen insgesamt geschrieben werden?",
+            voice_minuten="Wie viele Voice-Minuten sollen gesammelt werden?",
+            xp="Wie viele XP sollen gesammelt werden?",
+            levelups="Wie viele Level-Ups insgesamt?",
+            neue_user="Wie viele neue User sollen dem Server joinen?",
+            ban_free_days="Wie viele Tage ohne Ban/Warn?",
+            befehle="Wie viele Slash-Befehle sollen genutzt werden?"
+        )
+        @app_commands.checks.has_permissions(administrator=True)
+        async def set(
+                self,
+                interaction: discord.Interaction,
+                ends_in_days: app_commands.Range[int, 1, 60],
+                reward: Optional[str] = None,
+                nachrichten: Optional[app_commands.Range[int, 1, 1000000]] = None,
+                voice_minuten: Optional[app_commands.Range[int, 1, 1000000]] = None,
+                xp: Optional[app_commands.Range[int, 1, 10000000]] = None,
+                levelups: Optional[app_commands.Range[int, 1, 10000]] = None,
+                neue_user: Optional[app_commands.Range[int, 1, 10000]] = None,
+                ban_free_days: Optional[app_commands.Range[int, 1, 60]] = None,
+                befehle: Optional[app_commands.Range[int, 1, 100000]] = None,
+        ):
+            await interaction.response.defer(ephemeral=True)
+            conds = []
+            mapping = [
+                ("messages", nachrichten),
+                ("voice_minutes", voice_minuten),
+                ("xp", xp),
+                ("levelups", levelups),
+                ("new_users", neue_user),
+                ("ban_free_days", ban_free_days),
+                ("commands_used", befehle),
+            ]
+            for key, val in mapping:
+                if val is not None and val > 0:
+                    conds.append((key, val))
+            if not conds:
+                embed = discord.Embed(
+                    title="🚫 Fehler",
+                    description="Mindestens eine Bedingung mit Wert > 0 angeben.",
+                    color=discord.Color.red()
                 )
-                goal_id = cur.lastrowid
-                for typ, val in conds:
+                return await interaction.followup.send(embed=embed)
+            now = datetime.utcnow()
+            ends = now + timedelta(days=ends_in_days)
+            async with self.cog.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE community_goals SET active=0 WHERE guild_id=%s", (interaction.guild.id,))
                     await cur.execute(
-                        "INSERT INTO community_goal_conditions (goal_id, type, target, progress) VALUES (%s, %s, %s, %s)",
-                        (goal_id, typ, val, 0)
+                        "INSERT INTO community_goals (guild_id, started_at, ends_at, reward, active) VALUES (%s, %s, %s, %s, 1)",
+                        (interaction.guild.id, now, ends, reward)
                     )
-                await conn.commit()
-        self.cog.bot.loop.create_task(self.cog.goal_end_task(goal_id, interaction.guild.id, ends))
-        cond_lines = "\n".join(
-            f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** `{val:,}`"
-            for typ, val in conds
-        )
-        embed = discord.Embed(
-            title="🎯 Neues Community Goal erstellt!",
-            description=f"Läuft **{ends_in_days}** Tage\n\n{cond_lines}",
-            color=discord.Color.blurple()
-        )
-        if reward:
-            embed.add_field(name="🎁 Belohnung", value=reward, inline=False)
-        await interaction.followup.send(embed=embed)
+                    goal_id = cur.lastrowid
+                    for typ, val in conds:
+                        await cur.execute(
+                            "INSERT INTO community_goal_conditions (goal_id, type, target, progress) VALUES (%s, %s, %s, %s)",
+                            (goal_id, typ, val, 0)
+                        )
+                    await conn.commit()
+            self.cog.bot.loop.create_task(self.cog.goal_end_task(goal_id, interaction.guild.id, ends))
+            cond_lines = "\n".join(
+                f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** `{val:,}`"
+                for typ, val in conds
+            )
+            embed = discord.Embed(
+                title="🎯 Neues Community Goal erstellt!",
+                description=f"Läuft **{ends_in_days}** Tage\n\n{cond_lines}",
+                color=discord.Color.blurple()
+            )
+            if reward:
+                embed.add_field(name="🎁 Belohnung", value=reward, inline=False)
+            await interaction.followup.send(embed=embed)
+            return None
 
     @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
     @app_commands.guild_only()
