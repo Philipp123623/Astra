@@ -1750,4 +1750,11 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     except discord.InteractionResponded:
         pass
 
-bot.run(TOKEN)
+app = Flask(__name__)
+
+@app.route('/status')
+def status():
+    return jsonify(online=True)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
