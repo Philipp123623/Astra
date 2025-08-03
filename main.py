@@ -157,7 +157,7 @@ class Astra(commands.Bot):
                                   )
                                   """)
 
-                await cur.execute("""CREATE TABLE IF NOT EXISTS community_goal_conditions(id INT PRIMARY KEY AUTO_INCREMENT, goal_id INT, type VARCHAR(23), target INT, progress INT DEFAULT 0, UNIQUE (goal_id, type)""")
+                await cur.execute("""CREATE TABLE IF NOT EXISTS community_goal_conditions(id INT PRIMARY KEY AUTO_INCREMENT, goal_id INT, type VARCHAR(23), target INT, progress INT DEFAULT 0, UNIQUE (goal_id, type))""")
 
 
                 await cur.execute("""
