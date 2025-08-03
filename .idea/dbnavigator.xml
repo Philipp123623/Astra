@@ -25,9 +25,7 @@
     <last-used-providers />
   </component>
   <component name="DBNavigator.Project.DatabaseFileManager">
-    <open-files>
-      <object connection-id="8aac425e-29ce-4813-83cb-a1d27815fcd0" object-ref="consoles/AstraDB" />
-    </open-files>
+    <open-files />
   </component>
   <component name="DBNavigator.Project.DatabaseSessionManager">
     <connection id="8aac425e-29ce-4813-83cb-a1d27815fcd0" />
