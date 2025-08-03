@@ -148,32 +148,16 @@ class Astra(commands.Bot):
                 await cur.execute("DROP TABLE community_goal_conditions;")
                 await cur.execute("DROP TABLE community_goals;")
 
-                await cur.execute("""
-                                  CREATE TABLE IF NOT EXISTS community_goals
-                                  (
-                                      id         INT PRIMARY KEY AUTO_INCREMENT,
-                                      guild_id   BIGINT   NOT NULL,
-                                      started_at DATETIME NOT NULL,
-                                      ends_at    DATETIME,
-                                      reward     VARCHAR(255),
-                                      active     BOOLEAN DEFAULT 1
-                                  )
-                                  """)
-                await cur.execute("""
-                                  CREATE TABLE IF NOT EXISTS community_goal_conditions
-                                  (
-                                      id       INT PRIMARY KEY AUTO_INCREMENT,
-                                      goal_id  INT,
-                                      type     VARCHAR(32),
-                                      target   INT,
-                                      progress INT DEFAULT 0,
-                                      UNIQUE (goal_id, type)
-                                  )
-                                  """)
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, reward TEXT, active BOOLEAN DEFAULT 1)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target INT NOT NULL, progress INT NOT NULL DEFAULT 0)")
+                await cur.execute(
+                    "CREATE TABLE IF NOT EXISTS goal_bans (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, mod_id BIGINT, time DATETIME NOT NULL)")
 
                 # Einzelne Reaktionsrollen, pro Nachricht – keine Änderung nötig, aber hier zur Vollständigkeit:
                 await cur.execute("""
-                CREATE TABLE IF NOT EXISTS reactionrole_entries (
+                CREATE TABLE IF NOT EXISTS reactionrole_entries(
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     message_id BIGINT NOT NULL,
                     role_id BIGINT NOT NULL,
