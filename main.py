@@ -604,7 +604,7 @@ async def on_dbl_vote(data):
                 title="Danke fürs Voten von Astra",
                 description=(
                     f"<:Astra_boost:1141303827107164270> `philu2005({user.id})` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun `{votes}` diesen Monat."
+                    f"Wir haben nun `{votes}` diesen Monat.\n"
                     f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
                     f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
@@ -615,7 +615,7 @@ async def on_dbl_vote(data):
                 url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
             )
             embed.set_footer(
-                text=f"Danke für deinen Support • {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}",
+                text=f"Danke für deinen Support",
                 icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
             )
 
