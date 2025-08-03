@@ -15,6 +15,7 @@ COMMUNITY_GOAL_TYPES = {
 }
 
 @app_commands.guild_only()
+@app_commands.checks.has_permissions(manage_guild=True)
 class Level(app_commands.Group):
     def __init__(self):
         super().__init__(
