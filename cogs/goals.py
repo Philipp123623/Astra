@@ -389,7 +389,8 @@ class CommunityGoalsCog(commands.Cog):
         self.goal_tasks_started = False
         bot.loop.create_task(self.schedule_goal_end_tasks())
 
-    async def update_goal_embed(self, guild_id):
+    async def announce_and_check_goal(self, guild_id):
+        # Ruft Fortschritt ab, sendet pro Zieltyp eine Nachricht bei Erreichen & updated Embed sofort!
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -415,6 +416,7 @@ class CommunityGoalsCog(commands.Cog):
                 conds_db = await cur.fetchall()
                 conds = []
                 finished = 0
+                announce_types = []
                 for typ, target, progress in conds_db:
                     value = min(progress, target)
                     if typ == "xp":
@@ -426,9 +428,26 @@ class CommunityGoalsCog(commands.Cog):
                     if value >= target:
                         finished += 1
                     conds.append((typ, target, value))
+                    # Check ob gerade frisch erreicht!
+                    if value == target and progress == target:
+                        announce_types.append(typ)
 
-                embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
-                                          status=None)
+                # --- Einzelziele announce, falls gerade erst geschafft (schnell & "dumm", geht aber) ---
+                # Nur Ziel-Typen die bei diesem Aufruf wirklich *frisch* erreicht wurden (Progress == Target)
+                if announce_types:
+                    for typ in announce_types:
+                        icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
+                        await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
+
+                # Alle Ziele erfüllt?
+                all_done = finished == len(conds) and finished > 0
+                if all_done:
+                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
+                                              status="🏁 Community Goal **GESCHAFFT!**")
+                    embed.description = "Alle Ziele wurden erreicht! 🎉"
+                else:
+                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role)
+
                 try:
                     await msg.edit(embed=embed)
                 except Exception:
@@ -480,7 +499,6 @@ class CommunityGoalsCog(commands.Cog):
                     conds = []
                     finished = 0
                     for typ, target, progress in conds_db:
-                        # Wie im Status-Command: Korrekte Werte berechnen!
                         value = min(progress, target)
                         if typ == "xp":
                             await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id=%s", (guild_id,))
@@ -492,17 +510,8 @@ class CommunityGoalsCog(commands.Cog):
                             finished += 1
                         conds.append((typ, target, value))
 
-                        # --- Neu: Einzel-Ziel erreicht? Nachricht! ---
-                        # Nur beim ersten Mal pro Zieltyp
-                        if value >= target and progress_announce.get(typ) != True:
-                            if channel:
-                                icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
-                                await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
-                            progress_announce[typ] = True
-                        elif value < target:
-                            progress_announce[typ] = False
-
-                    done = all_done_checker(conds)
+                    # NEU: Wenn alle Ziele erfüllt, beende den Task SOFORT!
+                    done = finished == len(conds) and finished > 0
                     time_over = int(time.time()) >= ends_at_ts
 
                     if done or time_over:
@@ -524,9 +533,9 @@ class CommunityGoalsCog(commands.Cog):
                                     await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
                                 except Exception:
                                     pass
-                        break
+                        break  # <-- TASK STOPPEN!
 
-                    # Normaler Embed-Update (wieder richtige Werte!)
+                    # Normaler Embed-Update
                     embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
                                               status=None)
                     try:
@@ -583,7 +592,7 @@ class CommunityGoalsCog(commands.Cog):
                             (goal_id,)
                         )
                         await conn.commit()
-                        await self.update_goal_embed(message.guild.id)  # <- NEU!
+                        await self.announce_and_check_goal(message.guild.id)  # <- NEU!
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before, after):
@@ -628,7 +637,7 @@ class CommunityGoalsCog(commands.Cog):
                                             (add_minutes, goal_id)
                                         )
                                         await conn.commit()
-                                        await self.update_goal_embed(member.guild.id)  # <- NEU!
+                                        await self.announce_and_check_goal(member.guild.id)  # <- NEU!
 
     @commands.Cog.listener()
     async def on_app_command_completion(self, interaction: discord.Interaction, command):
@@ -662,7 +671,7 @@ class CommunityGoalsCog(commands.Cog):
                                 (goal_id,)
                             )
                             await conn.commit()
-                            await self.update_goal_embed(interaction.guild.id)  # <- NEU!
+                            await self.announce_and_check_goal(interaction.guild.id)  # <- NEU!
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
@@ -694,7 +703,7 @@ class CommunityGoalsCog(commands.Cog):
                                 (goal_id,)
                             )
                             await conn.commit()
-                            await self.update_goal_embed(member.guild.id)  # <- NEU!
+                            await self.announce_and_check_goal(member.guild.id)  # <- NEU!
 
     async def count_levelup(self, guild_id):
         async with self.bot.pool.acquire() as conn:
@@ -725,7 +734,7 @@ class CommunityGoalsCog(commands.Cog):
                                 (goal_id,)
                             )
                             await conn.commit()
-                            await self.update_goal_embed(member.guild.id)  # <- NEU!
+                            await self.announce_and_check_goal(guild_id)  # <- NEU!
 
 async def setup(bot):
     cog = CommunityGoalsCog(bot)
