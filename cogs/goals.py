@@ -148,23 +148,20 @@ class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
         if not ends_ts or ends_ts <= int(time.time()):
             return await interaction.response.send_message("Ungültiges Enddatum.", ephemeral=True)
 
-        def to_int(s): return int(s.replace(".", "").replace(",", "")) if s else None
-
-        mapping = [
-            ("messages", to_int(data_page1["nachrichten"])),
-            ("voice_minutes", to_int(data_page1["voice_minuten"])),
-            ("xp", to_int(data_page1["xp"])),
-        ]
-        conds = [(typ, val) for typ, val in mapping if val and val > 0]
-
-        if not conds:
-            return await interaction.response.send_message("Mindestens ein Ziel muss angegeben werden.", ephemeral=True)
-
-        cond_lines = "\n".join(f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** {val:,}" for typ, val in conds)
+        cond_lines = []
+        if data_page1["nachrichten"]:
+            cond_lines.append(
+                f"{GOAL_TYPES['messages'][1]} **{GOAL_TYPES['messages'][0]}:** {int(data_page1['nachrichten']):,}")
+        if data_page1["voice_minuten"]:
+            cond_lines.append(
+                f"{GOAL_TYPES['voice_minutes'][1]} **{GOAL_TYPES['voice_minutes'][0]}:** {int(data_page1['voice_minuten']):,}")
+        if data_page1["xp"]:
+            cond_lines.append(f"{GOAL_TYPES['xp'][1]} **{GOAL_TYPES['xp'][0]}:** {int(data_page1['xp']):,}")
 
         embed = discord.Embed(
             title="📋 Zielübersicht (1/2)",
-            description=f"**Ende:** <t:{ends_ts}:f>\n\n{cond_lines}",
+            description=f"**Ende:** <t:{ends_ts}:f>\n\n" + (
+                "\n".join(cond_lines) if cond_lines else "*Noch kein Ziel angegeben*"),
             color=discord.Color.blurple()
         )
         if data_page1["belohnung_text"]:
@@ -172,6 +169,8 @@ class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
 
         setup_state = GoalSetupState(interaction, self.ziel_kanal, self.reward_role, data_page1)
         await interaction.response.send_message(embed=embed, view=WeiterButton(setup_state), ephemeral=True)
+        return None
+
 
 class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
     levelups = discord.ui.TextInput(label="Level-Ups-Ziel (optional)", required=False, placeholder="z.B. 15")
@@ -193,8 +192,9 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
         self.setup_state.data_page2 = data_page2
 
         full_data = {**self.setup_state.data_page1, **data_page2}
-        ends_ts = parse_time_input(full_data["dauer"])
-        def to_int(s): return int(s.replace(".", "").replace(",", "")) if s else None
+
+        def to_int(s):
+            return int(s.replace(".", "").replace(",", "")) if s else None
 
         mapping = [
             ("messages", to_int(full_data.get("nachrichten"))),
@@ -206,6 +206,12 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
             ("commands_used", to_int(full_data.get("befehle"))),
         ]
         conds = [(typ, val) for typ, val in mapping if val and val > 0]
+        if not conds:
+            return await interaction.response.send_message("Du musst mindestens eine Bedingung ausfüllen!",
+                                                           ephemeral=True)
+
+        # (Rest wie gehabt, optional das Embed-Preview)
+        ends_ts = parse_time_input(full_data["dauer"])
         cond_lines = "\n".join(f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** {val:,}" for typ, val in conds)
 
         embed = discord.Embed(
@@ -218,6 +224,7 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
             embed.add_field(name="🏱 Belohnung", value=reward_text, inline=False)
 
         await interaction.response.edit_message(embed=embed, view=FertigButton(self.setup_state, cond_lines, ends_ts, reward_text))
+
 
 class CommunityGoalsGroup(app_commands.Group):
     def __init__(self, cog):
@@ -447,7 +454,12 @@ class CommunityGoalsCog(commands.Cog):
 
                 # Embed-Update (wie gehabt)
                 all_done = finished == len(conds) and finished > 0
-                if all_done:
+                if all_done and reward_role:
+                    for member in guild.members:
+                        try:
+                            await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
+                        except Exception:
+                            pass
                     embed = format_goal_embed(
                         conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
                         status="🏁 Community Goal **GESCHAFFT!**"
@@ -494,79 +506,36 @@ class CommunityGoalsCog(commands.Cog):
                 msg = await channel.fetch_message(msg_id) if channel else None
                 reward_role = guild.get_role(reward_role_id) if reward_role_id and guild else None
 
+                # Warten bis Zeit vorbei ist!
                 while True:
-                    # Lade announced-Status aus DB!
-                    await cur.execute(
-                        "SELECT type, target, progress, announced FROM community_goal_conditions WHERE goal_id=%s",
-                        (goal_id,)
-                    )
+                    time_left = ends_at_ts - int(time.time())
+                    if time_left > 0:
+                        await asyncio.sleep(min(60, time_left))  # jede Minute checken
+                        continue
+
+                    # ENDE ERREICHT: Alles löschen!
+                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
+                                      (goal_id,))
                     conds_db = await cur.fetchall()
-                    conds = []
-                    finished = 0
-                    announce_types = []
-                    for typ, target, progress, announced in conds_db:
-                        value = min(progress, target)
-                        if typ == "xp":
-                            await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id=%s", (guild_id,))
-                            sum_xp = await cur.fetchone()
-                            value = min(sum_xp[0] or 0, target)
-                        elif typ == "new_users":
-                            value = min(guild.member_count, target) if guild else 0
-                        if value >= target:
-                            finished += 1
-                        conds.append((typ, target, value))
-                        if value >= target and not announced:
-                            announce_types.append(typ)
+                    finished = sum(1 for typ, target, progress in conds_db if progress >= target)
+                    conds = [(typ, target, progress) for typ, target, progress in conds_db]
 
-                    # Announce nur neu geschaffte Ziele:
-                    if announce_types and channel:
-                        for typ in announce_types:
-                            icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
-                            await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
-                            await cur.execute(
-                                "UPDATE community_goal_conditions SET announced=TRUE WHERE goal_id=%s AND type=%s",
-                                (goal_id, typ)
-                            )
-                        await conn.commit()
-
-                    done = finished == len(conds) and finished > 0
-                    time_over = int(time.time()) >= ends_at_ts
-
-                    if done or time_over:
-                        status = "🏁 Community Goal **GESCHAFFT!**" if done else "⏹️ Community Goal beendet"
-                        desc = f"Alle Ziele wurden erreicht! 🎉" if done else f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
-                        final_embed = format_goal_embed(
-                            conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=status
-                        )
-                        final_embed.description = desc
-                        try:
-                            if msg:
-                                await msg.edit(embed=final_embed)
-                        except Exception:
-                            pass
-                        # Setze das Goal als inaktiv und lösche alle zugehörigen Daten
-                        await cur.execute("UPDATE community_goals SET active=FALSE WHERE id=%s", (goal_id,))
-                        await cur.execute("DELETE FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
-                        await cur.execute("DELETE FROM community_goals WHERE id=%s", (goal_id,))  # <-- HIER EINFÜGEN
-                        await conn.commit()
-                        if reward_role and done:
-                            for member in guild.members:
-                                try:
-                                    await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
-                                except Exception:
-                                    pass
-                        break  # <-- TASK STOPPEN!
-
-                    # Embed-Update ohne Announcements!
-                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
-                                              status=None)
+                    status = "⏹️ Community Goal beendet"
+                    desc = f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
+                    final_embed = format_goal_embed(
+                        conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=status
+                    )
+                    final_embed.description = desc
                     try:
                         if msg:
-                            await msg.edit(embed=embed)
+                            await msg.edit(embed=final_embed)
                     except Exception:
                         pass
-
-                    await asyncio.sleep(3600)
+                    await cur.execute("UPDATE community_goals SET active=FALSE WHERE id=%s", (goal_id,))
+                    await cur.execute("DELETE FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
+                    await cur.execute("DELETE FROM community_goals WHERE id=%s", (goal_id,))
+                    await conn.commit()
+                    break
 
     async def check_ban_in_period(self, guild_id, started_at: datetime, ends_at: datetime) -> bool:
         async with self.bot.pool.acquire() as conn:
