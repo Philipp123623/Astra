@@ -19,22 +19,21 @@ GOAL_TYPES = {
 
 def parse_time_input(time_str: str) -> Optional[int]:
     """
-    Versucht, aus verschiedenen Eingaben (Tage, Datum, Uhrzeit) einen UNIX-Timestamp UTC zu machen.
-    Erlaubt z.B.:
-    - reine Zahl (1-60) als Tage ab jetzt
-    - Datum (z.B. 5.8.2025, 05.08.2025, 5.08.2025, 05.8.2025)
-    - Datum + Uhrzeit (z.B. 5.8.2025 18, 5.8.2025 18:30)
-    - Nur Uhrzeit (z.B. 18, 18:30) am aktuellen Tag (UTC)
+    Parsen verschiedener Zeitformate in UNIX-Timestamp UTC.
+    Erlaubt:
+    - Zahl (1-60) als Tage ab jetzt
+    - Datum mit optionaler Uhrzeit (z.B. 5.8.2025, 05.08.2025 18:30)
+    - Nur Uhrzeit heute oder morgen (UTC)
     """
     now = datetime.now(timezone.utc)
 
-    # 1) Prüfe ob reine Zahl (Tage)
+    # 1) Zahl als Tage
     if re.fullmatch(r"\d{1,2}", time_str):
         tage = int(time_str)
         if 1 <= tage <= 60:
             return int((now + timedelta(days=tage)).timestamp())
 
-    # 2) Datum mit optionaler Uhrzeit: D.M.Y [H[:M]]
+    # 2) Datum + optionale Uhrzeit
     m = re.fullmatch(r"(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2})(?::(\d{1,2}))?)?", time_str)
     if m:
         tag, monat, jahr = int(m[1]), int(m[2]), int(m[3])
@@ -47,14 +46,13 @@ def parse_time_input(time_str: str) -> Optional[int]:
         except Exception:
             return None
 
-    # 3) Nur Uhrzeit heute (UTC): H[:M]
+    # 3) Nur Uhrzeit heute/morgen
     m = re.fullmatch(r"(\d{1,2})(?::(\d{1,2}))?", time_str)
     if m:
         stunde = int(m[1])
         minute = int(m[2]) if m[2] else 0
         try:
             dt = now.replace(hour=stunde, minute=minute, second=0, microsecond=0)
-            # Wenn Uhrzeit in der Vergangenheit heute -> nächster Tag
             if dt.timestamp() <= now.timestamp():
                 dt += timedelta(days=1)
             return int(dt.timestamp())
@@ -103,14 +101,13 @@ def format_goal_embed(conds, reward_text, ends_timestamp, finished, total, rewar
     embed.set_footer(text=f"{finished}/{total} Ziele erfüllt")
     return embed
 
-# Modals
+# --- Modals ---
 
 class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
     dauer = discord.ui.TextInput(label="Ende (Tage, Datum oder Uhrzeit)", required=True,
                                 placeholder="z.B. 14 oder 05.08.2025 18:00 oder 18:00")
     belohnung_text = discord.ui.TextInput(label="Belohnung (optional, Text)", required=False,
                                          placeholder="Text, z.B. '500 Coins'")
-    # Rollen-Belohnung via Slash Command Option, nicht hier
     nachrichten = discord.ui.TextInput(label="Nachrichten-Ziel (optional)", required=False, placeholder="z.B. 2500")
     voice_minuten = discord.ui.TextInput(label="Voice-Minuten-Ziel (optional)", required=False, placeholder="z.B. 1000")
     xp = discord.ui.TextInput(label="XP-Ziel (optional)", required=False, placeholder="z.B. 25000")
@@ -175,7 +172,6 @@ class CommunityGoalsGroup(app_commands.Group):
     @staticmethod
     async def create_goal_from_modal(goal_data, ziel_kanal, interaction: discord.Interaction, reward_role: Optional[discord.Role] = None):
         now_ts = int(time.time())
-        # Zeit parsen
         ends_raw = goal_data.get("dauer", "")
         ends_ts = parse_time_input(ends_raw)
         if not ends_ts or ends_ts <= now_ts:
@@ -226,7 +222,7 @@ class CommunityGoalsGroup(app_commands.Group):
         )
         embed = discord.Embed(
             title="🎯 Neues Community Goal erstellt!",
-            description=f"Läuft bis <t:{ends_ts}:f> ({ends_ts})\n\n{cond_lines}",
+            description=f"Läuft bis <t:{ends_ts}:f>\n\n{cond_lines}",
             color=discord.Color.blurple()
         )
 
@@ -239,7 +235,6 @@ class CommunityGoalsGroup(app_commands.Group):
         msg_id = goal_message.id
         ziel_kanal_id = ziel_kanal.id
 
-        # DB speichern
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE community_goals SET active=FALSE WHERE guild_id=%s", (interaction.guild.id,))
@@ -304,7 +299,6 @@ class CommunityGoalsGroup(app_commands.Group):
                 embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=None)
                 await interaction.response.send_message(embed=embed)
 
-# Cog
 
 class CommunityGoalsCog(commands.Cog):
     def __init__(self, bot):
@@ -409,7 +403,7 @@ class CommunityGoalsCog(commands.Cog):
                 )
                 return bool(await cur.fetchone())
 
-    # Listener für Fortschritt
+    # Listener etc. wie gehabt ...
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -426,7 +420,6 @@ class CommunityGoalsCog(commands.Cog):
                     return
                 goal_id, reward_text = res
 
-                # Check channel limit, falls angegeben
                 channel_limit = None
                 if reward_text and "CHANNEL:" in reward_text:
                     m = re.search(r"CHANNEL:(\d+)", reward_text)
