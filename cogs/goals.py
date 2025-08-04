@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional
 import asyncio
+from dateutil import tz
 import re
 from datetime import datetime, timedelta, timezone
 import time
@@ -16,35 +17,41 @@ GOAL_TYPES = {
     "ban_free": ("Ban-freie Tage", "🕊️"),
     "commands_used": ("Befehle genutzt", "⚡"),
 }
-
 def parse_time_input(time_str: str) -> Optional[int]:
     now = datetime.now(timezone.utc)
+    local_zone = tz.tzlocal()  # Lokale Zeitzone
+
+    # 1) Tage als Zahl
     if re.fullmatch(r"\d{1,2}", time_str):
         tage = int(time_str)
         if 1 <= tage <= 60:
             return int((now + timedelta(days=tage)).timestamp())
 
+    # 2) Datum + optionale Uhrzeit
     m = re.fullmatch(r"(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2})(?::(\d{1,2}))?)?", time_str)
     if m:
         tag, monat, jahr = int(m[1]), int(m[2]), int(m[3])
         stunde = int(m[4]) if m[4] else 0
         minute = int(m[5]) if m[5] else 0
         try:
-            dt = datetime(jahr, monat, tag, stunde, minute, tzinfo=timezone.utc)
-            if dt.timestamp() > now.timestamp():
-                return int(dt.timestamp())
+            dt_local = datetime(jahr, monat, tag, stunde, minute, tzinfo=local_zone)
+            dt_utc = dt_local.astimezone(timezone.utc)
+            if dt_utc.timestamp() > now.timestamp():
+                return int(dt_utc.timestamp())
         except Exception:
             return None
 
+    # 3) Uhrzeit heute oder morgen
     m = re.fullmatch(r"(\d{1,2})(?::(\d{1,2}))?", time_str)
     if m:
         stunde = int(m[1])
         minute = int(m[2]) if m[2] else 0
         try:
-            dt = now.replace(hour=stunde, minute=minute, second=0, microsecond=0)
-            if dt.timestamp() <= now.timestamp():
-                dt += timedelta(days=1)
-            return int(dt.timestamp())
+            now_local = datetime.now(local_zone)
+            dt_local = now_local.replace(hour=stunde, minute=minute, second=0, microsecond=0)
+            if dt_local.timestamp() <= now_local.timestamp():
+                dt_local += timedelta(days=1)
+            return int(dt_local.astimezone(timezone.utc).timestamp())
         except Exception:
             return None
 
@@ -209,7 +216,7 @@ class CommunityGoalsGroup(app_commands.Group):
         ends_raw = goal_data.get("dauer", "")
         ends_ts = parse_time_input(ends_raw)
         if not ends_ts or ends_ts <= now_ts:
-            await interaction.followup.send("Ungültiges oder vergangenes Enddatum. Bitte gib einen gültigen Wert an.", ephemeral=True)
+            await interaction.response.send_message("Ungültiges oder vergangenes Enddatum. Bitte gib einen gültigen Wert an.", ephemeral=True)
             return
 
         belohnung_text = goal_data.get("belohnung_text") or None
