@@ -149,9 +149,10 @@ class Astra(commands.Bot):
                 await cur.execute("DROP TABLE community_goals;")
                 await cur.execute("DROP TABLE goal_bans;")
                 await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, reward TEXT, active BOOLEAN DEFAULT 1, channel_id BIGINT, msg_id BIGINT)")
+                    "CREATE TABLE community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at BIGINT NOT NULL, ends_at BIGINT NOT NULL, reward_role_id BIGINT NULL, reward_text VARCHAR(255) NULL, active BOOLEAN DEFAULT TRUE, channel_id BIGINT NOT NULL, msg_id BIGINT NOT NULL)")
+
                 await cur.execute(
-                    "CREATE TABLE IF NOT EXISTS community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target INT NOT NULL, progress INT NOT NULL DEFAULT 0)")
+                    "CREATE TABLE community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target BIGINT NOT NULL, progress BIGINT NOT NULL DEFAULT 0, FOREIGN KEY (goal_id) REFERENCES community_goals(id) ON DELETE CASCADE)")
 
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS goal_bans (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, mod_id BIGINT, time DATETIME NOT NULL)")
