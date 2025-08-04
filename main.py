@@ -154,6 +154,8 @@ class Astra(commands.Bot):
                 await cur.execute(
                     "CREATE TABLE community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target BIGINT NOT NULL, progress BIGINT NOT NULL DEFAULT 0, FOREIGN KEY (goal_id) REFERENCES community_goals(id) ON DELETE CASCADE)")
 
+                await cur.execute("ALTER TABLE community_goal_conditions ADD COLUMN announced BOOLEAN DEFAULT FALSE;")
+
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS goal_bans (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, mod_id BIGINT, time DATETIME NOT NULL)")
 

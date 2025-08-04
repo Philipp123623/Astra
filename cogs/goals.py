@@ -390,7 +390,6 @@ class CommunityGoalsCog(commands.Cog):
         bot.loop.create_task(self.schedule_goal_end_tasks())
 
     async def announce_and_check_goal(self, guild_id):
-        # Ruft Fortschritt ab, sendet pro Zieltyp eine Nachricht bei Erreichen & updated Embed sofort!
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -411,13 +410,16 @@ class CommunityGoalsCog(commands.Cog):
                 except Exception:
                     return
 
-                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
-                                  (goal_id,))
+                # Lade announced-Status aus DB mit!
+                await cur.execute(
+                    "SELECT type, target, progress, announced FROM community_goal_conditions WHERE goal_id=%s",
+                    (goal_id,)
+                )
                 conds_db = await cur.fetchall()
                 conds = []
                 finished = 0
                 announce_types = []
-                for typ, target, progress in conds_db:
+                for typ, target, progress, announced in conds_db:
                     value = min(progress, target)
                     if typ == "xp":
                         await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id=%s", (guild_id,))
@@ -428,22 +430,28 @@ class CommunityGoalsCog(commands.Cog):
                     if value >= target:
                         finished += 1
                     conds.append((typ, target, value))
-                    # Check ob gerade frisch erreicht!
-                    if value == target and progress == target:
+                    # NUR announce, wenn noch nicht announced!
+                    if value >= target and not announced:
                         announce_types.append(typ)
 
-                # --- Einzelziele announce, falls gerade erst geschafft (schnell & "dumm", geht aber) ---
-                # Nur Ziel-Typen die bei diesem Aufruf wirklich *frisch* erreicht wurden (Progress == Target)
+                # Announcement für neu geschaffte Ziele
                 if announce_types:
                     for typ in announce_types:
                         icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
                         await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
+                        await cur.execute(
+                            "UPDATE community_goal_conditions SET announced=TRUE WHERE goal_id=%s AND type=%s",
+                            (goal_id, typ)
+                        )
+                    await conn.commit()
 
-                # Alle Ziele erfüllt?
+                # Embed-Update (wie gehabt)
                 all_done = finished == len(conds) and finished > 0
                 if all_done:
-                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
-                                              status="🏁 Community Goal **GESCHAFFT!**")
+                    embed = format_goal_embed(
+                        conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
+                        status="🏁 Community Goal **GESCHAFFT!**"
+                    )
                     embed.description = "Alle Ziele wurden erreicht! 🎉"
                 else:
                     embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role)
@@ -469,9 +477,6 @@ class CommunityGoalsCog(commands.Cog):
                     self.bot.loop.create_task(self.goal_auto_update_task(goal_id, guild_id, ends_at, reward_role_id))
 
     async def goal_auto_update_task(self, goal_id, guild_id, ends_at_ts, reward_role_id=None):
-        def all_done_checker(condlist):
-            return all(val >= target for _, target, val in condlist)
-
         now_ts = int(time.time())
         if ends_at_ts < now_ts:
             ends_at_ts = now_ts
@@ -489,12 +494,11 @@ class CommunityGoalsCog(commands.Cog):
                 msg = await channel.fetch_message(msg_id) if channel else None
                 reward_role = guild.get_role(reward_role_id) if reward_role_id and guild else None
 
-                # --- Progress Cache für einzelne Ziele ---
-                progress_announce = {}
-
                 while True:
-                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
-                                      (goal_id,))
+                    await cur.execute(
+                        "SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
+                        (goal_id,)
+                    )
                     conds_db = await cur.fetchall()
                     conds = []
                     finished = 0
@@ -510,7 +514,6 @@ class CommunityGoalsCog(commands.Cog):
                             finished += 1
                         conds.append((typ, target, value))
 
-                    # NEU: Wenn alle Ziele erfüllt, beende den Task SOFORT!
                     done = finished == len(conds) and finished > 0
                     time_over = int(time.time()) >= ends_at_ts
 
@@ -535,7 +538,7 @@ class CommunityGoalsCog(commands.Cog):
                                     pass
                         break  # <-- TASK STOPPEN!
 
-                    # Normaler Embed-Update
+                    # Embed-Update ohne Announcements!
                     embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
                                               status=None)
                     try:
