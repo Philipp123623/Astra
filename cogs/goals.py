@@ -417,7 +417,12 @@ class CommunityGoalsCog(commands.Cog):
                 except Exception:
                     return
 
-                # Lade announced-Status aus DB mit!
+                # Nachricht-IDs für spätere Löschung speichern (RAM-Safe)
+                if not hasattr(self, "announce_message_ids"):
+                    self.announce_message_ids = {}
+                ids = self.announce_message_ids.setdefault(goal_id, [])
+
+                # Ziele prüfen
                 await cur.execute(
                     "SELECT type, target, progress, announced FROM community_goal_conditions WHERE goal_id=%s",
                     (goal_id,)
@@ -437,41 +442,60 @@ class CommunityGoalsCog(commands.Cog):
                     if value >= target:
                         finished += 1
                     conds.append((typ, target, value))
-                    # NUR announce, wenn noch nicht announced!
                     if value >= target and not announced:
                         announce_types.append(typ)
 
-                # Announcement für neu geschaffte Ziele
-                if announce_types:
-                    for typ in announce_types:
-                        icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
-                        await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
-                        await cur.execute(
-                            "UPDATE community_goal_conditions SET announced=TRUE WHERE goal_id=%s AND type=%s",
-                            (goal_id, typ)
-                        )
-                    await conn.commit()
+                # Einzeln erfüllte Ziele ansagen
+                for typ in announce_types:
+                    icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
+                    announce_msg = await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
+                    ids.append(announce_msg.id)
+                    await cur.execute(
+                        "UPDATE community_goal_conditions SET announced=TRUE WHERE goal_id=%s AND type=%s",
+                        (goal_id, typ)
+                    )
+                await conn.commit()
 
-                # Embed-Update (wie gehabt)
+                # Prüfen ob ALLE fertig
                 all_done = finished == len(conds) and finished > 0
-                if all_done and reward_role:
-                    for member in guild.members:
+                if all_done:
+                    # Alte Einzel-Nachrichten löschen!
+                    for mid in ids:
                         try:
-                            await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
+                            del_msg = await channel.fetch_message(mid)
+                            await del_msg.delete()
                         except Exception:
                             pass
+                    self.announce_message_ids[goal_id] = []
+
+                    # Gesamterfolg-Message schicken
+                    done_msg = await channel.send("🎊 **Alle Community-Ziele wurden erreicht! Glückwunsch an alle!** 🎊")
+
+                    # Rolle verteilen
+                    if reward_role:
+                        for member in guild.members:
+                            try:
+                                await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
+                            except Exception:
+                                pass
+
+                    # Embed aktualisieren
                     embed = format_goal_embed(
                         conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
                         status="🏁 Community Goal **GESCHAFFT!**"
                     )
                     embed.description = "Alle Ziele wurden erreicht! 🎉"
+                    try:
+                        await msg.edit(embed=embed)
+                    except Exception:
+                        pass
                 else:
+                    # Nur Embed updaten, falls nicht alles fertig
                     embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role)
-
-                try:
-                    await msg.edit(embed=embed)
-                except Exception:
-                    pass
+                    try:
+                        await msg.edit(embed=embed)
+                    except Exception:
+                        pass
 
     async def schedule_goal_end_tasks(self):
         await self.bot.wait_until_ready()
