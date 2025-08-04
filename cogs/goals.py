@@ -495,14 +495,16 @@ class CommunityGoalsCog(commands.Cog):
                 reward_role = guild.get_role(reward_role_id) if reward_role_id and guild else None
 
                 while True:
+                    # Lade announced-Status aus DB!
                     await cur.execute(
-                        "SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
+                        "SELECT type, target, progress, announced FROM community_goal_conditions WHERE goal_id=%s",
                         (goal_id,)
                     )
                     conds_db = await cur.fetchall()
                     conds = []
                     finished = 0
-                    for typ, target, progress in conds_db:
+                    announce_types = []
+                    for typ, target, progress, announced in conds_db:
                         value = min(progress, target)
                         if typ == "xp":
                             await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id=%s", (guild_id,))
@@ -513,6 +515,19 @@ class CommunityGoalsCog(commands.Cog):
                         if value >= target:
                             finished += 1
                         conds.append((typ, target, value))
+                        if value >= target and not announced:
+                            announce_types.append(typ)
+
+                    # Announce nur neu geschaffte Ziele:
+                    if announce_types and channel:
+                        for typ in announce_types:
+                            icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
+                            await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
+                            await cur.execute(
+                                "UPDATE community_goal_conditions SET announced=TRUE WHERE goal_id=%s AND type=%s",
+                                (goal_id, typ)
+                            )
+                        await conn.commit()
 
                     done = finished == len(conds) and finished > 0
                     time_over = int(time.time()) >= ends_at_ts
@@ -520,15 +535,19 @@ class CommunityGoalsCog(commands.Cog):
                     if done or time_over:
                         status = "🏁 Community Goal **GESCHAFFT!**" if done else "⏹️ Community Goal beendet"
                         desc = f"Alle Ziele wurden erreicht! 🎉" if done else f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
-                        final_embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds),
-                                                        reward_role, status=status)
+                        final_embed = format_goal_embed(
+                            conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=status
+                        )
                         final_embed.description = desc
                         try:
                             if msg:
                                 await msg.edit(embed=final_embed)
                         except Exception:
                             pass
+                        # Setze das Goal als inaktiv und lösche alle zugehörigen Daten
                         await cur.execute("UPDATE community_goals SET active=FALSE WHERE id=%s", (goal_id,))
+                        await cur.execute("DELETE FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
+                        await cur.execute("DELETE FROM community_goals WHERE id=%s", (goal_id,))  # <-- HIER EINFÜGEN
                         await conn.commit()
                         if reward_role and done:
                             for member in guild.members:
