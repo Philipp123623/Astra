@@ -18,22 +18,12 @@ GOAL_TYPES = {
 }
 
 def parse_time_input(time_str: str) -> Optional[int]:
-    """
-    Parsen verschiedener Zeitformate in UNIX-Timestamp UTC.
-    Erlaubt:
-    - Zahl (1-60) als Tage ab jetzt
-    - Datum mit optionaler Uhrzeit (z.B. 5.8.2025, 05.08.2025 18:30)
-    - Nur Uhrzeit heute oder morgen (UTC)
-    """
     now = datetime.now(timezone.utc)
-
-    # 1) Zahl als Tage
     if re.fullmatch(r"\d{1,2}", time_str):
         tage = int(time_str)
         if 1 <= tage <= 60:
             return int((now + timedelta(days=tage)).timestamp())
 
-    # 2) Datum + optionale Uhrzeit
     m = re.fullmatch(r"(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2})(?::(\d{1,2}))?)?", time_str)
     if m:
         tag, monat, jahr = int(m[1]), int(m[2]), int(m[3])
@@ -46,7 +36,6 @@ def parse_time_input(time_str: str) -> Optional[int]:
         except Exception:
             return None
 
-    # 3) Nur Uhrzeit heute/morgen
     m = re.fullmatch(r"(\d{1,2})(?::(\d{1,2}))?", time_str)
     if m:
         stunde = int(m[1])
@@ -61,53 +50,46 @@ def parse_time_input(time_str: str) -> Optional[int]:
 
     return None
 
-def overall_progress_bar(values, targets, length=24):
-    if not values or not targets or sum(targets) == 0:
-        percent = 0
-    else:
-        percent = sum(min(v, t) / t for v, t in zip(values, targets) if t > 0) / len(targets)
-    percent = min(percent, 1)
-    filled = int(length * percent)
-    empty = length - filled
-    bar = "🟩" * filled + "⬜" * empty
-    return f"`{bar}` **{percent * 100:.1f}%**"
+# --- BUTTON/MODAL FLOW IMPLEMENTATION ---
+class GoalSetupState:
+    def __init__(self, interaction: discord.Interaction, ziel_kanal, reward_role, data_page1):
+        self.interaction = interaction
+        self.ziel_kanal = ziel_kanal
+        self.reward_role = reward_role
+        self.data_page1 = data_page1
+        self.message = None
 
-def format_goal_embed(conds, reward_text, ends_timestamp, finished, total, reward_role: Optional[discord.Role] = None,
-                      status: Optional[str] = None):
-    ends = datetime.fromtimestamp(ends_timestamp, timezone.utc).astimezone()
-    values = [v for _, _, v in conds]
-    targets = [t for _, t, _ in conds]
-    embed = discord.Embed(
-        title="🎯 Community Goal" if not status else status,
-        description=f"Läuft noch bis **{ends.strftime('%d.%m.%Y, %H:%M')} Uhr**",
-        color=discord.Color.blurple() if not status else (
-            discord.Color.green() if status and status.startswith("🏁") else discord.Color.red()
-        )
-    )
-    bar = overall_progress_bar(values, targets)
-    embed.add_field(name="Fortschritt (alle Ziele)", value=bar, inline=False)
-    for typ, target, value in conds:
-        name, icon = GOAL_TYPES.get(typ, (typ, "❔"))
-        percent = min(value / target * 100, 100) if target else 0
-        embed.add_field(
-            name=f"{icon} **{name}**",
-            value=f"**{value:,} / {target:,}** ({percent:.1f}%)",
-            inline=False
-        )
-    reward_field = reward_text or "*Keine Belohnung angegeben*"
-    if reward_role and (not reward_text or reward_role.mention not in reward_text):
-        reward_field += f"\n{reward_role.mention}"
-    embed.add_field(name="🎁 Belohnung", value=reward_field, inline=False)
-    embed.set_footer(text=f"{finished}/{total} Ziele erfüllt")
-    return embed
+class WeiterButton(discord.ui.View):
+    def __init__(self, setup_state: GoalSetupState):
+        super().__init__(timeout=300)
+        self.setup_state = setup_state
 
-# --- Modals ---
+    @discord.ui.button(label="Weiter", style=discord.ButtonStyle.primary)
+    async def weiter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.setup_state.interaction.user:
+            return await interaction.response.send_message("Nur der Ersteller kann fortfahren.", ephemeral=True)
+        await interaction.response.send_modal(GoalModalPage2(self.setup_state))
+
+class FertigButton(discord.ui.View):
+    def __init__(self, setup_state: GoalSetupState, cond_lines, ends_ts, belohnung_text):
+        super().__init__(timeout=300)
+        self.setup_state = setup_state
+        self.cond_lines = cond_lines
+        self.ends_ts = ends_ts
+        self.belohnung_text = belohnung_text
+
+    @discord.ui.button(label="Fertig", style=discord.ButtonStyle.success)
+    async def fertig(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await CommunityGoalsGroup.create_goal_from_modal(
+            {**self.setup_state.data_page1, **self.setup_state.data_page2},
+            self.setup_state.ziel_kanal,
+            interaction,
+            self.setup_state.reward_role
+        )
 
 class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
-    dauer = discord.ui.TextInput(label="Ende (Tage, Datum oder Uhrzeit)", required=True,
-                                placeholder="z.B. 14 oder 05.08.2025 18:00 oder 18:00")
-    belohnung_text = discord.ui.TextInput(label="Belohnung (optional, Text)", required=False,
-                                         placeholder="Text, z.B. '500 Coins'")
+    dauer = discord.ui.TextInput(label="Ende (Tage, Datum oder Uhrzeit)", required=True, placeholder="z.B. 14 oder 05.08.2025 18:00 oder 18:00")
+    belohnung_text = discord.ui.TextInput(label="Belohnung (optional, Text)", required=False, placeholder="Text, z.B. '500 Coins'")
     nachrichten = discord.ui.TextInput(label="Nachrichten-Ziel (optional)", required=False, placeholder="z.B. 2500")
     voice_minuten = discord.ui.TextInput(label="Voice-Minuten-Ziel (optional)", required=False, placeholder="z.B. 1000")
     xp = discord.ui.TextInput(label="XP-Ziel (optional)", required=False, placeholder="z.B. 25000")
@@ -125,7 +107,35 @@ class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
             "voice_minuten": self.voice_minuten.value.strip(),
             "xp": self.xp.value.strip(),
         }
-        await interaction.response.send_modal(GoalModalPage2(self.ziel_kanal, data_page1, self.reward_role))
+
+        ends_ts = parse_time_input(data_page1["dauer"])
+        if not ends_ts or ends_ts <= int(time.time()):
+            return await interaction.response.send_message("Ungültiges Enddatum.", ephemeral=True)
+
+        def to_int(s): return int(s.replace(".", "").replace(",", "")) if s else None
+
+        mapping = [
+            ("messages", to_int(data_page1["nachrichten"])),
+            ("voice_minutes", to_int(data_page1["voice_minuten"])),
+            ("xp", to_int(data_page1["xp"])),
+        ]
+        conds = [(typ, val) for typ, val in mapping if val and val > 0]
+
+        if not conds:
+            return await interaction.response.send_message("Mindestens ein Ziel muss angegeben werden.", ephemeral=True)
+
+        cond_lines = "\n".join(f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** {val:,}" for typ, val in conds)
+
+        embed = discord.Embed(
+            title="📋 Zielübersicht (1/2)",
+            description=f"**Ende:** <t:{ends_ts}:f>\n\n{cond_lines}",
+            color=discord.Color.blurple()
+        )
+        if data_page1["belohnung_text"]:
+            embed.add_field(name="🏱 Belohnung", value=data_page1["belohnung_text"], inline=False)
+
+        setup_state = GoalSetupState(interaction, self.ziel_kanal, self.reward_role, data_page1)
+        await interaction.response.send_message(embed=embed, view=WeiterButton(setup_state), ephemeral=True)
 
 class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
     levelups = discord.ui.TextInput(label="Level-Ups-Ziel (optional)", required=False, placeholder="z.B. 15")
@@ -133,11 +143,9 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
     banfrei = discord.ui.TextInput(label="Ban-freie Tage (optional)", required=False, placeholder="z.B. 14")
     befehle = discord.ui.TextInput(label="Befehle genutzt-Ziel (optional)", required=False, placeholder="z.B. 200")
 
-    def __init__(self, ziel_kanal: discord.TextChannel, data_page1: dict, reward_role: Optional[discord.Role]):
+    def __init__(self, setup_state: GoalSetupState):
         super().__init__()
-        self.ziel_kanal = ziel_kanal
-        self.data_page1 = data_page1
-        self.reward_role = reward_role
+        self.setup_state = setup_state
 
     async def on_submit(self, interaction: discord.Interaction):
         data_page2 = {
@@ -146,8 +154,34 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
             "banfrei": self.banfrei.value.strip(),
             "befehle": self.befehle.value.strip(),
         }
-        full_data = {**self.data_page1, **data_page2}
-        await CommunityGoalsGroup.create_goal_from_modal(full_data, self.ziel_kanal, interaction, self.reward_role)
+        self.setup_state.data_page2 = data_page2
+
+        full_data = {**self.setup_state.data_page1, **data_page2}
+        ends_ts = parse_time_input(full_data["dauer"])
+        def to_int(s): return int(s.replace(".", "").replace(",", "")) if s else None
+
+        mapping = [
+            ("messages", to_int(full_data.get("nachrichten"))),
+            ("voice_minutes", to_int(full_data.get("voice_minuten"))),
+            ("xp", to_int(full_data.get("xp"))),
+            ("levelups", to_int(full_data.get("levelups"))),
+            ("new_users", to_int(full_data.get("neue_mitglieder"))),
+            ("ban_free", to_int(full_data.get("banfrei"))),
+            ("commands_used", to_int(full_data.get("befehle"))),
+        ]
+        conds = [(typ, val) for typ, val in mapping if val and val > 0]
+        cond_lines = "\n".join(f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** {val:,}" for typ, val in conds)
+
+        embed = discord.Embed(
+            title="📋 Zielübersicht (komplett)",
+            description=f"**Ende:** <t:{ends_ts}:f>\n\n{cond_lines}",
+            color=discord.Color.green()
+        )
+        reward_text = full_data.get("belohnung_text")
+        if reward_text:
+            embed.add_field(name="🏱 Belohnung", value=reward_text, inline=False)
+
+        await interaction.response.edit_message(embed=embed, view=FertigButton(self.setup_state, cond_lines, ends_ts, reward_text))
 
 
 class CommunityGoalsGroup(app_commands.Group):
