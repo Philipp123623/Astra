@@ -425,14 +425,17 @@ class CommunityGoalsCog(commands.Cog):
                 msg = await channel.fetch_message(msg_id) if channel else None
                 reward_role = guild.get_role(reward_role_id) if reward_role_id and guild else None
 
-                goal_finished = False
+                # --- Progress Cache für einzelne Ziele ---
+                progress_announce = {}
 
                 while True:
-                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
+                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
+                                      (goal_id,))
                     conds_db = await cur.fetchall()
                     conds = []
                     finished = 0
                     for typ, target, progress in conds_db:
+                        # Wie im Status-Command: Korrekte Werte berechnen!
                         value = min(progress, target)
                         if typ == "xp":
                             await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id=%s", (guild_id,))
@@ -444,18 +447,24 @@ class CommunityGoalsCog(commands.Cog):
                             finished += 1
                         conds.append((typ, target, value))
 
+                        # --- Neu: Einzel-Ziel erreicht? Nachricht! ---
+                        # Nur beim ersten Mal pro Zieltyp
+                        if value >= target and progress_announce.get(typ) != True:
+                            if channel:
+                                icon, name = GOAL_TYPES.get(typ, ("???", "❓"))
+                                await channel.send(f"🎉 Das Ziel **{icon} {name}** wurde erfüllt!")
+                            progress_announce[typ] = True
+                        elif value < target:
+                            progress_announce[typ] = False
+
                     done = all_done_checker(conds)
                     time_over = int(time.time()) >= ends_at_ts
-
-                    if done and not goal_finished:
-                        if channel:
-                            await channel.send("🎉 Das Community Goal wurde **erreicht**! Alle Ziele wurden erfüllt. Glückwunsch an alle!")
-                        goal_finished = True
 
                     if done or time_over:
                         status = "🏁 Community Goal **GESCHAFFT!**" if done else "⏹️ Community Goal beendet"
                         desc = f"Alle Ziele wurden erreicht! 🎉" if done else f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
-                        final_embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=status)
+                        final_embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds),
+                                                        reward_role, status=status)
                         final_embed.description = desc
                         try:
                             if msg:
@@ -472,7 +481,9 @@ class CommunityGoalsCog(commands.Cog):
                                     pass
                         break
 
-                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=None)
+                    # Normaler Embed-Update (wieder richtige Werte!)
+                    embed = format_goal_embed(conds, reward_text, ends_at_ts, finished, len(conds), reward_role,
+                                              status=None)
                     try:
                         if msg:
                             await msg.edit(embed=embed)
