@@ -513,15 +513,29 @@ class CommunityGoalsCog(commands.Cog):
                         await asyncio.sleep(min(60, time_left))  # jede Minute checken
                         continue
 
-                    # ENDE ERREICHT: Alles löschen!
+                    # ENDE ERREICHT: Aber prüfe, ob das Ziel schon geschafft ist!
                     await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
                                       (goal_id,))
                     conds_db = await cur.fetchall()
                     finished = sum(1 for typ, target, progress in conds_db if progress >= target)
                     conds = [(typ, target, progress) for typ, target, progress in conds_db]
 
-                    status = "⏹️ Community Goal beendet"
-                    desc = f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
+                    all_done = finished == len(conds) and finished > 0
+
+                    if all_done:
+                        status = "🏁 Community Goal **GESCHAFFT!**"
+                        desc = "Alle Ziele wurden erreicht! 🎉"
+                        # Rollenverteilen, falls noch nicht geschehen:
+                        if reward_role:
+                            for member in guild.members:
+                                try:
+                                    await member.add_roles(reward_role, reason="Community Goal abgeschlossen")
+                                except Exception:
+                                    pass
+                    else:
+                        status = "⏹️ Community Goal beendet"
+                        desc = f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**"
+
                     final_embed = format_goal_embed(
                         conds, reward_text, ends_at_ts, finished, len(conds), reward_role, status=status
                     )
