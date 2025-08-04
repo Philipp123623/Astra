@@ -1,11 +1,10 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from datetime import datetime, timedelta
-from typing import Optional, List
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 import asyncio
 import re
-from datetime import timezone
 from zoneinfo import ZoneInfo
 
 GOAL_TYPES = {
@@ -18,9 +17,7 @@ GOAL_TYPES = {
     "commands_used": ("Befehle genutzt", "⚡"),
 }
 
-
 def overall_progress_bar(values, targets, length=24):
-    # Ein Balken für den Durchschnittsfortschritt aller Ziele
     if not values or not targets or sum(targets) == 0:
         percent = 0
     else:
@@ -30,7 +27,6 @@ def overall_progress_bar(values, targets, length=24):
     empty = length - filled
     bar = "🟩" * filled + "⬜" * empty
     return f"`{bar}` **{percent * 100:.1f}%**"
-
 
 def format_goal_embed(conds, reward, ends, finished, total, reward_role: Optional[discord.Role] = None,
                       status: Optional[str] = None):
@@ -43,12 +39,8 @@ def format_goal_embed(conds, reward, ends, finished, total, reward_role: Optiona
             discord.Color.green() if status.startswith("🏁") else discord.Color.red()
         )
     )
-    # Gesamt-Progressbar
     bar = overall_progress_bar(values, targets)
-    embed.add_field(
-        name="Fortschritt (alle Ziele)", value=bar, inline=False
-    )
-    # Detailübersicht pro Ziel (ohne eigenen Balken)
+    embed.add_field(name="Fortschritt (alle Ziele)", value=bar, inline=False)
     for typ, target, value in conds:
         name, icon = GOAL_TYPES.get(typ, (typ, "❔"))
         percent = min(value / target * 100, 100) if target else 0
@@ -64,38 +56,51 @@ def format_goal_embed(conds, reward, ends, finished, total, reward_role: Optiona
     embed.set_footer(text=f"{finished}/{total} Ziele erfüllt")
     return embed
 
+# ----- Modals -----
 
-class GoalModal(discord.ui.Modal, title="Community Goal erstellen"):
+class GoalModalPage1(discord.ui.Modal, title="Community Goal erstellen (1/2)"):
     dauer = discord.ui.TextInput(label="Dauer (Tage, 1–60)", min_length=1, max_length=2, required=True, placeholder="z.B. 14")
     belohnung = discord.ui.TextInput(label="Belohnung (Text, Emoji oder @Rolle)", required=False, placeholder="@Mitgliedschaftsrolle oder 500 Coins")
     nachrichten = discord.ui.TextInput(label="Nachrichten-Ziel (optional)", required=False, placeholder="z.B. 2500")
     voice_minuten = discord.ui.TextInput(label="Voice-Minuten-Ziel (optional)", required=False, placeholder="z.B. 1000")
     xp = discord.ui.TextInput(label="XP-Ziel (optional)", required=False, placeholder="z.B. 25000")
-    levelups = discord.ui.TextInput(label="Level-Ups-Ziel (optional)", required=False, placeholder="z.B. 15")
-    neue_mitglieder = discord.ui.TextInput(label="Neue Mitglieder-Ziel (optional)", required=False, placeholder="z.B. 12")
-    banfrei = discord.ui.TextInput(label="Ban-freie Tage (optional)", required=False, placeholder="z.B. 14")
-    befehle = discord.ui.TextInput(label="Befehle genutzt-Ziel (optional)", required=False, placeholder="z.B. 200")
 
     def __init__(self, ziel_kanal: discord.TextChannel):
         super().__init__()
         self.ziel_kanal = ziel_kanal
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Alle Daten im Modal + Zielkanal als Parameter an die Erstellungsmethode geben
-        data = {
+        data_page1 = {
             "dauer": self.dauer.value,
             "belohnung": self.belohnung.value,
             "nachrichten": self.nachrichten.value,
             "voice_minuten": self.voice_minuten.value,
             "xp": self.xp.value,
+        }
+        await interaction.response.send_modal(GoalModalPage2(self.ziel_kanal, data_page1))
+
+class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
+    levelups = discord.ui.TextInput(label="Level-Ups-Ziel (optional)", required=False, placeholder="z.B. 15")
+    neue_mitglieder = discord.ui.TextInput(label="Neue Mitglieder-Ziel (optional)", required=False, placeholder="z.B. 12")
+    banfrei = discord.ui.TextInput(label="Ban-freie Tage (optional)", required=False, placeholder="z.B. 14")
+    befehle = discord.ui.TextInput(label="Befehle genutzt-Ziel (optional)", required=False, placeholder="z.B. 200")
+
+    def __init__(self, ziel_kanal: discord.TextChannel, data_page1: dict):
+        super().__init__()
+        self.ziel_kanal = ziel_kanal
+        self.data_page1 = data_page1
+
+    async def on_submit(self, interaction: discord.Interaction):
+        data_page2 = {
             "levelups": self.levelups.value,
             "neue_mitglieder": self.neue_mitglieder.value,
             "banfrei": self.banfrei.value,
             "befehle": self.befehle.value,
         }
-        await CommunityGoalsGroup.create_goal_from_modal(
-            data, self.ziel_kanal, interaction
-        )
+        full_data = {**self.data_page1, **data_page2}
+        await CommunityGoalsGroup.create_goal_from_modal(full_data, self.ziel_kanal, interaction)
+
+# ----- Command Group -----
 
 class CommunityGoalsGroup(app_commands.Group):
     def __init__(self, cog):
@@ -109,12 +114,10 @@ class CommunityGoalsGroup(app_commands.Group):
     @app_commands.describe(ziel_kanal="Channel für das Ziel-Embed & Updates.")
     @app_commands.checks.has_permissions(administrator=True)
     async def erstellen(self, interaction: discord.Interaction, ziel_kanal: discord.TextChannel):
-        # Zeige das Modal, gib den Channel als Objekt mit
-        await interaction.response.send_modal(GoalModal(ziel_kanal))
+        await interaction.response.send_modal(GoalModalPage1(ziel_kanal))
 
     @staticmethod
     async def create_goal_from_modal(goal_data, ziel_kanal, interaction: discord.Interaction):
-        # Daten aus dem Modal auslesen und validieren
         try:
             dauer = int(goal_data.get("dauer", 0))
             if not (1 <= dauer <= 60):
@@ -122,7 +125,9 @@ class CommunityGoalsGroup(app_commands.Group):
         except ValueError:
             await interaction.followup.send("Ungültige Dauer. Bitte 1–60 Tage.", ephemeral=True)
             return
+
         belohnung = goal_data.get("belohnung") or None
+
         def to_int(s):
             try:
                 return int(s.replace(".", "").replace(",", "")) if s else None
@@ -156,11 +161,12 @@ class CommunityGoalsGroup(app_commands.Group):
                 description="Mindestens eine Bedingung mit Wert > 0 angeben.",
                 color=discord.Color.red()
             )
-            return await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
         now = datetime.now(timezone.utc)
         ends = now + timedelta(days=dauer)
 
-        # --- Belohnung: Support für Rollenextraktion (@Rolle im belohnung-Text)
         reward_role_id = None
         reward_role = None
         if belohnung:
@@ -169,7 +175,6 @@ class CommunityGoalsGroup(app_commands.Group):
                 reward_role_id = int(role_mention_match.group(1))
                 reward_role = interaction.guild.get_role(reward_role_id)
 
-        # Embed erzeugen
         cond_lines = "\n".join(
             f"{GOAL_TYPES[typ][1]} **{GOAL_TYPES[typ][0]}:** `{val:,}`"
             for typ, val in conds
@@ -184,12 +189,10 @@ class CommunityGoalsGroup(app_commands.Group):
             reward_field += f"\n{reward_role.mention}"
         embed.add_field(name="🎁 Belohnung", value=reward_field, inline=False)
 
-        # Embed ins Ziel-Channel posten und msg_id holen
         goal_message = await ziel_kanal.send(embed=embed)
         msg_id = goal_message.id
         ziel_kanal_id = ziel_kanal.id
 
-        # DB-Operationen (wie gehabt, anpassen je nach DB)
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE community_goals SET active=0 WHERE guild_id=%s", (interaction.guild.id,))
@@ -204,12 +207,9 @@ class CommunityGoalsGroup(app_commands.Group):
                         (goal_id, typ, val, 0)
                     )
                 await conn.commit()
-        # Task für Zeitablauf starten
-        interaction.client.loop.create_task(interaction.client.get_cog("CommunityGoalsCog").goal_end_task(goal_id, interaction.guild.id, ends, reward_role_id))
 
-        await interaction.followup.send(f"Community Goal wurde erstellt und im Channel {ziel_kanal.mention} gepostet!",
-                                        ephemeral=True)
-        return None
+        interaction.client.loop.create_task(interaction.client.get_cog("CommunityGoalsCog").goal_end_task(goal_id, interaction.guild.id, ends, reward_role_id))
+        await interaction.followup.send(f"Community Goal wurde erstellt und im Channel {ziel_kanal.mention} gepostet!", ephemeral=True)
 
     @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
     async def status(self, interaction: discord.Interaction):
@@ -225,7 +225,8 @@ class CommunityGoalsGroup(app_commands.Group):
                         description="Momentan läuft kein Ziel. Erstelle eines mit `/communitygoals erstellen`.",
                         color=discord.Color.red()
                     )
-                    return await interaction.response.send_message(embed=embed, ephemeral=True)
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    return
                 goal_id = goal[0]
                 reward = goal[4]
                 ends = goal[3]
@@ -236,16 +237,14 @@ class CommunityGoalsGroup(app_commands.Group):
                 if role_mention_match:
                     reward_role_id = int(role_mention_match.group(1))
                     reward_role = interaction.guild.get_role(reward_role_id)
-                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
-                                  (goal_id,))
+                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
                 conds_db = await cur.fetchall()
                 conds = []
                 finished = 0
                 for typ, target, progress in conds_db:
                     value = min(progress, target)
                     if typ == "xp":
-                        await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id = %s",
-                                          (interaction.guild.id,))
+                        await cur.execute("SELECT SUM(user_xp) FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
                         sum_xp = await cur.fetchone()
                         value = min(sum_xp[0] if sum_xp and sum_xp[0] else 0, target)
                     elif typ == "new_users":
@@ -255,8 +254,8 @@ class CommunityGoalsGroup(app_commands.Group):
                     conds.append((typ, target, value))
                 embed = format_goal_embed(conds, reward, ends, finished, len(conds), reward_role)
                 await interaction.response.send_message(embed=embed)
-                return None
 
+# ----- Cog -----
 
 class CommunityGoalsCog(commands.Cog):
     def __init__(self, bot):
@@ -272,40 +271,32 @@ class CommunityGoalsCog(commands.Cog):
         self.goal_tasks_started = True
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(
-                    "SELECT id, guild_id, ends_at, reward FROM community_goals WHERE active=1 AND ends_at > NOW()")
+                await cur.execute("SELECT id, guild_id, ends_at, reward FROM community_goals WHERE active=1 AND ends_at > NOW()")
                 entries = await cur.fetchall()
                 for goal_id, guild_id, ends_at, reward in entries:
                     reward_role_id = None
                     role_mention_match = re.search(r"<@&(\d+)>", reward or "")
                     if role_mention_match:
                         reward_role_id = int(role_mention_match.group(1))
-                    ends_at_dt = ends_at if isinstance(ends_at, datetime) else datetime.strptime(str(ends_at),
-                                                                                                 "%Y-%m-%d %H:%M:%S")
+                    ends_at_dt = ends_at if isinstance(ends_at, datetime) else datetime.strptime(str(ends_at), "%Y-%m-%d %H:%M:%S")
                     self.bot.loop.create_task(self.goal_end_task(goal_id, guild_id, ends_at_dt, reward_role_id))
 
     async def goal_end_task(self, goal_id, guild_id, ends_at, reward_role_id=None):
         def all_done_checker(condlist):
             return all(val >= target for _, target, val in condlist)
+
         if ends_at.tzinfo is None:
             ends_at = ends_at.replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        channel_id = None
-        msg_id = None
+
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT channel_id, msg_id FROM community_goals WHERE id=%s", (goal_id,))
                 channel_row = await cur.fetchone()
-                if channel_row:
-                    channel_id, msg_id = channel_row
+                channel_id, msg_id = channel_row if channel_row else (None, None)
                 while True:
-                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
-                                      (goal_id,))
+                    await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
                     conds_db = await cur.fetchall()
-                    condlist = []
-                    for typ, target, progress in conds_db:
-                        value = min(progress, target)
-                        condlist.append((typ, target, value))
+                    condlist = [(typ, target, min(progress, target)) for typ, target, progress in conds_db]
                     if all_done_checker(condlist):
                         break
                     sleep_time = (ends_at - datetime.now(timezone.utc)).total_seconds()
@@ -321,28 +312,25 @@ class CommunityGoalsCog(commands.Cog):
                 await cur.execute("UPDATE community_goals SET active=0 WHERE id=%s", (goal_id,))
                 await cur.execute("SELECT reward FROM community_goals WHERE id=%s", (goal_id,))
                 reward = (await cur.fetchone() or [None])[0]
-                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s",
-                                  (goal_id,))
+                await cur.execute("SELECT type, target, progress FROM community_goal_conditions WHERE goal_id=%s", (goal_id,))
                 conds_db = await cur.fetchall()
-                conds = []
-                finished = 0
-                for typ, target, progress in conds_db:
-                    value = min(progress, target)
-                    if typ == "ban_free":
-                        ban_occurred = await self.check_ban_in_period(guild_id, started_at, ends_at_db)
-                        value = target if not ban_occurred else 0
-                    if value >= target:
-                        finished += 1
-                    conds.append((typ, target, value))
+
+        conds = []
+        finished = 0
+        for typ, target, progress in conds_db:
+            value = min(progress, target)
+            if typ == "ban_free":
+                ban_occurred = await self.check_ban_in_period(guild_id, started_at, ends_at_db)
+                value = target if not ban_occurred else 0
+            if value >= target:
+                finished += 1
+            conds.append((typ, target, value))
+
         guild = self.bot.get_guild(int(guild_id))
-        color = discord.Color.green() if finished == len(conds) and len(conds) > 0 else discord.Color.red()
-        status = "🏁 Community Goal **GESCHAFFT!**" if finished == len(conds) and len(
-            conds) > 0 else "⏹️ Community Goal beendet"
+        status = "🏁 Community Goal **GESCHAFFT!**" if finished == len(conds) and len(conds) > 0 else "⏹️ Community Goal beendet"
         desc = (f"Alle Ziele wurden erreicht! 🎉" if finished == len(conds) and len(conds) > 0
                 else f"Nicht alle Ziele wurden erreicht! **{finished}/{len(conds)}**")
-        reward_role = None
-        if reward_role_id and guild:
-            reward_role = guild.get_role(reward_role_id)
+        reward_role = guild.get_role(reward_role_id) if reward_role_id and guild else None
         embed = format_goal_embed(conds, reward, ends_at, finished, len(conds), reward_role, status=status)
         embed.description = desc
 
