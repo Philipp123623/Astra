@@ -76,12 +76,12 @@ class GoalModal(discord.ui.Modal, title="Community Goal erstellen"):
     banfrei = discord.ui.TextInput(label="Ban-freie Tage (optional)", required=False, placeholder="z.B. 14")
     befehle = discord.ui.TextInput(label="Befehle genutzt-Ziel (optional)", required=False, placeholder="z.B. 200")
 
-    def __init__(self, interaction: discord.Interaction):
+    def __init__(self, ziel_kanal: discord.TextChannel):
         super().__init__()
-        self.interaction = interaction
-        self.goal_data = None
+        self.ziel_kanal = ziel_kanal
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Alle Daten im Modal + Zielkanal als Parameter an die Erstellungsmethode geben
         data = {
             "dauer": self.dauer.value,
             "belohnung": self.belohnung.value,
@@ -93,49 +93,9 @@ class GoalModal(discord.ui.Modal, title="Community Goal erstellen"):
             "banfrei": self.banfrei.value,
             "befehle": self.befehle.value,
         }
-        self.goal_data = data
-        await interaction.response.send_message(
-            content="Wähle nun den Channel, in dem das Ziel gepostet werden soll:",
-            view=GoalChannelSelectView(self),
-            ephemeral=True
-        )
-
-
-class GoalChannelSelectView(discord.ui.View):
-    def __init__(self, modal: GoalModal):
-        super().__init__(timeout=300)
-        self.modal = modal
-
-    @discord.ui.select(
-        placeholder="Channel auswählen...",
-        min_values=1,
-        max_values=1,
-        options=[
-            # Diese Optionen werden im Code dynamisch ergänzt!
-            # Platzhalter, damit Discord UI ein Select-Element rendert.
-            discord.SelectOption(label="Wird automatisch ergänzt...", value="dummy", description="Bitte warten ..."),
-        ],
-        custom_id="channel_select"
-    )
-    async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if not self.modal.goal_data:
-            await interaction.response.send_message("Fehler: Keine Daten erhalten.", ephemeral=True)
-            return
-        # Die richtige Channel-Auswahl extrahieren
-        try:
-            selected_id = int(select.values[0])
-            channel = interaction.guild.get_channel(selected_id)
-            if not channel or not isinstance(channel, discord.TextChannel):
-                await interaction.response.send_message("Bitte wähle einen Textkanal aus!", ephemeral=True)
-                return
-        except Exception:
-            await interaction.response.send_message("Fehler beim Auslesen des Channels.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
         await CommunityGoalsGroup.create_goal_from_modal(
-            self.modal.goal_data, channel, interaction
+            data, self.ziel_kanal, interaction
         )
-
 
 class CommunityGoalsGroup(app_commands.Group):
     def __init__(self, cog):
@@ -146,12 +106,11 @@ class CommunityGoalsGroup(app_commands.Group):
         name="erstellen",
         description="Setzt ein neues Communityziel via Modal."
     )
+    @app_commands.describe(ziel_kanal="Channel für das Ziel-Embed & Updates.")
     @app_commands.checks.has_permissions(administrator=True)
-    async def erstellen(self, interaction: discord.Interaction):
-        # Modal anzeigen
-        modal = GoalModal(interaction)
-        await interaction.response.send_modal(modal)
-        # Modale weitere Schritte werden im Modal und View abgewickelt
+    async def erstellen(self, interaction: discord.Interaction, ziel_kanal: discord.TextChannel):
+        # Zeige das Modal, gib den Channel als Objekt mit
+        await interaction.response.send_modal(GoalModal(ziel_kanal))
 
     @staticmethod
     async def create_goal_from_modal(goal_data, ziel_kanal, interaction: discord.Interaction):
