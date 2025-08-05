@@ -48,6 +48,7 @@ class buttons_emj(discord.ui.View):
     async def skip(self, interaction: discord.Interaction, button: discord.Button):
         import asyncio
         try:
+            # Sofort defern, damit Discord keine Zeitüberschreitung meldet
             await interaction.response.defer(ephemeral=True)
 
             async with interaction.client.pool.acquire() as conn:
@@ -68,14 +69,23 @@ class buttons_emj(discord.ui.View):
                             ephemeral=True)
                         return
 
+                    # Hole alte Lösung bevor sie gelöscht wird
+                    await cur.execute("SELECT lösung FROM emojiquiz_lsg WHERE guildID = %s", (interaction.guild.id,))
+                    old_solution_data = await cur.fetchone()
+                    old_solution = old_solution_data[0] if old_solution_data else "Unbekannt"
+
+                    # Ziehe Geld ab
                     await self.economy.update_balance(interaction.user.id, wallet_change=-20)
 
+                    # Nachricht posten, dass geskippt wurde (wird später gelöscht)
                     skipped_msg = await interaction.channel.send(
-                        f"{interaction.user.mention} hat das Wort übersprungen. (-20 <:Astra_cookie:1141303831293079633>)"
+                        f"{interaction.user.mention} hat das Wort übersprungen. Das Wort war: **{old_solution}**. (-20 <:Astra_cookie:1141303831293079633>)"
                     )
 
+                    # 2 Sekunden warten
                     await asyncio.sleep(2)
 
+                    # Alle User-Messages im Channel löschen
                     await cur.execute(
                         "SELECT messageID FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
                         (interaction.guild.id, interaction.channel.id)
@@ -88,16 +98,19 @@ class buttons_emj(discord.ui.View):
                         except Exception:
                             pass
 
+                    # Tabelle leeren
                     await cur.execute(
                         "DELETE FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
                         (interaction.guild.id, interaction.channel.id)
                     )
 
+                    # Übersprungene Info-Nachricht löschen
                     try:
                         await skipped_msg.delete()
                     except Exception:
                         pass
 
+                    # Alte Quiznachricht löschen
                     channel_id, old_message_id = already_on
                     try:
                         quiz_channel = self.bot.get_channel(channel_id)
@@ -107,7 +120,10 @@ class buttons_emj(discord.ui.View):
                     except Exception:
                         pass
 
+                    # Alte Lösung löschen
                     await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = (%s)", (interaction.guild.id,))
+
+                    # Neue Frage holen
                     query = "SELECT question, answer, hint FROM emojiquiz_quizzez ORDER BY RAND() LIMIT 1;"
                     await cur.execute(query)
                     quiz_data = await cur.fetchone()
@@ -131,21 +147,11 @@ class buttons_emj(discord.ui.View):
                                           (sent.id, interaction.guild.id))
                         await cur.execute("INSERT INTO emojiquiz_lsg(guildID, lösung) VALUES (%s, %s)",
                                           (interaction.guild.id, answer))
-
-                    # Nachricht sichtbar im Channel senden und nach 2 Sekunden löschen
-                    followup_msg = await interaction.channel.send(
-                        f"Das Quiz wurde von {interaction.user.mention} übersprungen. Das Wort war: **{answer}**. Eine neue Frage wurde gepostet!"
-                    )
-                    await asyncio.sleep(2)
-                    try:
-                        await followup_msg.delete()
-                    except Exception:
-                        pass
-
         except discord.errors.NotFound:
             print(f"Die Interaktion von {interaction.user} ist abgelaufen oder bereits beantwortet.")
 
-    @discord.ui.button(label='Initial letter', style=discord.ButtonStyle.grey, custom_id='persistent_view:tip', emoji="💡")
+
+@discord.ui.button(label='Initial letter', style=discord.ButtonStyle.grey, custom_id='persistent_view:tip', emoji="💡")
     async def tip(self, interaction: discord.Interaction, button: discord.Button):
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cur:
