@@ -187,27 +187,24 @@ class fun(commands.Cog):
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def meme(self, interaction: discord.Interaction):
         """Zeigt lustige Memes."""
-        if interaction.channel.is_nsf():
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Dieser Command kann nur in NSFW-Channel ausgeführt werden!", ephemeral=True)
-        else:
-            async with aiohttp.ClientSession() as cs:
-                async with cs.get('https://www.reddit.com/r/memes/random/.json') as r:
-                    res = await r.json()
+        async with aiohttp.ClientSession() as cs:
+            async with cs.get('https://www.reddit.com/r/memes/random/.json') as r:
+                res = await r.json()
 
-                    data = res[0]['data']['children'][0]['data']
+                data = res[0]['data']['children'][0]['data']
 
-                    image = data['url']
-                    permalink = data['permalink']
-                    url = f'https://reddit.com{permalink}'
-                    title = data['title']
-                    ups = data['ups']
-                    downs = data['downs']
-                    comments = data['num_comments']
+                image = data['url']
+                permalink = data['permalink']
+                url = f'https://reddit.com{permalink}'
+                title = data['title']
+                ups = data['ups']
+                downs = data['downs']
+                comments = data['num_comments']
 
-                    embed = discord.Embed(colour=discord.Colour.blue(), title=title, url=url)
-                    embed.set_image(url=image)
-                    embed.set_footer(text=f"🔺 {ups} | 🔻 {downs} | 💬 {comments} ")
-                    await interaction.response.send_message(embed=embed)
+                embed = discord.Embed(colour=discord.Colour.blue(), title=title, url=url)
+                embed.set_image(url=image)
+                embed.set_footer(text=f"🔺 {ups} | 🔻 {downs} | 💬 {comments} ")
+                await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="qrcode")
     @app_commands.guild_only()
