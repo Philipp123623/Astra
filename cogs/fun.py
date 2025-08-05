@@ -187,24 +187,37 @@ class fun(commands.Cog):
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def meme(self, interaction: discord.Interaction):
         """Zeigt lustige Memes."""
-        async with aiohttp.ClientSession() as cs:
+        await interaction.response.defer()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (MemeBot by your_discord_tag)"
+        }
+        async with aiohttp.ClientSession(headers=headers) as cs:
             async with cs.get('https://www.reddit.com/r/memes/random/.json') as r:
-                res = await r.json()
+                try:
+                    res = await r.json()
+                    if not res or not isinstance(res, list) or not res[0].get('data'):
+                        return await interaction.followup.send(
+                            "Reddit gibt gerade keine Memes zurück. Probiere es später nochmal!", ephemeral=True)
+                    data_list = res[0]['data'].get('children', [])
+                    if not data_list:
+                        return await interaction.followup.send("Keine Meme-Daten gefunden. Versuch es erneut!",
+                                                               ephemeral=True)
+                    data = data_list[0]['data']
+                except Exception as e:
+                    return await interaction.followup.send(f"Fehler beim Abrufen des Memes: {e}", ephemeral=True)
 
-                data = res[0]['data']['children'][0]['data']
-
-                image = data['url']
-                permalink = data['permalink']
-                url = f'https://reddit.com{permalink}'
-                title = data['title']
-                ups = data['ups']
-                downs = data['downs']
-                comments = data['num_comments']
+                image = data.get('url', '')
+                permalink = data.get('permalink', '')
+                url = f'https://reddit.com{permalink}' if permalink else None
+                title = data.get('title', 'Meme')
+                ups = data.get('ups', 0)
+                downs = data.get('downs', 0)
+                comments = data.get('num_comments', 0)
 
                 embed = discord.Embed(colour=discord.Colour.blue(), title=title, url=url)
                 embed.set_image(url=image)
                 embed.set_footer(text=f"🔺 {ups} | 🔻 {downs} | 💬 {comments} ")
-                await interaction.response.send_message(embed=embed)
+                await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="qrcode")
     @app_commands.guild_only()
