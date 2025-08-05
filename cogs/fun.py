@@ -93,62 +93,95 @@ class fun(commands.Cog):
             await interaction.response.send_message(file=file, embed=embed)
             os.remove("pix.png")
 
-    @app_commands.command(name="wasted")
-    @app_commands.describe(
-        user="Der User, dessen Profilbild benutzt werden soll (optional)"
-    )
-    async def wasted(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        """Sendet ein Profilbild mit Wasted-Effekt (API)."""
-        await interaction.response.defer()
-        user = user or interaction.user
-        avatar_url = user.display_avatar.replace(format='png', size=256).url
-        api_url = f"https://nekobot.xyz/api/imagegen?type=wasted&url={avatar_url}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as resp:
-                if resp.status != 200:
-                    return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
-                data = await resp.json()
-                embed = discord.Embed(description="**Wasted!**", color=discord.Color.dark_gray())
-                embed.set_image(url=data["message"])
-                await interaction.followup.send(embed=embed)
+    import discord
+    from discord import app_commands
+    from typing import Optional
+    import aiohttp
+    import urllib.parse
 
-    @app_commands.command(name="gay")
-    @app_commands.describe(
-        user="Der User, dessen Profilbild benutzt werden soll (optional)"
-    )
-    async def gay(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        """Sendet ein Profilbild mit Rainbow-Overlay (API)."""
-        await interaction.response.defer()
-        user = user or interaction.user
-        avatar_url = user.display_avatar.replace(format='png', size=256).url
-        api_url = f"https://nekobot.xyz/api/imagegen?type=gay&url={avatar_url}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as resp:
-                if resp.status != 200:
-                    return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
-                data = await resp.json()
-                embed = discord.Embed(description="🏳️‍🌈 **Gay!**", color=discord.Color.magenta())
-                embed.set_image(url=data["message"])
-                await interaction.followup.send(embed=embed)
+    class FunCommands(app_commands.Group):
+        def __init__(self):
+            super().__init__(
+                name="fun",
+                description="Lustige Bildbearbeitungen mit API!"
+            )
 
-    @app_commands.command(name="triggered")
-    @app_commands.describe(
-        user="Der User, dessen Profilbild benutzt werden soll (optional)"
-    )
-    async def triggered(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        """Sendet ein Profilbild mit Triggered-Effekt (API, animiertes GIF)."""
-        await interaction.response.defer()
-        user = user or interaction.user
-        avatar_url = user.display_avatar.replace(format='png', size=256).url
-        api_url = f"https://nekobot.xyz/api/imagegen?type=triggered&url={avatar_url}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url) as resp:
-                if resp.status != 200:
-                    return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
-                data = await resp.json()
-                embed = discord.Embed(description="**Triggered!**", color=discord.Color.red())
-                embed.set_image(url=data["message"])
-                await interaction.followup.send(embed=embed)
+        # Wasted
+        @app_commands.command(name="wasted")
+        @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
+        async def wasted(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+            """Sendet ein Profilbild mit Wasted-Effekt über SomeRandomAPI."""
+            await interaction.response.defer()
+            user = user or interaction.user
+            avatar_url = user.display_avatar.replace(format="png", size=256).url
+            encoded_url = urllib.parse.quote(avatar_url, safe='')
+            api_url = f"https://some-random-api.com/canvas/misc/wasted?avatar={encoded_url}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
+                    img_bytes = await resp.read()
+                    file = discord.File(io.BytesIO(img_bytes), filename="wasted.png")
+                    embed = discord.Embed(description="**Wasted!**", color=discord.Color.dark_gray())
+                    embed.set_image(url="attachment://wasted.png")
+                    await interaction.followup.send(embed=embed, file=file)
+
+        # Gay
+        @app_commands.command(name="gay")
+        @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
+        async def gay(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+            """Sendet ein Profilbild mit Rainbow/Gay-Effekt über SomeRandomAPI."""
+            await interaction.response.defer()
+            user = user or interaction.user
+            avatar_url = user.display_avatar.replace(format="png", size=256).url
+            encoded_url = urllib.parse.quote(avatar_url, safe='')
+            api_url = f"https://some-random-api.com/canvas/misc/gay?avatar={encoded_url}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
+                    img_bytes = await resp.read()
+                    file = discord.File(io.BytesIO(img_bytes), filename="gay.png")
+                    embed = discord.Embed(description="🏳️‍🌈 **Gay!**", color=discord.Color.magenta())
+                    embed.set_image(url="attachment://gay.png")
+                    await interaction.followup.send(embed=embed, file=file)
+
+        # Triggered
+        @app_commands.command(name="triggered")
+        @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
+        async def triggered(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+            """Sendet ein Profilbild mit Triggered-Effekt (animiertes GIF) über SomeRandomAPI."""
+            await interaction.response.defer()
+            user = user or interaction.user
+            avatar_url = user.display_avatar.replace(format="png", size=256).url
+            encoded_url = urllib.parse.quote(avatar_url, safe='')
+            api_url = f"https://some-random-api.com/canvas/misc/triggered?avatar={encoded_url}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.followup.send("❌ Fehler bei der API-Anfrage.", ephemeral=True)
+                    img_bytes = await resp.read()
+                    file = discord.File(io.BytesIO(img_bytes), filename="triggered.gif")
+                    embed = discord.Embed(description="**Triggered!**", color=discord.Color.red())
+                    embed.set_image(url="attachment://triggered.gif")
+                    await interaction.followup.send(embed=embed, file=file)
+
+        # Colorviewer
+        @app_commands.command(name="color")
+        @app_commands.describe(hex="Hex-Code der Farbe, z.B. ff0055 oder #ff0055")
+        async def color(self, interaction: discord.Interaction, hex: str):
+            """Zeigt eine Farbe als Bild über SomeRandomAPI an."""
+            hex_color = hex.lstrip("#")
+            api_url = f"https://some-random-api.com/canvas/colourviewer?hex={hex_color}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.response.send_message("❌ Fehler bei der API-Anfrage.", ephemeral=True)
+                    img_bytes = await resp.read()
+                    file = discord.File(io.BytesIO(img_bytes), filename="color.png")
+                    embed = discord.Embed(title=f"Hier ist die Farbe #{hex_color}", color=int(hex_color, 16))
+                    embed.set_image(url="attachment://color.png")
+                    await interaction.response.send_message(embed=embed, file=file)
 
     @app_commands.command(name="meme", nsfw=True)
     @app_commands.guild_only()
