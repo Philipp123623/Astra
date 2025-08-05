@@ -1,13 +1,14 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiohttp
 from datetime import datetime
 from PIL import Image, ImageOps, ImageDraw
 from io import BytesIO
 import pyfiglet
 from typing import Optional
 import io
+import aiohttp
+import urllib.parse
 import qrcode
 import os
 import requests
