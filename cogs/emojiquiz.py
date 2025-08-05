@@ -155,7 +155,6 @@ class emojiquiz(commands.Cog):
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = %s", (msg.guild.id,))
                 # Prüfe, ob das Emoji-Quiz aktiv ist
                 await cur.execute("SELECT channelID, messageID FROM emojiquiz WHERE guildID = %s", (msg.guild.id,))
                 already_on = await cur.fetchone()
