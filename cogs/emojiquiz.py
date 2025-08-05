@@ -48,7 +48,6 @@ class buttons_emj(discord.ui.View):
     async def skip(self, interaction: discord.Interaction, button: discord.Button):
         import asyncio
         try:
-            # Sofort auf Interaktion deferen, damit Discord nicht meckert
             await interaction.response.defer(ephemeral=True)
 
             async with interaction.client.pool.acquire() as conn:
@@ -132,9 +131,15 @@ class buttons_emj(discord.ui.View):
                         await cur.execute("INSERT INTO emojiquiz_lsg(guildID, lösung) VALUES (%s, %s)",
                                           (interaction.guild.id, answer))
 
-                    # Am Ende sende followup Nachricht
-                    await interaction.followup.send("Das Quiz wurde übersprungen und eine neue Frage gepostet!",
-                                                    ephemeral=True)
+                    # Nachricht sichtbar im Channel senden und nach 2 Sekunden löschen
+                    followup_msg = await interaction.channel.send(
+                        f"Das Quiz wurde von {interaction.user.mention} übersprungen und eine neue Frage gepostet!"
+                    )
+                    await asyncio.sleep(2)
+                    try:
+                        await followup_msg.delete()
+                    except Exception:
+                        pass
 
         except discord.errors.NotFound:
             print(f"Die Interaktion von {interaction.user} ist abgelaufen oder bereits beantwortet.")
