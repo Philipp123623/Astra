@@ -71,7 +71,8 @@ class buttons_emj(discord.ui.View):
                     await self.economy.update_balance(interaction.user.id, wallet_change=-20)
 
                     skipped_msg = await interaction.channel.send(
-                        f"{interaction.user.mention} hat das Wort übersprungen. (-20 <:Astra_cookie:1141303831293079633>)")
+                        f"{interaction.user.mention} hat das Wort übersprungen. (-20 <:Astra_cookie:1141303831293079633>)"
+                    )
 
                     await asyncio.sleep(2)
 
@@ -133,7 +134,7 @@ class buttons_emj(discord.ui.View):
 
                     # Nachricht sichtbar im Channel senden und nach 2 Sekunden löschen
                     followup_msg = await interaction.channel.send(
-                        f"Das Quiz wurde von {interaction.user.mention} übersprungen und eine neue Frage gepostet!"
+                        f"Das Quiz wurde von {interaction.user.mention} übersprungen. Das Wort war: **{answer}**. Eine neue Frage wurde gepostet!"
                     )
                     await asyncio.sleep(2)
                     try:
