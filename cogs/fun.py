@@ -94,7 +94,6 @@ class fun(commands.Cog):
             await interaction.response.send_message(file=file, embed=embed)
             os.remove("pix.png")
 
-    # Wasted
     @app_commands.command(name="wasted")
     @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
     async def wasted(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
@@ -103,7 +102,7 @@ class fun(commands.Cog):
         user = user or interaction.user
         avatar_url = user.display_avatar.replace(format="png", size=256).url
         encoded_url = urllib.parse.quote(avatar_url, safe='')
-        api_url = f"https://some-random-api.com/canvas/misc/wasted?avatar={encoded_url}"
+        api_url = f"https://some-random-api.com/canvas/wasted?avatar={encoded_url}"
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url) as resp:
                 if resp.status != 200:
@@ -123,7 +122,7 @@ class fun(commands.Cog):
         user = user or interaction.user
         avatar_url = user.display_avatar.replace(format="png", size=256).url
         encoded_url = urllib.parse.quote(avatar_url, safe='')
-        api_url = f"https://some-random-api.com/canvas/misc/gay?avatar={encoded_url}"
+        api_url = f"https://some-random-api.com/canvas/gay?avatar={encoded_url}"
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url) as resp:
                 if resp.status != 200:
@@ -143,7 +142,7 @@ class fun(commands.Cog):
         user = user or interaction.user
         avatar_url = user.display_avatar.replace(format="png", size=256).url
         encoded_url = urllib.parse.quote(avatar_url, safe='')
-        api_url = f"https://some-random-api.com/canvas/misc/triggered?avatar={encoded_url}"
+        api_url = f"https://some-random-api.com/canvas/triggered?avatar={encoded_url}"
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url) as resp:
                 if resp.status != 200:
