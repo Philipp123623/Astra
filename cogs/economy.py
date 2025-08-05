@@ -678,6 +678,16 @@ class Job(app_commands.Group):
             description="Alles rund um deinen Job"
         )
 
+    async def get_user(self, user_id: int):
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT * FROM economy_users WHERE user_id = %s", (user_id,))
+                data = await cur.fetchone()
+                if not data:
+                    await cur.execute("INSERT INTO economy_users (user_id) VALUES (%s)", (user_id,))
+                    return user_id, 0, 0, None, 0, None
+                return data
+
     @app_commands.command(name="work", description="Arbeite in deinem aktuellen Job.")
     @app_commands.guild_only()
     async def work(self, interaction: discord.Interaction):

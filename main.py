@@ -651,7 +651,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "SELECT guildID, channelID, userID, messageID FROM giveaway_entrys WHERE messageID = (%s)", (messageid))
+                "SELECT guildID, channelID, userID, messageID FROM giveaway_entrys WHERE messageID = (%s)", (messageid,))
             result = await cur.fetchall()
             if result == ():
                 await cur.execute(
@@ -684,7 +684,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                     await cur.execute(
                         "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                         (1, guild.id, channel.id, messageid))
-                    await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                    await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
             if result:
                 guildID = result[0][0]
                 channelID = result[0][1]
@@ -730,7 +730,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                         await cur.execute(
                             "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                             (1, guildID, channelID, messageid))
-                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
                     if entrys >= 1:
                         embed = discord.Embed(title=" ",
                                               description=f"🏆 Preis: {price}\n`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n<:Astra_gw_open2:1141303850125504533> » __**Wer hat das Gewinnspiel gewonnen?**__\n<:Astra_arrow:1141303823600717885> {mentions} hat das Gewinnspiel gewonnen.\n<:Astra_arrow:1141303823600717885> Das Gewinnspiel endet {discord.utils.format_dt(time2, 'R')}\n<:Astra_arrow:1141303823600717885> Es gab **{entrys}** Teilnehmer.",
@@ -741,7 +741,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                         await cur.execute(
                             "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                             (1, guildID, channelID, messageid))
-                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
 
 
 class gw_button(discord.ui.View):
@@ -1131,7 +1131,7 @@ class Giveaway(app_commands.Group):
                                           (interaction.guild.id, 1, msg.id))
                         if gwid_result:
                             await cur.execute("INSERT INTO giveway_ids(guildID, gwID, messageID) VALUES(%s, %s, %s)",
-                                              (interaction.guild.id, len(result) + 1, msg.id))
+                                              (interaction.guild.id, len(gwid_result) + 1, msg.id))
                     await interaction.response.send_message(
                         f"**<:Astra_accept:1141303821176422460> Das Gewinnspiel wird in {channel.mention} stattfinden.**")
                 if role is not None and level is None:
@@ -1158,7 +1158,7 @@ class Giveaway(app_commands.Group):
                                           (interaction.guild.id, 1, msg.id))
                         if gwid_result:
                             await cur.execute("INSERT INTO giveway_ids(guildID, gwID, messageID) VALUES(%s, %s, %s)",
-                                              (interaction.guild.id, len(result) + 1, msg.id))
+                                              (interaction.guild.id, len(gwid_result) + 1, msg.id))
 
                     await interaction.response.send_message(
                         f"**<:Astra_accept:1141303821176422460> Das Gewinnspiel wird in {channel.mention} stattfinden.**")
@@ -1195,7 +1195,7 @@ class Giveaway(app_commands.Group):
                             if gwid_result:
                                 await cur.execute(
                                     "INSERT INTO giveway_ids(guildID, gwID, messageID) VALUES(%s, %s, %s)",
-                                    (interaction.guild.id, len(result) + 1, msg.id))
+                                    (interaction.guild.id, len(gwid_result) + 1, msg.id))
                         await interaction.response.send_message(
                             f"** The Giveaway will take place in {channel.mention}**")
 
@@ -1209,7 +1209,7 @@ class Giveaway(app_commands.Group):
             async with conn.cursor() as cur:
                 if aktion == "Gewinnspiele Anzeigen":
                     await cur.execute("SELECT gwID, messageID FROM giveway_ids WHERE guildID = (%s)",
-                                      interaction.guild.id)
+                                      (interaction.guild.id,))
                     result = await cur.fetchall()
                     if result == ():
                         await interaction.response.send_message(
@@ -1265,7 +1265,7 @@ class Giveaway(app_commands.Group):
                         await interaction.response.send_message(
                             "<:Astra_accept:1141303821176422460> **Das Gewinnspiel wurde erfolgreich beendet.**",
                             ephemeral=True)
-                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
                         await cur.execute(
                             "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                             (1, guild.id, channel.id, messageid))
@@ -1314,7 +1314,7 @@ class Giveaway(app_commands.Group):
                                 await cur.execute(
                                     "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                                     (1, guildID, channelID, messageid))
-                                await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                                await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
                             if entrys >= 1:
                                 embed = discord.Embed(title=" ",
                                                       description=f"🏆 Preis: {price}\n`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n<:Astra_gw_open2:1061384624951021578> » __**Who has won this giveaway?**__\n<:Astra_arrow:1141303823600717885> {mentions} hat das Gewinnspiel gewonnen.\n<:Astra_arrow:1141303823600717885> Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}\n<:Astra_arrow:1141303823600717885> Es gab **{entrys}** Teilnehmer.",
@@ -1325,7 +1325,7 @@ class Giveaway(app_commands.Group):
                             await cur.execute(
                                 "UPDATE giveaway_active SET ended = (%s) WHERE guildID = (%s) AND channelID = (%s) and messageID = (%s)",
                                 (1, guildID, channelID, messageid))
-                            await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid))
+                            await cur.execute("DELETE FROM giveway_ids WHERE messageID = (%s)", (messageid,))
 
                 if aktion == "Gewinnspiel neu würfeln(Nachrichten ID angeben)":
                     await cur.execute(
@@ -1386,7 +1386,7 @@ class Giveaway(app_commands.Group):
                             await msg.edit(content="`❌` Gewinnspiel Vorbei `❌`", embed=embed, view=None)
                             await msg.reply(
                                 f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen. Herzlichen Glückwunsch.")
-                            if entries == 1:
+                            if entrys == 1:
                                 await interaction.response.send_message(
                                     f"<:Astra_accept:1141303821176422460> **Ich habe das Gewinnspiel neu ausgelost, der neue Gewinner ist {mentions}.**",
                                     epehemeral=True)

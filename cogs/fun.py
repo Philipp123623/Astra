@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageOps, ImageDraw
 from io import BytesIO
 import pyfiglet
 import io
@@ -92,89 +92,99 @@ class fun(commands.Cog):
             await interaction.response.send_message(file=file, embed=embed)
             os.remove("pix.png")
 
+    # Hilfsfunktion: Avatar herunterladen
+    async def fetch_avatar(self, url):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.read()
+                return Image.open(io.BytesIO(data)).convert("RGBA")
+
+    # Wasted Effekt
     @app_commands.command(name="wasted")
-    @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def wasted(self, interaction: discord.Interaction, user: discord.Member = None):
-        """Sendet ein Profilbild mit Effekten."""
-        if user is None:
-            user = interaction.user
-        async with interaction.channel.typing():
-            session = aiohttp.ClientSession()
-            async with session.get(
-                    f"https://some-random-api.ml/canvas/wasted?avatar={user.avatar.replace(format='jpg')}") as r:
-                if r.status != 200:
-                    return await interaction.response.send_message("Error loading image.")
-                else:
-                    data = io.BytesIO(await r.read())
-                    file = discord.File(data, 'triggered.gif')
-                    embed = discord.Embed(title=" ", description="**Wasted!**", colour=discord.Colour.blue())
-                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
-                    embed.set_image(url="attachment://triggered.gif")
-                    await interaction.response.send_message(file=file, embed=embed)
-                    await session.close()
+        """Sendet ein Profilbild mit Wasted-Effekt."""
+        await interaction.response.defer()
+        user = user or interaction.user
+        avatar = await self.fetch_avatar(user.display_avatar.replace(format='png', size=256).url)
+        overlay = Image.open("wasted_overlay.png").convert("RGBA").resize(avatar.size)
+        result = Image.alpha_composite(avatar, overlay)
 
+        buf = io.BytesIO()
+        result.save(buf, format="PNG")
+        buf.seek(0)
+        file = discord.File(buf, "wasted.png")
+        embed = discord.Embed(description="**Wasted!**", color=discord.Color.blue())
+        embed.set_image(url="attachment://wasted.png")
+        await interaction.followup.send(file=file, embed=embed)
+
+    # Gay-Effekt (Regenbogen-Overlay)
+    @app_commands.command(name="gay")
+    async def gay(self, interaction: discord.Interaction, user: discord.Member = None):
+        """Sendet ein Profilbild mit Rainbow-Overlay."""
+        await interaction.response.defer()
+        user = user or interaction.user
+        avatar = await self.fetch_avatar(user.display_avatar.replace(format='png', size=256).url)
+        overlay = Image.open("gay_overlay.png").convert("RGBA").resize(avatar.size)
+        result = Image.alpha_composite(avatar, overlay)
+
+        buf = io.BytesIO()
+        result.save(buf, format="PNG")
+        buf.seek(0)
+        file = discord.File(buf, "gay.png")
+        embed = discord.Embed(description="**Gay!**", color=discord.Color.blue())
+        embed.set_image(url="attachment://gay.png")
+        await interaction.followup.send(file=file, embed=embed)
+
+    # Triggered-Effekt (animiertes GIF)
     @app_commands.command(name="triggered")
-    @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def triggered(self, interaction: discord.Interaction, user: discord.Member = None):
-        """Sendet ein Profilbild mit Effekten."""
-        if user is None:
-            user = interaction.user
-        async with interaction.channel.typing():
-            session = aiohttp.ClientSession()
-            async with session.get(
-                    f"https://some-random-api.ml/canvas/triggered?avatar={user.avatar.replace(format='png')}") as r:
-                if r.status != 200:
-                    return await interaction.response.send_message("Error loading image.")
-                else:
-                    data = io.BytesIO(await r.read())
-                    file = discord.File(data, 'triggered.gif')
-                    embed = discord.Embed(title=" ", description="**Triggered!**", colour=discord.Colour.blue())
-                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
-                    embed.set_image(url="attachment://triggered.gif")
-                    await interaction.response.send_message(file=file, embed=embed)
-                    await session.close()
+        """Sendet ein Profilbild mit Triggered-Effekt (animiertes GIF)."""
+        await interaction.response.defer()
+        user = user or interaction.user
+        avatar = await self.fetch_avatar(user.display_avatar.replace(format='png', size=256).url)
 
+        # Frame-Daten
+        frames = []
+        overlay = Image.open("triggered_overlay.png").convert("RGBA").resize(avatar.size)
+        shifts = [(-10, 0), (0, -10), (10, 0), (0, 10)]  # Zittern
+
+        for dx, dy in shifts:
+            frame = Image.new("RGBA", avatar.size, (255, 0, 0, 50))  # rotes Blitzen
+            offset_avatar = Image.new("RGBA", avatar.size)
+            offset_avatar.paste(avatar, (dx, dy))
+            combined = Image.alpha_composite(offset_avatar, overlay)
+            combined = Image.alpha_composite(frame, combined)
+            frames.append(combined)
+
+        buf = io.BytesIO()
+        frames[0].save(buf, format="GIF", save_all=True, append_images=frames[1:], loop=0, duration=60, disposal=2)
+        buf.seek(0)
+        file = discord.File(buf, "triggered.gif")
+        embed = discord.Embed(description="**Triggered!**", color=discord.Color.red())
+        embed.set_image(url="attachment://triggered.gif")
+        await interaction.followup.send(file=file, embed=embed)
+
+    # Colorviewer (Hex-Farbe anzeigen)
     @app_commands.command(name="color")
-    @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def color(self, interaction: discord.Interaction, arg: str):
         """Gebe einen Hex-Code an und schaue dir die Farbe an."""
         try:
-            link = f'https://some-random-api.ml/canvas/colorviewer?hex={arg}'
-
-            embed = discord.Embed(color=discord.Color.light_gray(), title=f"**Here the color** `#{arg}`")
-            embed.set_image(url=link)
-            embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-            embed.set_footer(text="HEX Code: (a-f, 1-9) up to 6 characters")
-
-            await interaction.response.send_message(embed=embed)
-        except:
-            return await interaction.response.send_message("Error loading image.")
-
-    @app_commands.command(name="gay")
-    @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
-    async def gay(self, interaction: discord.Interaction, user: discord.Member = None):
-        """Sendet ein Profilbild mit Effekten.."""
-        if user is None:
-            user = interaction.user
-
-        async with interaction.channel.typing():
-            session = aiohttp.ClientSession()
-            async with session.get(
-                    f"https://some-random-api.ml/canvas/gay?avatar={user.avatar.replace(format='png')}") as r:
-                if r.status != 200:
-                    return await interaction.response.send_message("Error loading image.")
-                else:
-                    data = io.BytesIO(await r.read())
-                    file = discord.File(data, 'triggered.gif')
-                    embed = discord.Embed(title=" ", description="**Gay**!", colour=discord.Colour.blue())
-                    embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
-                    embed.set_image(url="attachment://triggered.gif")
-                    await interaction.response.send_message(file=file, embed=embed)
-                    await session.close()
+            hex_color = arg.strip("#")
+            if len(hex_color) not in (3, 6):
+                return await interaction.response.send_message("Bitte gültigen Hex-Code (z.B. ff0055) angeben.")
+            # Bild mit Farbe erstellen
+            img = Image.new("RGB", (256, 256), f"#{hex_color}")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            file = discord.File(buf, "color.png")
+            embed = discord.Embed(title=f"**Hier ist die Farbe `#{hex_color}`**", color=int(hex_color, 16))
+            embed.set_image(url="attachment://color.png")
+            await interaction.response.send_message(embed=embed, file=file)
+        except Exception:
+            return await interaction.response.send_message("Error loading color.")
 
     @app_commands.command(name="meme", nsfw=True)
     @app_commands.guild_only()
