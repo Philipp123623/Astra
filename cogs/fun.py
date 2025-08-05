@@ -153,20 +153,32 @@ class fun(commands.Cog):
                 embed.set_image(url="attachment://triggered.gif")
                 await interaction.followup.send(embed=embed, file=file)
 
-    # Colorviewer
     @app_commands.command(name="color")
-    @app_commands.describe(hex="Hex-Code der Farbe, z.B. ff0055 oder #ff0055")
+    @app_commands.describe(hex="Hex-Code der Farbe, z. B. ff0055 oder #ff0055")
     async def color(self, interaction: discord.Interaction, hex: str):
-        """Zeigt eine Farbe als Bild über SomeRandomAPI an."""
+        """Zeigt eine Farbe als Bild über Some Random API."""
         hex_color = hex.lstrip("#")
-        api_url = f"https://some-random-api.com/canvas/colourviewer?hex={hex_color}"
+        # Optional: Validierung
+        if len(hex_color) not in (3, 6):
+            return await interaction.response.send_message(
+                "Bitte gültigen Hex-Code (z. B. ff0055) angeben.", ephemeral=True
+            )
+
+        api_url = f"https://api.some-random-api.com/canvas/colorviewer?hex={hex_color}"
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url) as resp:
                 if resp.status != 200:
-                    return await interaction.response.send_message("❌ Fehler bei der API-Anfrage.", ephemeral=True)
+                    err = await resp.text()
+                    return await interaction.response.send_message(
+                        f"❌ Fehler bei der API-Anfrage ({resp.status}):\n{err}", ephemeral=True
+                    )
                 img_bytes = await resp.read()
-                file = discord.File(io.BytesIO(img_bytes), filename="color.png")
-                embed = discord.Embed(title=f"Hier ist die Farbe #{hex_color}", color=int(hex_color, 16))
+                buf = io.BytesIO(img_bytes)
+                file = discord.File(buf, filename="color.png")
+                embed = discord.Embed(
+                    title=f"Hier ist die Farbe #{hex_color}",
+                    color=int(hex_color, 16) if len(hex_color) == 6 else None
+                )
                 embed.set_image(url="attachment://color.png")
                 await interaction.response.send_message(embed=embed, file=file)
 
