@@ -140,10 +140,6 @@ class Astra(commands.Bot):
             async with conn.cursor() as cur:
                 # Tabellen erstellen
 
-                await cur.execute("DELETE FROM giveaway_active")
-                await cur.execute("DELETE FROM giveway_ids")
-                await cur.execute("DELETE FROM giveaway_entrys")
-
                 await cur.execute("DROP TABLE community_goal_conditions;")
                 await cur.execute("DROP TABLE community_goals;")
                 await cur.execute("DROP TABLE goal_bans;")
