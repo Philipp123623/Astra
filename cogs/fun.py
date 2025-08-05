@@ -150,30 +150,6 @@ class fun(commands.Cog):
                 embed.set_image(url=data["message"])
                 await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="color")
-    @app_commands.describe(
-        arg="Hex-Code der Farbe, z.B. ff0055 oder #ff0055"
-    )
-    async def color(self, interaction: discord.Interaction, arg: str):
-        """Gebe einen Hex-Code an und schaue dir die Farbe an."""
-        import io
-        from PIL import Image
-        hex_color = arg.strip("#")
-        if len(hex_color) not in (3, 6):
-            return await interaction.response.send_message("Bitte gültigen Hex-Code (z.B. ff0055) angeben.",
-                                                           ephemeral=True)
-        try:
-            img = Image.new("RGB", (256, 256), f"#{hex_color}")
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            buf.seek(0)
-            file = discord.File(buf, "color.png")
-            embed = discord.Embed(title=f"**Hier ist die Farbe #{hex_color}**", color=int(hex_color, 16))
-            embed.set_image(url="attachment://color.png")
-            await interaction.response.send_message(embed=embed, file=file)
-        except Exception:
-            return await interaction.response.send_message("Error loading color.", ephemeral=True)
-
     @app_commands.command(name="meme", nsfw=True)
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
