@@ -639,7 +639,6 @@ async def funktion2(when: datetime.datetime):
 
                     await cur.execute("DELETE FROM voterole WHERE userID = (%s)", (userID,))
 
-
 async def gwtimes(when: datetime.datetime, messageid: int):
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
@@ -656,6 +655,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
             result3 = await cur.fetchone()
             if not result3:
                 return
+
             ended = result3[0]
             price = result3[1]
             winners = result3[2]
@@ -663,9 +663,24 @@ async def gwtimes(when: datetime.datetime, messageid: int):
             time = result3[4]
             guildID = result3[5]
             channelID = result3[6]
+
+            # == SICHERHEITSCHECKS für Guild & Channel ==
             guild = bot.get_guild(int(guildID))
+            if guild is None:
+                logging.error(f"Guild {guildID} not found for giveaway {messageid}!")
+                return
+
             channel = guild.get_channel(int(channelID))
-            msg = await channel.fetch_message(messageid)
+            if channel is None:
+                logging.error(f"Channel {channelID} not found in guild {guildID} for giveaway {messageid}!")
+                return
+
+            try:
+                msg = await channel.fetch_message(messageid)
+            except Exception as e:
+                logging.error(f"Giveaway message {messageid} not found in channel {channelID} in guild {guildID}: {e}")
+                return
+
             time2 = datetime.datetime.fromtimestamp(int(time))
 
             # Niemand hat teilgenommen
@@ -706,10 +721,9 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                     time2 = datetime.datetime.fromtimestamp(int(time))
                     participants = [userid[2] for userid in result]
 
-                    # Fix: Es darf keine ValueError geben!
+                    # Gewinner bestimmen (Anzahl nie höher als Teilnehmer)
                     chosen_winners = []
                     if len(participants) > 0:
-                        # Mehr Gewinner als Teilnehmer? Dann nimm alle!
                         to_pick = min(len(participants), winners_amount)
                         chosen_winners = random.sample(participants, k=to_pick)
                     users = []
