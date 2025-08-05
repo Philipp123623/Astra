@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/cogs/emojiquiz.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/emojiquiz.py" afterDir="false" />
-    </list>
+    <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -220,7 +218,7 @@
       <workItem from="1754251791095" duration="231000" />
       <workItem from="1754252041817" duration="8028000" />
       <workItem from="1754319326493" duration="9176000" />
-      <workItem from="1754427544597" duration="6486000" />
+      <workItem from="1754427544597" duration="6815000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />

@@ -148,78 +148,99 @@ class emojiquiz(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, msg):
-        if not msg.guild:  # Ignoriere private Nachrichten
-            return
-        if msg.author.bot:  # Ignoriere Nachrichten von Bots
+        if not msg.guild or msg.author.bot:
             return
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Prüfe, ob das Emoji-Quiz aktiv ist
+                # Ist Emojiquiz aktiv?
                 await cur.execute("SELECT channelID, messageID FROM emojiquiz WHERE guildID = %s", (msg.guild.id,))
                 already_on = await cur.fetchone()
                 if not already_on:
-                    return  # Emoji-Quiz ist nicht aktiviert
+                    return
 
-                channelID = already_on[0]
-                quiz_message_id = already_on[1]
+                channelID, quiz_message_id = already_on
+
+                # Ist das der richtige Channel?
                 if int(channelID) == int(msg.channel.id):
-                    # Hole die Lösung für das Quiz
+                    # Jede Usernachricht merken (auch Antworten)
+                    await cur.execute(
+                        "INSERT INTO emojiquiz_messages (guildID, channelID, messageID) VALUES (%s, %s, %s)",
+                        (msg.guild.id, msg.channel.id, msg.id)
+                    )
+
+                    # Lösung prüfen
                     await cur.execute("SELECT lösung FROM emojiquiz_lsg WHERE guildID = %s", (msg.guild.id,))
                     result2 = await cur.fetchone()
-                    if result2:
-                        loesung = result2[0]
-                        if msg.content.strip().lower() == loesung.strip().lower():  # Überprüfe die Antwort (whitespace + case-insensitive)
-                            # ✅ Reaktion für richtige Antwort
-                            right_message = await msg.channel.fetch_message(msg.id)
-                            await right_message.add_reaction('✅')
-                            await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = %s", (msg.guild.id,))
+                    if not result2:
+                        return
+                    loesung = result2[0]
+                    if msg.content.strip().lower() == loesung.strip().lower():
+                        await msg.add_reaction('✅')
+                        await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = %s", (msg.guild.id,))
 
-                            # Frage für neues Quiz holen
-                            query = "SELECT question, answer, hint FROM emojiquiz_quizzez ORDER BY RAND() LIMIT 1;"
-                            await cur.execute(query)
-                            quiz_data = await cur.fetchone()
-                            if quiz_data:
-                                question = quiz_data[0]
-                                answer = quiz_data[1]
-                                hint = quiz_data[2]
+                        # Geld geben
+                        await self.economy.update_balance(msg.author.id, wallet_change=20)
 
-                                # Guthaben erhöhen
-                                await self.economy.update_balance(msg.author.id, wallet_change=20)
+                        import asyncio
+                        await asyncio.sleep(2)  # 2 Sekunden warten vor dem Löschen
 
-                                # --- Alte Quiznachricht löschen ---
-                                if quiz_message_id:
-                                    try:
-                                        old_msg = await msg.channel.fetch_message(int(quiz_message_id))
-                                        await old_msg.delete()
-                                    except Exception:
-                                        pass  # Nachricht existiert evtl. nicht mehr
+                        # Alle User-Messages im Channel löschen (sicher aus der DB)
+                        await cur.execute(
+                            "SELECT messageID FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
+                            (msg.guild.id, msg.channel.id)
+                        )
+                        all_msg_ids = await cur.fetchall()
+                        for (mid,) in all_msg_ids:
+                            try:
+                                m = await msg.channel.fetch_message(mid)
+                                await m.delete()
+                            except Exception:
+                                pass
+                        # Nachrichten-DB leeren für diesen Channel
+                        await cur.execute(
+                            "DELETE FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
+                            (msg.guild.id, msg.channel.id)
+                        )
 
-                                # Neue Quiz-Nachricht senden
-                                emojiquiz_embed = discord.Embed(
-                                    title="Emojiquiz",
-                                    description="Solltest du Probleme beim Lösen haben, kannst du die Buttons dieser Nachricht benutzen.",
-                                    colour=discord.Colour.blue())
-                                emojiquiz_embed.add_field(name="❓ Gesuchter Begriff", value=question, inline=True)
-                                emojiquiz_embed.add_field(name="❗️ Tipp", value=f"||{hint}||", inline=True)
-                                emojiquiz_embed.set_footer(
-                                    text=f"Das letzte Quiz wurde von {msg.author.name} erraten!",
-                                    icon_url=msg.author.avatar.url
-                                )
-                                sent = await msg.channel.send(embed=emojiquiz_embed,
-                                                              view=buttons_emj(bot=self.bot, economy=self.economy))
+                        # Alte Quiznachricht löschen
+                        if quiz_message_id:
+                            try:
+                                old_msg = await msg.channel.fetch_message(int(quiz_message_id))
+                                await old_msg.delete()
+                            except Exception:
+                                pass
 
-                                # Neue Quiz-Message-ID speichern
-                                await cur.execute("UPDATE emojiquiz SET messageID = %s WHERE guildID = %s",
-                                                  (sent.id, msg.guild.id))
+                        # Neues Quiz posten
+                        query = "SELECT question, answer, hint FROM emojiquiz_quizzez ORDER BY RAND() LIMIT 1;"
+                        await cur.execute(query)
+                        quiz_data = await cur.fetchone()
+                        if quiz_data:
+                            question, answer, hint = quiz_data
+                            emojiquiz_embed = discord.Embed(
+                                title="Emojiquiz",
+                                description="Solltest du Probleme beim Lösen haben, kannst du die Buttons dieser Nachricht benutzen.",
+                                colour=discord.Colour.blue())
+                            emojiquiz_embed.add_field(name="❓ Gesuchter Begriff", value=question, inline=True)
+                            emojiquiz_embed.add_field(name="❗️ Tipp", value=f"||{hint}||", inline=True)
+                            emojiquiz_embed.set_footer(
+                                text=f"Das letzte Quiz wurde von {msg.author.name} erraten!",
+                                icon_url=msg.author.avatar.url
+                            )
+                            sent = await msg.channel.send(embed=emojiquiz_embed,
+                                                          view=buttons_emj(bot=self.bot, economy=self.economy))
+                            # Neue MessageID speichern
+                            await cur.execute("UPDATE emojiquiz SET messageID = %s WHERE guildID = %s",
+                                              (sent.id, msg.guild.id))
+                            # Neue Lösung speichern
+                            await cur.execute("INSERT INTO emojiquiz_lsg(guildID, lösung) VALUES (%s, %s)",
+                                              (msg.guild.id, answer))
 
-                                # Lösung für neues Quiz abspeichern
-                                await cur.execute("INSERT INTO emojiquiz_lsg(guildID, lösung) VALUES (%s, %s)",
-                                                  (msg.guild.id, answer))
-
-                        elif msg.content.lower() != loesung.lower():  # Falsche Antwort
-                            message = await msg.channel.fetch_message(msg.id)
-                            await message.add_reaction('❌')  # Falsche Antwort - ❌ Reaktion hinzufügen
+                    else:  # Falsche Antwort
+                        try:
+                            await msg.add_reaction('❌')
+                        except Exception:
+                            pass
 
     @commands.Cog.listener()
     async def on_ready(self):
