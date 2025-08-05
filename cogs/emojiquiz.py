@@ -169,7 +169,7 @@ class emojiquiz(commands.Cog):
                     result2 = await cur.fetchone()
                     if result2:
                         loesung = result2[0]
-                        if msg.content.lower() == loesung.lower():  # Überprüfe die Antwort
+                        if msg.content.strip().lower() == loesung.strip().lower():  # Überprüfe die Antwort (whitespace + case-insensitive)
                             # ✅ Reaktion für richtige Antwort
                             right_message = await msg.channel.fetch_message(msg.id)
                             await right_message.add_reaction('✅')
