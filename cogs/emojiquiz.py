@@ -151,7 +151,7 @@ class buttons_emj(discord.ui.View):
             print(f"Die Interaktion von {interaction.user} ist abgelaufen oder bereits beantwortet.")
 
 
-@discord.ui.button(label='Initial letter', style=discord.ButtonStyle.grey, custom_id='persistent_view:tip', emoji="💡")
+    @discord.ui.button(label='Initial letter', style=discord.ButtonStyle.grey, custom_id='persistent_view:tip', emoji="💡")
     async def tip(self, interaction: discord.Interaction, button: discord.Button):
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cur:
