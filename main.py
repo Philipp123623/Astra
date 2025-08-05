@@ -189,6 +189,7 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS botrole (roleID BIGINT, guildID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS joinrole (roleID BIGINT, guildID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS capslock (guildID BIGINT, percent BIGINT)")
+                await cur.execute("DROP TABLE counter;")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS counter (guildID BIGINT, channelID BIGINT, number BIGINT, lastuserID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS leavemsg (guildID BIGINT, channelID BIGINT, msg TEXT)")
