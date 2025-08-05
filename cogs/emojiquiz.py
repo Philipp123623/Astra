@@ -48,8 +48,8 @@ class buttons_emj(discord.ui.View):
     async def skip(self, interaction: discord.Interaction, button: discord.Button):
         import asyncio
         try:
-            if interaction.response.is_done():
-                return
+            # Sofort auf Interaktion deferen, damit Discord nicht meckert
+            await interaction.response.defer(ephemeral=True)
 
             async with interaction.client.pool.acquire() as conn:
                 async with conn.cursor() as cur:
@@ -57,28 +57,25 @@ class buttons_emj(discord.ui.View):
                                       (interaction.guild.id,))
                     already_on = await cur.fetchone()
                     if not already_on:
-                        await interaction.response.send_message(
+                        await interaction.followup.send(
                             "<:Astra_x:1141303954555289600> Das Emojiquizz ist deaktiviert.")
                         return
 
                     user_balance = await self.economy.get_balance(interaction.user.id)
                     wallet, bank = user_balance
                     if wallet < 20:
-                        await interaction.response.send_message(
+                        await interaction.followup.send(
                             "Du hast nicht genug Geld, um das Quiz zu überspringen. Du benötigst mindestens 20 <:Astra_cookie:1141303831293079633>.",
                             ephemeral=True)
                         return
 
-                    # User Geld abziehen
                     await self.economy.update_balance(interaction.user.id, wallet_change=-20)
-                    # Nachricht posten, dass geskippt wurde
+
                     skipped_msg = await interaction.channel.send(
                         f"{interaction.user.mention} hat das Wort übersprungen. (-20 <:Astra_cookie:1141303831293079633>)")
 
-                    # --- Warten, dann alles löschen ---
                     await asyncio.sleep(2)
 
-                    # Alle User-Messages im Channel löschen
                     await cur.execute(
                         "SELECT messageID FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
                         (interaction.guild.id, interaction.channel.id)
@@ -90,19 +87,17 @@ class buttons_emj(discord.ui.View):
                             await m.delete()
                         except Exception:
                             pass
-                    # Tabelle leeren
+
                     await cur.execute(
                         "DELETE FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
                         (interaction.guild.id, interaction.channel.id)
                     )
 
-                    # Übersprungene Info-Nachricht löschen
                     try:
                         await skipped_msg.delete()
                     except Exception:
                         pass
 
-                    # Alte Quiznachricht löschen
                     channel_id, old_message_id = already_on
                     try:
                         quiz_channel = self.bot.get_channel(channel_id)
@@ -112,7 +107,6 @@ class buttons_emj(discord.ui.View):
                     except Exception:
                         pass
 
-                    # Neues Quiz!
                     await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = (%s)", (interaction.guild.id,))
                     query = "SELECT question, answer, hint FROM emojiquiz_quizzez ORDER BY RAND() LIMIT 1;"
                     await cur.execute(query)
@@ -138,9 +132,10 @@ class buttons_emj(discord.ui.View):
                         await cur.execute("INSERT INTO emojiquiz_lsg(guildID, lösung) VALUES (%s, %s)",
                                           (interaction.guild.id, answer))
 
-                    # Feedback an den User (nur Ephemeral!)
-                    await interaction.response.send_message(
-                        "Das Quiz wurde übersprungen und eine neue Frage gepostet!", ephemeral=True)
+                    # Am Ende sende followup Nachricht
+                    await interaction.followup.send("Das Quiz wurde übersprungen und eine neue Frage gepostet!",
+                                                    ephemeral=True)
+
         except discord.errors.NotFound:
             print(f"Die Interaktion von {interaction.user} ist abgelaufen oder bereits beantwortet.")
 
