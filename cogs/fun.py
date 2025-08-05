@@ -6,6 +6,7 @@ from datetime import datetime
 from PIL import Image, ImageOps, ImageDraw
 from io import BytesIO
 import pyfiglet
+from typing import Optional
 import io
 import qrcode
 import os
