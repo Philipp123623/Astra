@@ -512,7 +512,7 @@ async def on_dbl_vote(data):
             total_votes = int(votedata.get("monthly_points", 0))  # Gesamt Votes diesen Monat
 
             # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
-            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 60
+            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
 
             # Speichere userID und nächste Vote-Zeit in voterole-Tabelle (INSERT oder UPDATE)
             await cur.execute(
