@@ -545,15 +545,14 @@ async def on_dbl_test(data):
 
 
 async def print_commands_with_subs(bot, guild_id):
-    commands = await bot.tree.fetch_commands(guild_id=guild_id)
+    commands = await bot.tree.fetch_guild_commands(guild_id)
 
     def recurse_options(cmd, parent_name=""):
         base_name = f"{parent_name} {cmd.name}".strip()
         logging.info(f"Command: {base_name} - ID: {cmd.id}")
 
         for opt in cmd.options:
-            # Subcommands (type=1) oder Subcommand Groups (type=2)
-            if opt.type in (1, 2):
+            if opt.type in (1, 2):  # Subcommand oder Subcommand Group
                 recurse_options(opt, base_name)
 
     for cmd in commands:
@@ -562,7 +561,7 @@ async def print_commands_with_subs(bot, guild_id):
 
 @bot.event
 async def on_ready():
-    guild = bot.get_guild(1141116981697859736)  # Ersetze mit deiner Gilden-ID
+    guild = bot.get_guild(1141116981697859736)
     if guild:
         await print_commands_with_subs(bot, guild.id)
     else:
