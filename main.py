@@ -457,70 +457,79 @@ class VoteView(discord.ui.View):
             )
         )
 
-
 @bot.event
 async def on_dbl_vote(data):
-    logging.info("on_dbl_vote ausgelöst für User:", data["user"])
+    logging.info(f"on_dbl_vote ausgelöst für User: {data['user']}")
 
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
             if data["type"] == "test":
                 return bot.dispatch('dbl_test', data)
 
-            user = bot.get_user(int(data["user"]))
-            votedata = await bot.topggpy.get_bot_info()
-            votes = int(votedata["monthly_points"])
+            user_id = int(data["user"])
+            user = bot.get_user(user_id)
+            if user is None:
+                # Falls User nicht im Cache, try fetch
+                try:
+                    user = await bot.fetch_user(user_id)
+                except:
+                    logging.error(f"User {user_id} nicht gefunden")
+                    return
+
             guild = bot.get_guild(1141116981697859736)
+            if not guild:
+                logging.error("Guild nicht gefunden!")
+                return
+
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
 
-            today = datetime.date.today()
-            this_month = today.replace(day=1)
-            vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
+            # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
+            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
 
-            # User-Votes auslesen und ggf. resetten
-            await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (int(data["user"]),))
-            result = await cur.fetchone()
-            if not result:
-                member_votes = vote_increase
-                await cur.execute("INSERT INTO topgg (userID, count, last_reset) VALUES (%s, %s, %s)",
-                                  (int(data["user"]), member_votes, this_month))
-            else:
-                votes_member, last_reset = result
-                if not last_reset or last_reset < this_month:
-                    votes_member = 0
-                    await cur.execute("UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
-                                      (votes_member, this_month, int(data["user"])))
-                member_votes = votes_member + vote_increase
-                await cur.execute("UPDATE topgg SET count = %s WHERE userID = %s",
-                                  (member_votes, int(data["user"])))
+            # Speichere userID und nächste Vote-Zeit in voterole-Tabelle (INSERT oder UPDATE)
+            await cur.execute(
+                """
+                INSERT INTO voterole (userID, time) VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE time = VALUES(time)
+                """,
+                (user_id, next_vote_time)
+            )
+            await conn.commit()
 
-            # Embed nur mit User-Votes
+            # Hier evtl. User-Votes zählen und embed vorbereiten (optional)
+            # Beispiel:
             embed = discord.Embed(
                 title="Danke fürs Voten von Astra",
                 description=(
-                    f"<:Astra_boost:1141303827107164270> `philu2005({user.id})` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun `{votes}` diesen Monat.\n"
-                    f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
-                    f"Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
+                    f"<:Astra_boost:1141303827107164270> `{user}` hat für **Astra** gevotet.\n"
+                    "Du kannst in 12 Stunden wieder voten.\n"
+                    f"Hier kannst du voten: [Vote Link](https://top.gg/bot/811733599509544962/vote)"
                 ),
-                colour=discord.Colour.blue(),
-                timestamp=datetime.datetime.now(datetime.UTC)
+                color=discord.Color.blue(),
+                timestamp=datetime.datetime.utcnow()
             )
-            embed.set_thumbnail(
-                url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-            )
-            embed.set_footer(
-                text=f"Danke für deinen Support",
-                icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-            )
+            embed.set_thumbnail(url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
+            embed.set_footer(text="Danke für deinen Support", icon_url=embed.thumbnail.url)
 
-            for member in guild.members:
-                if member.id == user.id:
-                    await member.add_roles(voterole, reason="Voterole")
-            msg = await channel.send(embed=embed, view=VoteView())
+            # Rolle hinzufügen
+            member = guild.get_member(user_id)
+            if not member:
+                try:
+                    member = await guild.fetch_member(user_id)
+                except:
+                    logging.error(f"Member {user_id} nicht gefunden")
+                    member = None
+            if member and voterole:
+                try:
+                    await member.add_roles(voterole, reason="Voterole vergeben")
+                except Exception as e:
+                    logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
+
+            # Nachricht im Channel posten
+            if channel:
+                await channel.send(embed=embed)
             return None
-
 
 
 @bot.event
@@ -606,44 +615,51 @@ async def on_ready():
             bot.tree.add_command(Reminder())
 
 
+# Funktion, die nach 12h die Rolle entfernt und Erinnerungen schickt
 async def funktion2(when: datetime.datetime):
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT userID FROM voterole")
-            result = await cur.fetchall()
-            if result == ():
+            await cur.execute("SELECT userID FROM voterole WHERE time <= %s", (int(when.timestamp()),))
+            results = await cur.fetchall()
+            if not results:
                 return
-            if result:
-                for eintrag in result:
-                    userID = eintrag[0]
-                    guild = bot.get_guild(1141116981697859736)
-                    member = guild.get_member(userID)
-                    if not member:
-                        try:
-                            member = await guild.fetch_member(userID)
-                        except:
-                            continue
 
-                    voterole = guild.get_role(1141116981756575875)
-                    embed = discord.Embed(
-                        title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
-                        url="https://top.gg/de/bot/811733599509544962/vote",
-                        description="Der Cooldown von 12h ist vorbei. Es wäre schön wenn du wieder votest.\nAls Belohnung erhälst du eine spezielle Rolle auf unserem [Support-Server](https://discord.gg/NH9DdSUJrE).",
-                        colour=discord.Colour.blue()
-                    )
+            guild = bot.get_guild(1141116981697859736)
+            voterole = guild.get_role(1141116981756575875)
+
+            for (user_id,) in results:
+                member = guild.get_member(user_id)
+                if not member:
                     try:
-                        await member.send(embed=embed)
+                        member = await guild.fetch_member(user_id)
                     except:
-                        pass
+                        continue
 
-                    try:
-                        await member.remove_roles(voterole)
-                    except Exception as e:
-                        logging.error(f"❌ Fehler beim Entfernen der Rolle von {userID}: {e}")
+                embed = discord.Embed(
+                    title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
+                    url="https://top.gg/de/bot/811733599509544962/vote",
+                    description=(
+                        "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
+                        "Als Belohnung erhälst du eine spezielle Rolle auf unserem [Support-Server](https://discord.gg/NH9DdSUJrE)."
+                    ),
+                    colour=discord.Colour.blue()
+                )
+                try:
+                    await member.send(embed=embed)
+                except:
+                    pass
 
-                    await cur.execute("DELETE FROM voterole WHERE userID = (%s)", (userID,))
+                try:
+                    if voterole in member.roles:
+                        await member.remove_roles(voterole, reason="Voterole Cooldown abgelaufen")
+                except Exception as e:
+                    logging.error(f"Fehler beim Entfernen der Rolle von {user_id}: {e}")
+
+                # Entferne den Eintrag aus der Tabelle
+                await cur.execute("DELETE FROM voterole WHERE userID = %s", (user_id,))
+            await conn.commit()
 
 async def gwtimes(when: datetime.datetime, messageid: int):
     await bot.wait_until_ready()
