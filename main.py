@@ -524,6 +524,11 @@ async def on_dbl_vote(data):
             )
             await conn.commit()
 
+            # TASK-START FÜR DIE ROLLENENTFERNUNG IN 12h HINZUFÜGEN!
+            asyncio.create_task(
+                funktion2(datetime.datetime.utcfromtimestamp(next_vote_time))
+            )
+
             embed = discord.Embed(
                 title="Danke fürs Voten von Astra",
                 description=(
@@ -560,6 +565,7 @@ async def on_dbl_vote(data):
                 await channel.send(embed=embed, view=VoteView())
 
             return None
+
 
 
 
