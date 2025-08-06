@@ -589,7 +589,7 @@ async def on_ready():
     cmds = await bot.tree.fetch_commands()
 
     for cmd in cmds:
-        print(f"{cmd.name} - ID: {cmd.id}")
+        logging.info(f"{cmd.name} - ID: {cmd.id}")
 
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
