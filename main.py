@@ -555,10 +555,20 @@ def all_app_commands(bot):
             unique.append(cmd)
     return unique
 
+def print_commands(commands, parent_name=""):
+    for cmd in commands:
+        full_name = f"{parent_name} {cmd.name}".strip()
+        logging.info(f"Command: {full_name} - ID: {cmd.id}")
+        # Falls cmd Group ist, rekursiv Subcommands ausgeben
+        if isinstance(cmd, discord.app_commands.Group):
+            print_commands(cmd.commands, full_name)
 
 
 @bot.event
 async def on_ready():
+    all_cmds = all_app_commands(bot)
+    print_commands(all_cmds)
+
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))

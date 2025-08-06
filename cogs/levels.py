@@ -158,6 +158,39 @@ class Level(app_commands.Group):
                             ephemeral=True)
                         return
 
+    @app_commands.command(name="leaderboard", description="Zeigt das Top 10 Level und XP Leaderboard an.")
+    @app_commands.guild_only()
+    async def leaderboard(self, interaction: discord.Interaction):
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT client_id, user_level, user_xp FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC LIMIT 10",
+                    (interaction.guild.id,)
+                )
+                top10 = await cur.fetchall()
+
+        if not top10:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Es wurden keine Daten für dieses Server-Leaderboard gefunden.",
+                ephemeral=True
+            )
+
+        embed = discord.Embed(
+            title=f"Top 10 Level Leaderboard für {interaction.guild.name}",
+            color=discord.Color.blue()
+        )
+
+        description = ""
+        place = 1
+        for user_id, level, xp in top10:
+            user = interaction.guild.get_member(user_id)
+            name = user.display_name if user else f"User ID: {user_id}"
+            description += f"**#{place}**: {name} — Level {level} ({xp} XP)\n"
+            place += 1
+
+        embed.description = description
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="levelupkanal")
     @app_commands.checks.has_permissions(manage_channels=True)
     async def levelsystem_setchannel(self, interaction: discord.Interaction, arg: Literal[
