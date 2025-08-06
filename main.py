@@ -562,7 +562,7 @@ def print_commands(commands, parent_name=""):
     for cmd in commands:
         full_name = f"{parent_name} {cmd.name}".strip()
         cmd_id = getattr(cmd, "id", None)
-        print(f"Command: {full_name} - ID: {cmd_id}")
+        logging.info(f"Command: {full_name} - ID: {cmd_id}")
         if isinstance(cmd, discord.app_commands.Group):
             print_commands(cmd.commands, full_name)
 
