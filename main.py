@@ -215,15 +215,13 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS levelxp (guildID BIGINT, xp BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS levelroles (guildID BIGINT, roleID BIGINT, levelreq BIGINT)")
-                await cur.execute("DROP TABLE giveway_ids;")
-                await cur.execute("DROP TABLE giveaway_active;")
-                await cur.execute("DROP TABLE giveaway_entrys;")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS giveaway_active (guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS giveway_ids (guildID BIGINT, gwID BIGINT, messageID BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS giveaway_entrys (guildID BIGINT, channelID BIGINT, messageID BIGINT, userID BIGINT)")
+                await cur.execute("DROP TABLE voterole;")
                 await cur.execute("CREATE TABLE IF NOT EXISTS voterole (userID BIGINT, time TEXT)")
 
                 # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
@@ -514,7 +512,7 @@ async def on_dbl_vote(data):
             total_votes = int(votedata.get("monthly_points", 0))  # Gesamt Votes diesen Monat
 
             # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
-            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
+            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 60
 
             # Speichere userID und nächste Vote-Zeit in voterole-Tabelle (INSERT oder UPDATE)
             await cur.execute(
@@ -559,7 +557,7 @@ async def on_dbl_vote(data):
                     logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
 
             if channel:
-                await channel.send(embed=embed)
+                await channel.send(embed=embed, view=VoteView())
 
             return None
 
@@ -681,8 +679,9 @@ async def funktion2(when: datetime.datetime):
                 )
                 try:
                     await member.send(embed=embed)
-                except:
-                    pass
+                    print(f"DM erfolgreich an {member.id} gesendet!")
+                except Exception as e:
+                    print(f"❌ DM an {member.id} fehlgeschlagen: {e}")
 
                 try:
                     if voterole in member.roles:
