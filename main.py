@@ -543,34 +543,30 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     await msg.add_reaction(heart)
 
-def all_app_commands(bot):
-    global_commands = bot.tree.get_commands()
-    from itertools import chain
-    guild_commands = chain.from_iterable(bot.tree._guild_commands.values())
-    all_commands = list(global_commands) + list(guild_commands)
-    # Optional unique machen:
-    seen = set()
-    unique = []
-    for cmd in all_commands:
-        sig = (cmd.name, getattr(cmd, "type", None))
-        if sig not in seen:
-            seen.add(sig)
-            unique.append(cmd)
-    return unique
 
-def print_commands(commands, parent_name=""):
+async def print_commands_with_subs(bot, guild_id):
+    commands = await bot.tree.fetch_commands(guild_id=guild_id)
+
+    def recurse_options(cmd, parent_name=""):
+        base_name = f"{parent_name} {cmd.name}".strip()
+        print(f"Command: {base_name} - ID: {cmd.id}")
+
+        for opt in cmd.options:
+            # Subcommands (type=1) oder Subcommand Groups (type=2)
+            if opt.type in (1, 2):
+                recurse_options(opt, base_name)
+
     for cmd in commands:
-        full_name = f"{parent_name} {cmd.name}".strip()
-        cmd_id = getattr(cmd, "id", None)
-        logging.info(f"Command: {full_name} - ID: {cmd_id}")
-        if isinstance(cmd, discord.app_commands.Group):
-            print_commands(cmd.commands, full_name)
+        recurse_options(cmd)
 
 
 @bot.event
 async def on_ready():
-    all_cmds = all_app_commands(bot)
-    print_commands(all_cmds)
+    guild = bot.get_guild(1141116981697859736)  # Ersetze mit deiner Gilden-ID
+    if guild:
+        await print_commands_with_subs(bot, guild.id)
+    else:
+        print("Guild nicht gefunden.")
 
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
