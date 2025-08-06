@@ -22,7 +22,6 @@ import logging
 import time
 from dotenv import load_dotenv
 import aiohttp
-import datetime
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -240,7 +239,7 @@ class Astra(commands.Bot):
                     async def starte_reminder_tasks():
                         for eintrag in eintraege:
                             try:
-                                t2 = datetime.datetime.fromtimestamp(int(eintrag[0]))
+                                t2 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
                                 asyncio.create_task(funktion(t2))
                                 await asyncio.sleep(0.5)
                             except Exception as e:
@@ -274,7 +273,7 @@ class Astra(commands.Bot):
                     async def starte_giveaway_tasks():
                         for eintrag in eintraege3:
                             try:
-                                t2 = datetime.datetime.fromtimestamp(int(eintrag[0]))
+                                t2 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
                                 msg_id = int(eintrag[2])
                                 asyncio.create_task(gwtimes(t2, msg_id))
                                 await asyncio.sleep(0.5)
@@ -584,7 +583,7 @@ async def on_dbl_test(data):
     astra = bot.get_user(int(data['bot']))
     embed = discord.Embed(title="Test Vote Erfolgreich",
                           description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.datetime.now(datetime.UTC))
+                          colour=discord.Colour.red(), timestamp=datetime.now(timezone.utc))
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
     embed.set_footer(text="Danke für deinen Support",
@@ -657,7 +656,7 @@ async def on_ready():
 
 
 # Funktion, die nach 12h die Rolle entfernt und Erinnerungen schickt
-async def funktion2(when: datetime.datetime):
+async def funktion2(when: datetime):
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
     async with bot.pool.acquire() as conn:
@@ -703,7 +702,7 @@ async def funktion2(when: datetime.datetime):
                 await cur.execute("DELETE FROM voterole WHERE userID = %s", (user_id,))
             await conn.commit()
 
-async def gwtimes(when: datetime.datetime, messageid: int):
+async def gwtimes(when: datetime, messageid: int):
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
     async with bot.pool.acquire() as conn:
@@ -745,7 +744,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                 logging.error(f"Giveaway message {messageid} not found in channel {channelID} in guild {guildID}: {e}")
                 return
 
-            time2 = datetime.datetime.fromtimestamp(int(time))
+            time2 = datetime.fromtimestamp(int(time), tz=timezone.utc)
 
             # Niemand hat teilgenommen
             if not result:
@@ -782,7 +781,7 @@ async def gwtimes(when: datetime.datetime, messageid: int):
                     winners_amount = int(result2[2])
                     entrys = result2[3]
                     time = result2[4]
-                    time2 = datetime.datetime.fromtimestamp(int(time))
+                    time2 = datetime.fromtimestamp(int(time), tz=timezone.utc)
                     participants = [userid[2] for userid in result]
 
                     # Gewinner bestimmen (Anzahl nie höher als Teilnehmer)
@@ -864,7 +863,7 @@ class gw_button(discord.ui.View):
                 time = result2[6]
                 creatorID = result2[7]
                 creator = bot.get_user(creatorID)
-                time2 = datetime.datetime.fromtimestamp(int(time))
+                time2 = datetime.fromtimestamp(int(time), tz=timezone.utc)
 
                 # TEILNAHME (User ist NICHT drin)
                 if not result:
@@ -1213,9 +1212,9 @@ class Giveaway(app_commands.Group):
                                 ephemeral=True)
                             return
                 # Zeit umrechnen
-                time1 = convert(zeit)
-                t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-                t2 = datetime.datetime.fromtimestamp(int(t1))
+                time1 = convert(zeit)  # → float oder int (Sekunden, z. B. 43200 für 12h)
+                t1 = math.floor(discord.utils.utcnow().timestamp() + time1)  # ergibt korrekten Unix-Timestamp
+                t2 = datetime.fromtimestamp(t1, tz=timezone.utc)  # ✅ Zeitzone-aware!
 
                 # Embed-Description bauen (abhängig von Anforderungen)
                 req_lines = []
@@ -1354,7 +1353,7 @@ class Giveaway(app_commands.Group):
                     guild = bot.get_guild(guildID)
                     channel = guild.get_channel(channelID)
                     msg = await channel.fetch_message(int(messageid))
-                    time2 = datetime.datetime.fromtimestamp(int(end_time))
+                    time2 = datetime.fromtimestamp(int(end_time), tz=timezone.utc)
 
                     if ended:
                         await interaction.response.send_message(
@@ -1485,7 +1484,7 @@ class Giveaway(app_commands.Group):
                     users = [bot.get_user(uid) for uid in gewinner_ids]
                     mentions = ", ".join(user.mention for user in users if user)
 
-                    time2 = datetime.datetime.fromtimestamp(int(end_time))
+                    time2 = datetime.fromtimestamp(int(end_time), tz=timezone.utc)
                     # Gewinne-Embed verschicken
                     for user in users:
                         if user:
@@ -1531,7 +1530,7 @@ class Giveaway(app_commands.Group):
                     )
 
 
-async def funktion(when: datetime.datetime):
+async def funktion(when: datetime):
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
     async with bot.pool.acquire() as conn:
@@ -1572,9 +1571,9 @@ class Reminder(app_commands.Group):
                 result = await cur.fetchall()
                 if result == ():
                     remindid = 1
-                    time1 = convert(time)
-                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-                    t2 = datetime.datetime.fromtimestamp(int(t1))
+                    time1 = convert(zeit)  # → float oder int (Sekunden, z. B. 43200 für 12h)
+                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)  # ergibt korrekten Unix-Timestamp
+                    t2 = datetime.fromtimestamp(t1, tz=timezone.utc)  # ✅ Zeitzone-aware!
                     asyncio.create_task(funktion(t2))
                     await cur.execute("INSERT INTO reminder(userID, grund, time, remindID) VALUES(%s, %s, %s, %s)",
                                       (interaction.user.id, description, t1, remindid))
@@ -1584,10 +1583,9 @@ class Reminder(app_commands.Group):
                         colour=discord.Colour.blue())
                     await interaction.response.send_message(embed=embed)
                 if result:
-                    time1 = convert(time)
-                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
-                    t2 = datetime.datetime.fromtimestamp(int(t1))
-                    t3 = datetime.datetime.fromtimestamp(t1)
+                    time1 = convert(zeit)  # → float oder int (Sekunden, z. B. 43200 für 12h)
+                    t1 = math.floor(discord.utils.utcnow().timestamp() + time1)  # ergibt korrekten Unix-Timestamp
+                    t2 = datetime.fromtimestamp(t1, tz=timezone.utc)  # ✅ Zeitzone-aware!
                     asyncio.create_task(funktion(t2))
                     await cur.execute("INSERT INTO reminder(userID, grund, time, remindID) VALUES(%s, %s, %s, %s)",
                                       (interaction.user.id, description, t1, len(result) + 1))
