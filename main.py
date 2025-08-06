@@ -586,8 +586,9 @@ async def print_commands_with_subs(bot, guild_id=None):
 
 @bot.event
 async def on_ready():
-    commands = bot.tree.get_commands()
-    for cmd in commands:
+    cmds = await bot.tree.fetch_commands()
+
+    for cmd in cmds:
         print(f"{cmd.name} - ID: {cmd.id}")
 
     servercount = len(bot.guilds)
