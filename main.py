@@ -456,7 +456,6 @@ class VoteView(discord.ui.View):
                 emoji=discord.PartialEmoji(name="Herz", id=1361007251434901664)
             )
         )
-
 @bot.event
 async def on_dbl_vote(data):
     logging.info(f"on_dbl_vote ausgelöst für User: {data['user']}")
@@ -469,7 +468,6 @@ async def on_dbl_vote(data):
             user_id = int(data["user"])
             user = bot.get_user(user_id)
             if user is None:
-                # Falls User nicht im Cache, try fetch
                 try:
                     user = await bot.fetch_user(user_id)
                 except:
@@ -484,6 +482,33 @@ async def on_dbl_vote(data):
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
 
+            today = datetime.date.today()
+            this_month = today.replace(day=1)
+            vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
+
+            # User-Votes auslesen und ggf. resetten
+            await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (user_id,))
+            result = await cur.fetchone()
+            if not result:
+                member_votes = vote_increase
+                await cur.execute(
+                    "INSERT INTO topgg (userID, count, last_reset) VALUES (%s, %s, %s)",
+                    (user_id, member_votes, this_month)
+                )
+            else:
+                votes_member, last_reset = result
+                if not last_reset or last_reset < this_month:
+                    votes_member = 0
+                    await cur.execute(
+                        "UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
+                        (votes_member, this_month, user_id)
+                    )
+                member_votes = votes_member + vote_increase
+                await cur.execute(
+                    "UPDATE topgg SET count = %s WHERE userID = %s",
+                    (member_votes, user_id)
+                )
+
             # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
             next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
 
@@ -497,22 +522,25 @@ async def on_dbl_vote(data):
             )
             await conn.commit()
 
-            # Hier evtl. User-Votes zählen und embed vorbereiten (optional)
-            # Beispiel:
             embed = discord.Embed(
                 title="Danke fürs Voten von Astra",
                 description=(
-                    f"<:Astra_boost:1141303827107164270> `{user}` hat für **Astra** gevotet.\n"
-                    "Du kannst in 12 Stunden wieder voten.\n"
-                    f"Hier kannst du voten: [Vote Link](https://top.gg/bot/811733599509544962/vote)"
+                    f"<:Astra_boost:1141303827107164270> `{user}({user.id})` hat für **Astra** gevotet.\n"
+                    f"Wir haben nun `{member_votes}` diesen Monat.\n"
+                    f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
+                    "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
-                color=discord.Color.blue(),
+                colour=discord.Colour.blue(),
                 timestamp=datetime.datetime.utcnow()
             )
-            embed.set_thumbnail(url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-            embed.set_footer(text="Danke für deinen Support", icon_url=embed.thumbnail.url)
+            embed.set_thumbnail(
+                url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+            )
+            embed.set_footer(
+                text="Danke für deinen Support",
+                icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+            )
 
-            # Rolle hinzufügen
             member = guild.get_member(user_id)
             if not member:
                 try:
@@ -526,9 +554,9 @@ async def on_dbl_vote(data):
                 except Exception as e:
                     logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
 
-            # Nachricht im Channel posten
             if channel:
                 await channel.send(embed=embed)
+
             return None
 
 
