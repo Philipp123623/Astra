@@ -220,13 +220,13 @@ class emojiquiz(commands.Cog):
                         await msg.add_reaction('✅')
                         await cur.execute("DELETE FROM emojiquiz_lsg WHERE guildID = %s", (msg.guild.id,))
 
-                        # Geld geben
+                        # Belohnung auszahlen (z.B. 20 Einheiten)
                         await self.economy.update_balance(msg.author.id, wallet_change=20)
 
                         import asyncio
                         await asyncio.sleep(2)  # 2 Sekunden warten vor dem Löschen
 
-                        # Alle User-Messages im Channel löschen (sicher aus der DB)
+                        # Alle User-Messages im Channel löschen (aus der DB)
                         await cur.execute(
                             "SELECT messageID FROM emojiquiz_messages WHERE guildID = %s AND channelID = %s",
                             (msg.guild.id, msg.channel.id)
