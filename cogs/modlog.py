@@ -282,29 +282,28 @@ class modlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
-        if not after.author.bot:
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (after.guild.id))
-                    result = await cursor.fetchone()
-                    if result is None:
-                        return
-                    if result is not None:
-                        channel2 = result
-                        guild = before.guild
-                        channel = guild.get_channel(int(channel2[0]))
+        if after.guild is None or after.author.bot:
+            return
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (after.guild.id,))
+                result = await cursor.fetchone()
+                if result is None:
+                    return
+                channel_id = int(result[0])
+                channel = after.guild.get_channel(channel_id)
 
-                        if before.content != after.content:
-                            embed = discord.Embed(title="Message Update",
-                                                  description=f"Message edited by {after.author.mention}",
-                                                  colour=discord.Colour.blue(), timestamp=discord.utils.utcnow())
+                if before.content != after.content:
+                    embed = discord.Embed(
+                        title="Message Update",
+                        description=f"Message edited by {after.author.mention}",
+                        colour=discord.Colour.blue(),
+                        timestamp=discord.utils.utcnow()
+                    )
 
-                            fields = [("Before", before.content, True),
-                                      ("After", after.content, True)]
-
-                            for name, value, inline in fields:
-                                embed.add_field(name=name, value=value, inline=inline)
-                            await channel.send(embed=embed)
+                    embed.add_field(name="Before", value=before.content or "Empty", inline=True)
+                    embed.add_field(name="After", value=after.content or "Empty", inline=True)
+                    await channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
