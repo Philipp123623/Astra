@@ -215,6 +215,9 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS levelxp (guildID BIGINT, xp BIGINT)")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS levelroles (guildID BIGINT, roleID BIGINT, levelreq BIGINT)")
+                await cur.execute("DROP TABLE giveway_ids;")
+                await cur.execute("DROP TABLE giveaway_active;")
+                await cur.execute("DROP TABLE giveaway_entrys;")
                 await cur.execute(
                     "CREATE TABLE IF NOT EXISTS giveaway_active (guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
                 await cur.execute(
@@ -558,8 +561,8 @@ def all_app_commands(bot):
 def print_commands(commands, parent_name=""):
     for cmd in commands:
         full_name = f"{parent_name} {cmd.name}".strip()
-        logging.info(f"Command: {full_name} - ID: {cmd.id}")
-        # Falls cmd Group ist, rekursiv Subcommands ausgeben
+        cmd_id = getattr(cmd, "id", None)
+        print(f"Command: {full_name} - ID: {cmd_id}")
         if isinstance(cmd, discord.app_commands.Group):
             print_commands(cmd.commands, full_name)
 
