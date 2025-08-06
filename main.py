@@ -549,7 +549,7 @@ async def print_commands_with_subs(bot, guild_id):
 
     def recurse_options(cmd, parent_name=""):
         base_name = f"{parent_name} {cmd.name}".strip()
-        print(f"Command: {base_name} - ID: {cmd.id}")
+        logging.info(f"Command: {base_name} - ID: {cmd.id}")
 
         for opt in cmd.options:
             # Subcommands (type=1) oder Subcommand Groups (type=2)
