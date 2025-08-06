@@ -23,6 +23,7 @@ import time
 from dotenv import load_dotenv
 import aiohttp
 import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 import re
@@ -247,6 +248,8 @@ class Astra(commands.Bot):
 
                     asyncio.create_task(starte_reminder_tasks())
 
+                from datetime import datetime, timezone
+
                 if not self.task2:
                     self.task2 = True
                     await cur.execute("SELECT time FROM voterole")
@@ -255,7 +258,7 @@ class Astra(commands.Bot):
                     async def starte_voterole_tasks():
                         for eintrag in eintraege2:
                             try:
-                                t4 = datetime.datetime.fromtimestamp(int(eintrag[0]))
+                                t4 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
                                 asyncio.create_task(funktion2(t4))
                                 await asyncio.sleep(0.5)
                             except Exception as e:
@@ -454,6 +457,9 @@ class VoteView(discord.ui.View):
                 emoji=discord.PartialEmoji(name="Herz", id=1361007251434901664)
             )
         )
+
+
+
 @bot.event
 async def on_dbl_vote(data):
     logging.info(f"on_dbl_vote ausgelöst für User: {data['user']}")
@@ -480,11 +486,10 @@ async def on_dbl_vote(data):
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
 
-            today = datetime.date.today()
+            today = datetime.now(timezone.utc).date()
             this_month = today.replace(day=1)
             vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
 
-            # User-Votes aus DB lesen und ggf. resetten
             await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (user_id,))
             result = await cur.fetchone()
             if not result:
@@ -507,14 +512,16 @@ async def on_dbl_vote(data):
                     (member_votes, user_id)
                 )
 
-            # Gesamt-Votes von top.gg API holen
             votedata = await bot.topggpy.get_bot_info()
-            total_votes = int(votedata.get("monthly_points", 0))  # Gesamt Votes diesen Monat
+            total_votes = int(votedata.get("monthly_points", 0))
 
-            # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
-            next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
+            # ✅ NUTZE UTC-aware datetime
+            now_utc = datetime.now(timezone.utc)
+            next_vote_time = int(now_utc.timestamp()) + 12 * 3600
+            next_vote_dt = datetime.fromtimestamp(next_vote_time, timezone.utc)
 
-            # Speichere userID und nächste Vote-Zeit in voterole-Tabelle (INSERT oder UPDATE)
+            logging.info(f"[DEBUG] UTC now: {now_utc}, next vote at: {next_vote_dt} (ts={next_vote_time})")
+
             await cur.execute(
                 """
                 INSERT INTO voterole (userID, time) VALUES (%s, %s)
@@ -524,10 +531,7 @@ async def on_dbl_vote(data):
             )
             await conn.commit()
 
-            # TASK-START FÜR DIE ROLLENENTFERNUNG IN 12h HINZUFÜGEN!
-            asyncio.create_task(
-                funktion2(datetime.datetime.utcfromtimestamp(next_vote_time))
-            )
+            asyncio.create_task(funktion2(next_vote_dt))
 
             embed = discord.Embed(
                 title="Danke fürs Voten von Astra",
@@ -538,7 +542,7 @@ async def on_dbl_vote(data):
                     "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
                 colour=discord.Colour.blue(),
-                timestamp=datetime.datetime.utcnow()
+                timestamp=now_utc
             )
             embed.set_thumbnail(
                 url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
@@ -555,6 +559,7 @@ async def on_dbl_vote(data):
                 except:
                     logging.error(f"Member {user_id} nicht gefunden")
                     member = None
+
             if member and voterole:
                 try:
                     await member.add_roles(voterole, reason="Voterole vergeben")
@@ -565,7 +570,6 @@ async def on_dbl_vote(data):
                 await channel.send(embed=embed, view=VoteView())
 
             return None
-
 
 
 
