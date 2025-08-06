@@ -558,39 +558,8 @@ def all_app_commands(bot):
             unique.append(cmd)
     return unique
 
-def get_all_commands(bot, guild_id=None):
-    commands = []
-    if guild_id:
-        # Hole Commands für diese Guild (internes Dict)
-        commands = list(bot.tree._guild_commands.get(guild_id, []))
-    else:
-        # Hole globale Commands
-        commands = list(bot.tree._global_commands)
-    return commands
-
-
-def recurse_options(cmd, parent_name=""):
-    base_name = f"{parent_name} {cmd.name}".strip()
-    print(f"Command: {base_name} - ID: {cmd.id}")
-
-    for opt in cmd.options:
-        if opt.type in (1, 2):  # Subcommand oder Subcommand Group
-            recurse_options(opt, base_name)
-
-
-async def print_commands_with_subs(bot, guild_id=None):
-    commands = get_all_commands(bot, guild_id)
-    for cmd in commands:
-        recurse_options(cmd)
-
-
 @bot.event
 async def on_ready():
-    cmds = await bot.tree.fetch_commands()
-
-    for cmd in cmds:
-        logging.info(f"{cmd.name} - ID: {cmd.id}")
-
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
