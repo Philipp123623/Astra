@@ -307,41 +307,42 @@ class modlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message):
-        if not message.author.bot:
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute("SELECT word FROM blacklist WHERE serverID = (%s)", (message.guild.id))
-                    result2 = await cursor.fetchall()
-                    if not result2:
-                        return
-                    if result2:
-                        for eintrag2 in result2:
-                            word = eintrag2[0]
-                            lowerword = word.lower()
-                            lowercontent = message.content.lower()
-                            if lowerword in lowercontent:
-                                return
-                    await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (message.guild.id))
-                    result = await cursor.fetchone()
-                    if result is None:
-                        return
-                    if result is not None:
-                        if message.author.bot:
+        if message.guild is None or message.author.bot:
+            return
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT word FROM blacklist WHERE serverID = (%s)", (message.guild.id))
+                result2 = await cursor.fetchall()
+                if not result2:
+                    return
+                if result2:
+                    for eintrag2 in result2:
+                        word = eintrag2[0]
+                        lowerword = word.lower()
+                        lowercontent = message.content.lower()
+                        if lowerword in lowercontent:
                             return
-                        channel2 = result
-                        guild = message.guild
-                        channel = guild.get_channel(int(channel2[0]))
+                await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (message.guild.id))
+                result = await cursor.fetchone()
+                if result is None:
+                    return
+                if result is not None:
+                    if message.author.bot:
+                        return
+                    channel2 = result
+                    guild = message.guild
+                    channel = guild.get_channel(int(channel2[0]))
 
-                        embed = discord.Embed(title="Message Deleted",
-                                              description=f"Message deleted by {message.author.mention}",
-                                              colour=discord.Colour.red(), timestamp=discord.utils.utcnow())
+                    embed = discord.Embed(title="Message Deleted",
+                                          description=f"Message deleted by {message.author.mention}",
+                                          colour=discord.Colour.red(), timestamp=discord.utils.utcnow())
 
-                        fields = [("Content", message.content, True),
-                                  ("Channel", message.channel.mention, True)]
+                    fields = [("Content", message.content, True),
+                              ("Channel", message.channel.mention, True)]
 
-                        for name, value, inline in fields:
-                            embed.add_field(name=name, value=value, inline=inline)
-                        await channel.send(embed=embed)
+                    for name, value, inline in fields:
+                        embed.add_field(name=name, value=value, inline=inline)
+                    await channel.send(embed=embed)
 
     @app_commands.command(name="modlog")
     @app_commands.guild_only()
