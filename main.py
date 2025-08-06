@@ -543,6 +543,20 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     await msg.add_reaction(heart)
 
+def all_app_commands(bot):
+    global_commands = bot.tree.get_commands()
+    from itertools import chain
+    guild_commands = chain.from_iterable(bot.tree._guild_commands.values())
+    all_commands = list(global_commands) + list(guild_commands)
+    # Optional unique machen:
+    seen = set()
+    unique = []
+    for cmd in all_commands:
+        sig = (cmd.name, getattr(cmd, "type", None))
+        if sig not in seen:
+            seen.add(sig)
+            unique.append(cmd)
+    return unique
 
 def get_all_commands(bot, guild_id=None):
     commands = []
@@ -572,8 +586,9 @@ async def print_commands_with_subs(bot, guild_id=None):
 
 @bot.event
 async def on_ready():
-    guild_id = 1141116981697859736  # z.B. 1234567890
-    await print_commands_with_subs(bot, guild_id)
+    commands = bot.tree.get_commands()
+    for cmd in commands:
+        print(f"{cmd.name} - ID: {cmd.id}")
 
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
