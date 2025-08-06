@@ -486,7 +486,7 @@ async def on_dbl_vote(data):
             this_month = today.replace(day=1)
             vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
 
-            # User-Votes auslesen und ggf. resetten
+            # User-Votes aus DB lesen und ggf. resetten
             await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (user_id,))
             result = await cur.fetchone()
             if not result:
@@ -509,6 +509,10 @@ async def on_dbl_vote(data):
                     (member_votes, user_id)
                 )
 
+            # Gesamt-Votes von top.gg API holen
+            votedata = await bot.topggpy.get_bot_info()
+            total_votes = int(votedata.get("monthly_points", 0))  # Gesamt Votes diesen Monat
+
             # Zeitpunkt der nächsten erlaubten Vote: jetzt + 12h
             next_vote_time = int(datetime.datetime.utcnow().timestamp()) + 12 * 3600
 
@@ -526,7 +530,7 @@ async def on_dbl_vote(data):
                 title="Danke fürs Voten von Astra",
                 description=(
                     f"<:Astra_boost:1141303827107164270> `{user}({user.id})` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun `{member_votes}` diesen Monat.\n"
+                    f"Wir haben nun `{total_votes}` diesen Monat.\n"
                     f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
                     "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
                 ),
@@ -558,6 +562,7 @@ async def on_dbl_vote(data):
                 await channel.send(embed=embed)
 
             return None
+
 
 
 @bot.event
