@@ -1845,7 +1845,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             error_embed = discord.Embed(
                 title="SlashCommand Error",
                 colour=discord.Colour.red(),
-                timestamp=datetime.datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             user = interaction.user
             guild = interaction.guild
@@ -1870,7 +1870,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 value=(f"Bot Latency: {getattr(bot,'latency',None) and round(bot.latency,3) or '—'}\n"
                        f"Python: {platform.python_version()} | discord.py: {getattr(discord,'__version__','?')}\n"
                        f"OS: {platform.system()} {platform.release()} | PID: {os.getpid()}\n"
-                       f"Zeit: {getattr(interaction,'created_at',datetime.datetime.utcnow()).isoformat()}"),
+                       f"Zeit: {getattr(interaction,'created_at',datetime.now(timezone.utc)).isoformat()}"),
                 inline=False
             )
 
