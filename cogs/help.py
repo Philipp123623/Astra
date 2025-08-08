@@ -41,9 +41,40 @@ class Dropdown(discord.ui.Select):
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
         await interaction.response.edit_message(embed=embed)
 
+class HomeButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="🏠 Home", style=discord.ButtonStyle.primary, custom_id="help_home_button")
+
+    async def callback(self, interaction: discord.Interaction):
+        # Ursprüngliches Help-Menü anzeigen, ohne Home-Button
+        view = View(timeout=None)
+        view.add_item(Dropdown())
+
+        delta_uptime = datetime.utcnow() - interaction.client.get_cog("help").uptime
+        hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        days, hours = divmod(hours, 24)
+
+        embed = discord.Embed(
+            colour=discord.Colour.blue(),
+            title="Help Menü",
+            description=(
+                "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
+                "Hier findest du alle Commands.\n"
+                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
+                f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
+                f"**Ping**: {interaction.client.latency * 1000:.0f} ms"
+            )
+        )
+        embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
+        embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+
+        await interaction.response.edit_message(embed=embed, view=view)
+
 async def button2(interaction: discord.Interaction):
     view = View()
     view.add_item(Dropdown())
+    view.add_item(HomeButton())
     view.timeout = None
     embed = discord.Embed(title="Command Menu", description="Wähle eine Kategorie!", colour=discord.Colour.blue())
     embed.set_author(name="Astra Command Menu", icon_url=interaction.client.user.avatar)
