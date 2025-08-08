@@ -1,9 +1,45 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Button, View
+from discord.ui import View
 from datetime import datetime
 
+# -------------------- HOME BUTTON --------------------
+class HomeButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="🏠 Home", style=discord.ButtonStyle.primary, custom_id="help_home_button")
+
+    async def callback(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("help")
+        if cog is None:
+            return
+
+        delta_uptime = datetime.utcnow() - cog.uptime
+        hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        days, hours = divmod(hours, 24)
+
+        # View nur mit Dropdown (ohne Home-Button)
+        view = View(timeout=None)
+        view.add_item(Dropdown())
+
+        embed = discord.Embed(
+            colour=discord.Colour.blue(),
+            title="Help Menü",
+            description=(
+                "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
+                "Hier findest du alle Commands.\n"
+                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
+                f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
+                f"**Ping**: {interaction.client.latency * 1000:.0f} ms"
+            )
+        )
+        embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
+        embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+
+        await interaction.response.edit_message(embed=embed, view=view)
+
+# -------------------- DROPDOWN --------------------
 class Dropdown(discord.ui.Select):
     def __init__(self):
         options = [
@@ -22,6 +58,7 @@ class Dropdown(discord.ui.Select):
         super().__init__(placeholder='Wähle eine Seite', min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        # Seiteninhalt
         pages = {
             "Mod": "> **👥 × User Befehle:**\n> Keine User Befehle.\n\n> **👮‍♂ × Team Befehle:**\n> </kick:1362756274130915437> - Kicke einen User.\n> </ban:1362756274130915438> - Banne einen User.\n> </unban:1362756274424647754> - Entbanne einen User.\n> </banlist:1362756274424647755> - Liste gebannter User.\n> </clear:1362756274424647751> - Nachrichten löschen.",
             "Level": "> **👥 × User Befehle:**\n> </levelsystem rank:1362756275133222930> - Zeigt dein Level an.\n> </levelsystem leaderboard:1362756275133222930> - Zeigt das Top 10 Level und XP Leaderboard an.\n\n> **👮‍♂ × Team Befehle:**\n> </levelsystem status:1362756275133222930> - System an/aus.\n> </levelsystem levelupkanal:1362756275133222930> - Lege den Level-Channel fest.\n> </levelsystem levelupnachricht:1362756275133222930> - Custom Nachricht.\n> </levelsystem role:1362756275133222930> - Levelrollen einstellen.\n> </xpboost:1362756275544522822> - XP Boost aktivieren.\n> </setlevel:1362756275544522823> - Level eines Users setzen.",
@@ -35,51 +72,20 @@ class Dropdown(discord.ui.Select):
             "Messages": "> **👥 × User Befehle:**\n> </joinmsg:1362756274877632644> - Join-Message festlegen.\n> </leavemsg:1362756274877632646> - Leave-Message festlegen.\n> </autoreact:1362756274877632648> - Auto-Reaction setzen.\n> </embedfy:1362756274424647752> - Embed erstellen.\n\n> **👮‍♂ × Team Befehle:**\n> Keine Team Befehle.",
             "Minigames": "> **👥 × User Befehle:**\n> </emojiquiz:1362756275133222924> - Aktiviere oder deaktiviere das Emojiquiz in einem bestimmten Kanal.\n> </hangman:1362756274130915431> - Hangman spielen.\n> </snake start:1362756275544522825> - Snake spielen.\n> </snake highscore:1362756275544522825> - Zeigt den Highscore anderer Spieler an.\n> </guessthenumber:1362756275133222924> - Guess the Number.\n> </counting:1362756275133222925> - Counting Channel.\n\n> **👮‍♂ × Team Befehle:**\n> Keine Team Befehle."
         }
+
         description = pages.get(self.values[0], "Seite nicht gefunden!")
         embed = discord.Embed(title=" ", description=description, colour=discord.Colour.blue())
         embed.set_author(name=f"Command Menü | {self.values[0]}", icon_url=interaction.client.user.avatar)
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-        await interaction.response.edit_message(embed=embed)
 
-class HomeButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="🏠 Home", style=discord.ButtonStyle.primary, custom_id="help_home_button")
-
-    async def callback(self, interaction: discord.Interaction):
-        # Ursprüngliches Help-Menü anzeigen, ohne Home-Button
-
-        delta_uptime = datetime.utcnow() - interaction.client.get_cog("help").uptime
-        hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        days, hours = divmod(hours, 24)
-
-        embed = discord.Embed(
-            colour=discord.Colour.blue(),
-            title="Help Menü",
-            description=(
-                "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
-                "Hier findest du alle Commands.\n"
-                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
-                f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
-                f"**Ping**: {interaction.client.latency * 1000:.0f} ms"
-            )
-        )
-        embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-        embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+        # View mit Dropdown + HomeButton
+        view = View(timeout=None)
+        view.add_item(Dropdown())
+        view.add_item(HomeButton())
 
         await interaction.response.edit_message(embed=embed, view=view)
 
-async def button2(interaction: discord.Interaction):
-    view = View()
-    view.add_item(Dropdown())
-    view.add_item(HomeButton())
-    view.timeout = None
-    embed = discord.Embed(title="Command Menu", description="Wähle eine Kategorie!", colour=discord.Colour.blue())
-    embed.set_author(name="Astra Command Menu", icon_url=interaction.client.user.avatar)
-    embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-    embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
-    await interaction.response.edit_message(embed=embed, view=view)
-
+# -------------------- COG --------------------
 class help(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -89,13 +95,14 @@ class help(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def help(self, interaction: discord.Interaction):
-        view = View()
+        view = View(timeout=None)
         view.add_item(Dropdown())
-        view.timeout = None
+
         delta_uptime = datetime.utcnow() - self.uptime
         hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
+
         embed = discord.Embed(
             colour=discord.Colour.blue(),
             title="Help Menü",
@@ -127,7 +134,9 @@ class help(commands.Cog):
         )
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
         embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+
         await interaction.response.send_message(embed=embed, view=view)
 
+# -------------------- SETUP --------------------
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(help(bot))
