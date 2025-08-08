@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import View
-from datetime import datetime
+from datetime import datetime, timezone
 
 # -------------------- HOME BUTTON --------------------
 class HomeButton(discord.ui.Button):
@@ -14,7 +14,7 @@ class HomeButton(discord.ui.Button):
         if cog is None:
             return
 
-        delta_uptime = datetime.utcnow() - cog.uptime
+        delta_uptime = datetime.utcnow() - self.uptime
         hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
@@ -31,11 +31,30 @@ class HomeButton(discord.ui.Button):
                 "Hier findest du alle Commands.\n"
                 "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
                 f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
-                f"**Ping**: {interaction.client.latency * 1000:.0f} ms"
+                f"**Ping**: {self.bot.latency * 1000:.0f} ms"
             )
         )
+        embed.add_field(
+            name="Letzte Updates",
+            value=(
+                "> <:Coin:1359178077011181811> Neues Economy: </job:1362756274130915433>, </economy:1362756274130915432>\n"
+                "> <:Astra_minigames:1141303876528648232> Neue Minigames: </hangman:1362756274130915431>, </snake:1362756275544522825>\n"
+                "> <:Astra_gw1:1141303852889550928> Giveaway: </gewinnspiel:1197746882164834335>\n"
+                "> <:Astra_level:1141825043278598154> Levelsystem: </levelsystem status:1362756275133222930>"
+            )
+        )
+        embed.add_field(
+            name="Links",
+            value=(
+                "**[Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)"
+                " | [Support](https://discord.gg/NH9DdSUJrE)"
+                " | [Voten](https://top.gg/bot/1113403511045107773/vote)**"
+            ),
+            inline=False
+        )
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-        embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+        embed.set_image(
+            url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
 
         await interaction.response.edit_message(embed=embed, view=view)
 
