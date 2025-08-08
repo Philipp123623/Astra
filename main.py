@@ -9,9 +9,14 @@ from discord.app_commands import AppCommandError
 from discord import app_commands
 from discord.app_commands import Group
 from flask import Flask, request, jsonify
+import io
+import json
+import platform
+import datetime
+import tempfile
+from pathlib import Path
 from topgg import WebhookManager
 import math
-import sys
 import traceback
 import asyncio
 import topgg
@@ -1716,11 +1721,18 @@ async def sync(ctx, serverid: int = None):
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
 
+LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
+
 # Slash-Command Fehlerbehandlung
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    # Nutzer-Embed (ephemeral)
     embed = discord.Embed(colour=discord.Colour.red())
-    embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
+    # display_avatar.url ist sicherer als avatar.url (kann None sein)
+    try:
+        embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
+    except Exception:
+        embed.set_author(name=str(interaction.user))
 
     if isinstance(error, app_commands.MissingPermissions):
         embed.title = "Fehlende Berechtigungen"
@@ -1755,20 +1767,146 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         embed.description = "❌ Die eingegebenen Argumente sind ungültig oder konnten nicht umgewandelt werden."
 
     else:
-        # Unbekannter Fehler – an Log-Channel senden
+        # ------- UNBEKANNTER FEHLER: Vollständiges Logging in den Log-Channel -------
         embed.title = "Unbekannter Fehler"
         embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt!"
 
-        # Fehler an Log-Channel senden
-        log_channel = bot.get_channel(1141116983815962819)
-        if log_channel:
-            error_embed = discord.Embed(title="SlashCommand Error", colour=discord.Colour.red())
-            error_embed.add_field(name="User", value=f"{interaction.user} ({interaction.user.id})", inline=False)
-            error_embed.add_field(name="Command", value=str(interaction.command), inline=False)
-            error_embed.add_field(name="Error", value=f"```{str(error)}```", inline=False)
-            await log_channel.send(embed=error_embed)
+        # Helpers
+        def _safe(o):
+            try:
+                return str(o)
+            except Exception:
+                return repr(o)
 
-    # Versuche Antwort zu senden
+        def _get_command_name(itx: discord.Interaction) -> str:
+            try:
+                if itx.command:
+                    return itx.command.qualified_name  # inkl. group/subcommand
+                data = itx.data or {}
+                name = data.get("name")
+                opts = data.get("options") or []
+                trail = []
+                cur = opts[0] if opts and (opts[0].get("type") in (1, 2)) else None  # 1=subcmd, 2=group
+                while cur:
+                    trail.append(cur.get("name"))
+                    nxt = (cur.get("options") or [])
+                    cur = nxt[0] if nxt and (nxt[0].get("type") in (1, 2)) else None
+                return f"{name} {' '.join(trail)}".strip() if name else "unbekannt"
+            except Exception:
+                return "unbekannt"
+
+        def _get_options(itx: discord.Interaction):
+            try:
+                if hasattr(itx, "namespace") and itx.namespace:
+                    return {k: v for k, v in vars(itx.namespace).items()}
+            except Exception:
+                pass
+            try:
+                return (itx.data or {}).get("options")
+            except Exception:
+                return None
+
+        # Traceback / Ort
+        etype, exc, tb = type(error), error, error.__traceback__
+        tb_list = traceback.extract_tb(tb)
+        last = tb_list[-1] if tb_list else None
+        location = "unbekannt"
+        code_line = None
+        if last:
+            location = f"{Path(last.filename).name}:{last.lineno} in {last.name}()"
+            code_line = (last.line or "").strip()
+        short_exc = "".join(traceback.format_exception_only(etype, exc)).strip()
+        full_trace = "".join(traceback.format_exception(etype, exc, tb))
+
+        # Command / Options
+        cmd_name = _get_command_name(interaction)
+        options = _get_options(interaction)
+        options_pretty = None
+        if options is not None:
+            try:
+                options_pretty = json.dumps(options, ensure_ascii=False, indent=2, default=_safe)
+                if len(options_pretty) > 950:
+                    options_pretty = options_pretty[:950] + " …"
+            except Exception:
+                options_pretty = _safe(options)
+
+        # Tipps (heuristisch)
+        tips = []
+        msg = str(exc)
+        if "NoneType" in msg and "url" in msg:
+            tips.append("Wahrscheinlich Zugriff auf `.url` eines None-Objekts (z. B. `avatar`). "
+                        "Nutze `display_avatar.url` oder prüfe vorher auf `None`.")
+        if code_line:
+            tips.append(f"Zeile prüfen: `{code_line}`")
+
+        # Log an Channel
+        log_channel = bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel:
+            error_embed = discord.Embed(
+                title="SlashCommand Error",
+                colour=discord.Colour.red(),
+                timestamp=datetime.datetime.utcnow()
+            )
+            user = interaction.user
+            guild = interaction.guild
+            channel = interaction.channel
+
+            error_embed.add_field(name="User", value=f"{_safe(user)} ({getattr(user,'id','?')})", inline=False)
+            error_embed.add_field(
+                name="Guild / Channel",
+                value=f"{_safe(getattr(guild,'name','DM'))} ({getattr(guild,'id','—')}) / "
+                      f"#{_safe(getattr(channel,'name','DM'))} ({getattr(channel,'id','—')})",
+                inline=False
+            )
+            error_embed.add_field(name="Command", value=cmd_name or "unbekannt", inline=False)
+            if options_pretty:
+                error_embed.add_field(name="Options", value=f"```json\n{options_pretty}\n```", inline=False)
+            error_embed.add_field(name="Ort", value=location, inline=False)
+            error_embed.add_field(name="Fehler", value=f"```{short_exc}```", inline=False)
+            if tips:
+                error_embed.add_field(name="Tipps", value="\n".join(f"• {t}" for t in tips), inline=False)
+            error_embed.add_field(
+                name="Kontext",
+                value=(f"Bot Latency: {getattr(bot,'latency',None) and round(bot.latency,3) or '—'}\n"
+                       f"Python: {platform.python_version()} | discord.py: {getattr(discord,'__version__','?')}\n"
+                       f"OS: {platform.system()} {platform.release()} | PID: {os.getpid()}\n"
+                       f"Zeit: {getattr(interaction,'created_at',datetime.datetime.utcnow()).isoformat()}"),
+                inline=False
+            )
+
+            # ---- Artefakte als TEMP-DATEIEN, um Buffer/Bytes-Probleme zu vermeiden ----
+            trace_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt")
+            trace_tmp.write(full_trace)
+            trace_tmp.close()
+
+            ctx = {
+                "user": {"id": getattr(user, "id", None), "name": str(user)},
+                "guild": {"id": getattr(guild, "id", None), "name": getattr(guild, "name", None)} if guild else None,
+                "channel": {"id": getattr(channel, "id", None), "name": getattr(channel, "name", None)} if channel else None,
+                "command": cmd_name,
+                "options": options,
+                "location": location,
+                "short_error": short_exc,
+            }
+            ctx_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".json")
+            json.dump(ctx, ctx_tmp, ensure_ascii=False, indent=2, default=str)
+            ctx_tmp.close()
+
+            files = [
+                discord.File(trace_tmp.name, filename="traceback.txt"),
+                discord.File(ctx_tmp.name, filename="context.json"),
+            ]
+
+            try:
+                await log_channel.send(embed=error_embed, files=files)
+            finally:
+                for p in (trace_tmp.name, ctx_tmp.name):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+
+    # Antwort an den Nutzer senden (ephemeral)
     try:
         if interaction.response.is_done():
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -1776,6 +1914,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             await interaction.response.send_message(embed=embed, ephemeral=True)
     except discord.InteractionResponded:
         pass
+
 
 app = Flask(__name__)
 
