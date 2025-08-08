@@ -47,8 +47,6 @@ class HomeButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Ursprüngliches Help-Menü anzeigen, ohne Home-Button
-        view = View(timeout=None)
-        view.add_item(Dropdown())
 
         delta_uptime = datetime.utcnow() - interaction.client.get_cog("help").uptime
         hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
