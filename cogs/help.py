@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 # -------------------- HOME BUTTON --------------------
 class HomeButton(discord.ui.Button):
     def __init__(self):
+        self.uptime = datetime.now(timezone.utc)
         super().__init__(label="🏠 Home", style=discord.ButtonStyle.primary, custom_id="help_home_button")
 
     async def callback(self, interaction: discord.Interaction):
@@ -14,7 +15,7 @@ class HomeButton(discord.ui.Button):
         if cog is None:
             return
 
-        delta_uptime = datetime.utcnow() - self.uptime
+        delta_uptime = datetime.now(timezone.utc) - self.uptime
         hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
         days, hours = divmod(hours, 24)
