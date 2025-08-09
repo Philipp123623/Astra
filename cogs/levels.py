@@ -173,11 +173,6 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
-    """
-    Pixelgenau: Füllung sitzt links/oben/unten exakt in der inneren Schiene.
-    Linke Kante ist gerade, aber die linke Halb-Kappe schmiegt sich perfekt in die runde Ecke.
-    Rechte Kante bleibt gerade (Slot-Maske schneidet sauber ab).
-    """
     # Anteil
     perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
     if perc <= 0.0:
@@ -190,43 +185,30 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
     inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
-    # Zielbreite der Füllung (in Slot-Koordinaten)
     fill_w = int(round(inner_w * perc))
     if fill_w <= 0:
         return
-    if fill_w > inner_w:
-        fill_w = inner_w
+    fill_w = min(fill_w, inner_w)
 
-    # --- 1) Slot-Maske (innere Schiene) ---
+    # 1) Slot-Maske
     slot_mask = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(slot_mask).rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
+    ImageDraw.Draw(slot_mask).rounded_rectangle(
+        (0, 0, inner_w, inner_h), radius=inner_r, fill=255
+    )
 
-    # --- 2) Füll-Maske: rechteck + linke Halb-Kappe ---
+    # 2) Füllmaske = abgerundetes Rechteck mit gleichem Radius
     fill_mask = Image.new("L", (inner_w, inner_h), 0)
-    d = ImageDraw.Draw(fill_mask)
+    r_fill = min(inner_r, fill_w // 2)  # bei schmaler Füllung Kappe nicht “überziehen”
+    ImageDraw.Draw(fill_mask).rounded_rectangle(
+        (0, 0, fill_w, inner_h), radius=r_fill, fill=255
+    )
 
-    # Grundrechteck mit gerader linker Kante
-    d.rectangle((0, 0, fill_w, inner_h), fill=255)
-
-    # Linke Halb-Kappe (Ellipse) → schmiegt sich in die runde Ecke der Schiene
-    cap_mask = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(cap_mask).ellipse((0, 0, 2*inner_r, inner_h), fill=255)
-
-    # Nur bis fill_w zulassen (falls sehr klein)
-    rect_clip = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(rect_clip).rectangle((0, 0, fill_w, inner_h), fill=255)
-
-    # Kappe auf Breite beschneiden und mit Rechteck vereinigen
-    left_cap = ImageChops.multiply(cap_mask, rect_clip)
-    fill_mask = ImageChops.lighter(fill_mask, left_cap)  # Union
-
-    # --- 3) Mit Slot maskieren (kein Ausbluten) ---
+    # 3) In den Slot clippen (kein Ausbluten, perfekte Kante)
     final_mask = ImageChops.multiply(slot_mask, fill_mask)
 
-    # --- 4) Einblenden ---
+    # 4) Einblenden
     fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
