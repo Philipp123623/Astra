@@ -68,9 +68,9 @@ def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int
         for k, v in d.items():
             if isinstance(v, dict):
                 out[k] = sc(v)
-            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset"):
+            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset","x1","x2","pad"):
                 out[k] = int(round(v * sx))
-            elif k in ("y","h","pad_y"):
+            elif k in ("y","h","pad_y","y1","y2"):
                 out[k] = int(round(v * sy))
             elif k in ("font","min_font"):
                 out[k] = max(8, int(round(v * sfont)))
@@ -103,43 +103,42 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (ausgemessen!)
-# ──────────────────────────────────────────────────────────────────────────────
-# ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (ausgemessen)
+# Pixelgenaue Layouts (deine exakten Maße)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # NEUE Karten (türkis, Ring im PNG)
+    # NEUE Karten (Türkis, Ring im PNG)
     "new": {
-        # Avatar minimal nach unten + stärkerer inset, damit er genau im weißen Ring sitzt
-        "avatar":      {"x": 58,  "y": 96,  "size": 154, "inset": 12, "draw_ring": False, "ring_width": 0},
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        # Avatar: Ring im PNG → innerer Kreis hat 8px Rand (155 outer, 139 inner)
+        "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
 
-        # Progressbar (innere Schiene der PNG): etwas flacher + 1px tiefer
-        # => sitzt jetzt bündig in den Radien
-        "bar":         {"x": 216, "y": 279, "w": 678, "h": 32, "r": 16, "pad_x": 0, "pad_y": 0},
+        # Textboxen (optisch mittig per draw_text_in_box)
+        "name_box":  {"x1": 238, "y1": 89,  "x2": 813, "y2": 143, "font": 34, "min_font": 18, "pad": 8},
+        "level_box": {"x1": 853, "y1": 89,  "x2": 1021,"y2": 129, "font": 38, "min_font": 22, "pad": 6},
+        "xp_box":    {"x1": 853, "y1": 204, "x2": 1021,"y2": 244, "font": 30, "min_font": 18, "pad": 6},
+
+        "rank": {"x": 393, "y": 157, "font": 53},
+
+        # Progressbar (Außen: 209..898 / 271..318 ; Innen: 214..893 / 276..313)
+        # → pad = 5 in beide Richtungen, r als Pill (H/2)
+        "bar": {"x": 209, "y": 271, "w": 898-209, "h": 318-271, "r": 999, "pad_x": 5, "pad_y": 5},
     },
 
-    # STANDARD (blau, Ring wird gezeichnet)
+    # STANDARD (Blau, Ring wird gezeichnet)
     "standard": {
-        # Ring 12px, Avatar 2px tiefer für optisches Zentrum im gezeichneten Ring
-        "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
 
-        # Progressbar (innere Schiene der PNG): minimal höher + etwas größerer Radius
-        "bar":         {"x": 206, "y": 276, "w": 684, "h": 34, "r": 18, "pad_x": 0, "pad_y": 0},
+        "name_box":  {"x1": 232, "y1": 88,  "x2": 808, "y2": 142, "font": 34, "min_font": 18, "pad": 8},
+        "level_box": {"x1": 847, "y1": 88,  "x2": 1015,"y2": 128, "font": 38, "min_font": 22, "pad": 6},
+        "xp_box":    {"x1": 847, "y1": 205, "x2": 1015,"y2": 243, "font": 30, "min_font": 18, "pad": 6},
+
+        "rank": {"x": 393, "y": 157, "font": 53},
+
+        # Progressbar (Außen: 203..892 / 270..317 ; Innen: 208..887 / 275..312)
+        "bar": {"x": 203, "y": 270, "w": 892-203, "h": 317-270, "r": 999, "pad_x": 5, "pad_y": 5},
     }
 }
 
-
 STYLE_OVERRIDES = {}
-
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -162,6 +161,37 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
     while text and draw.textlength(text + ell, font=font) > max_px:
         text = text[:-1]
     return text + ell
+
+def draw_text_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict, fill="white"):
+    """Auto-Fit mit Ellipsis & exakter optischer Zentrierung in (x1,y1,x2,y2)."""
+    x1, y1, x2, y2 = box["x1"], box["y1"], box["x2"], box["y2"]
+    pad = int(box.get("pad", 0))
+    max_w = max(0, (x2 - x1) - 2*pad)
+    size = int(box.get("font", 24))
+    minf = int(box.get("min_font", 14))
+
+    font = ImageFont.truetype(FONT_PATH, size=size)
+    def fits(t: str, f: ImageFont.FreeTypeFont) -> bool:
+        return draw.textlength(t, font=f) <= max_w
+
+    while size > minf and not fits(text, font):
+        size -= 1
+        font = ImageFont.truetype(FONT_PATH, size=size)
+
+    if not fits(text, font):
+        ell = "…"
+        while text and not fits(text + ell, font):
+            text = text[:-1]
+        text = (text + ell) if text else ell
+
+    bbox = font.getbbox(text)
+    tw = draw.textlength(text, font=font)
+    th = bbox[3] - bbox[1]
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+    x = cx - tw / 2
+    y = cy - th / 2 - bbox[1]  # BBox-Top kompensieren
+    draw.text((x, y), text, font=font, fill=fill)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
@@ -256,33 +286,24 @@ class Level(app_commands.Group):
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # -------- Username & Rang --------
-        font_username = _mk_font(lay["username"]["font"])
+        if lay.get("name_box"):
+            draw_text_in_box(draw, str(user), lay["name_box"], fill="white")
+        else:
+            font_username = _mk_font(lay["username"]["font"])
+            ux, uy = lay["username"]["x"], lay["username"]["y"]
+            uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
+            draw.text((ux, uy), uname, font=font_username, fill="white")
+
         font_rank = _mk_font(lay["rank"]["font"])
+        draw.text((lay["rank"]["x"], lay["rank"]["y"]), f"#{rank_pos}", font=font_rank, fill="white")
 
-        ux, uy = lay["username"]["x"], lay["username"]["y"]
-        uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
-        draw.text((ux, uy), uname, font=font_username, fill="white")
+        # -------- Level & XP --------
+        if lay.get("level_box"):
+            draw_text_in_box(draw, f"{lvl_start}", lay["level_box"], fill="white")
+        if lay.get("xp_box"):
+            draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        rx, ry = lay["rank"]["x"], lay["rank"]["y"]
-        draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
-
-        # -------- Level & XP (mittig + Auto-Fit) --------
-        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
-            size = base_size
-            font = _mk_font(size)
-            while draw.textlength(text, font=font) > max_w and size > min_size:
-                size -= 1
-                font = _mk_font(size)
-            _center_text(draw, cx, cy, text, font, "white")
-
-        lev_cfg = lay["level_center"]
-        xp_cfg = lay["xp_center"]
-        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
-                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
-        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
-                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
-
-        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
+        # -------- Progressbar (pixelgenau, bündig) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
@@ -290,14 +311,11 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-
-        # Radius exakt als Pill (Hälfte der Höhe), aber durch Style begrenzt
-        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
+        inner_r = min(max(1, inner_h // 2), int(bar.get("r", inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            # 1px Bleed nach rechts gegen AA-Kanten, links exakt am Start
-            right = min(inner_x + inner_w, inner_x + fill_w + 1)
+            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px Bleed gegen AA-Spalte
             draw.rounded_rectangle(
                 (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
@@ -413,33 +431,24 @@ class Level(app_commands.Group):
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # Username & Rang
-        font_username = _mk_font(lay["username"]["font"])
+        if lay.get("name_box"):
+            draw_text_in_box(draw, str(interaction.user), lay["name_box"], fill="white")
+        else:
+            font_username = _mk_font(lay["username"]["font"])
+            ux, uy = lay["username"]["x"], lay["username"]["y"]
+            uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
+            draw.text((ux, uy), uname, font=font_username, fill="white")
+
         font_rank = _mk_font(lay["rank"]["font"])
-
-        ux, uy = lay["username"]["x"], lay["username"]["y"]
-        uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
-        draw.text((ux, uy), uname, font=font_username, fill="white")
-
-        rx, ry = lay["rank"]["x"], lay["rank"]["y"]
-        draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
+        draw.text((lay["rank"]["x"], lay["rank"]["y"]), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
         # Level & XP
-        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
-            size = base_size
-            font = _mk_font(size)
-            while draw.textlength(text, font=font) > max_w and size > min_size:
-                size -= 1
-                font = _mk_font(size)
-            _center_text(draw, cx, cy, text, font, "white")
+        if lay.get("level_box"):
+            draw_text_in_box(draw, f"{lvl_start}", lay["level_box"], fill="white")
+        if lay.get("xp_box"):
+            draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        lev_cfg = lay["level_center"]
-        xp_cfg = lay["xp_center"]
-        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
-                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
-        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
-                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
-
-        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
+        # Progressbar
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
@@ -447,13 +456,10 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-
-        # Radius exakt als Pill (Hälfte der Höhe), aber durch Style begrenzt
-        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
+        inner_r = min(max(1, inner_h // 2), int(bar.get("r", inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            # 1px Bleed nach rechts gegen AA-Kanten, links exakt am Start
             right = min(inner_x + inner_w, inner_x + fill_w + 1)
             draw.rounded_rectangle(
                 (inner_x, inner_y, right, inner_y + inner_h),
