@@ -170,8 +170,6 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
-from PIL import Image, ImageDraw, ImageChops, ImageFilter
-
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
@@ -180,47 +178,60 @@ def _draw_progressbar(background: Image.Image, lay: dict,
         return
 
     bar = lay["bar"]
-    inner_x = bar["x"] + bar.get("pad_x", 0)
-    inner_y = bar["y"] + bar.get("pad_y", 0)
+    inner_x = bar["x"] + bar.get("pad_x", 0) + bar.get("ox", 0)
+    inner_y = bar["y"] + bar.get("pad_y", 0) + bar.get("oy", 0)
     inner_w = max(1, bar["w"] - 2 * bar.get("pad_x", 0))
     inner_h = max(1, bar["h"] - 2 * bar.get("pad_y", 0))
-
-    # <-- WICHTIG: den kleineren, festen Radius verwenden
-    inner_r = max(1, min(bar.get("r", inner_h // 2), inner_h // 2))
+    r      = max(1, min(bar.get("r", inner_h // 2), inner_h // 2))
 
     fill_w = max(1, min(int(round(inner_w * perc)), inner_w))
 
-    # Supersampling (saubere Kanten)
+    # ---------- Supersampling ----------
     SS = 4
-    W2, H2, FW2, R2 = inner_w*SS, inner_h*SS, fill_w*SS, inner_r*SS
+    W2, H2 = inner_w * SS, inner_h * SS
+    FW2    = fill_w * SS
+    R2     = r * SS
 
-    def capsule_mask(width_px: int) -> Image.Image:
+    # >>> Geheimwaffe: ein paar Pixel LINKS überziehen (im SS-Raster),
+    # danach clippen wir mit dem Slot -> kein Spalt möglich.
+    LEFT_OVERSCAN = 4  # SS-Pixel; 4 == 1 px im finalen Bild
+
+    def capsule_mask(width_px: int, overscan_left: int = 0) -> Image.Image:
         m = Image.new("L", (W2, H2), 0)
         d = ImageDraw.Draw(m)
-        # Mittelteil
-        left_rect = R2
-        right_rect = max(left_rect, width_px - R2)
-        d.rectangle((left_rect, 0, right_rect, H2), fill=255)
-        # Linke Kappe
-        d.ellipse((0, 0, 2*R2, H2), fill=255)
-        # Rechte Kappe nur wenn breit genug
+
+        # Mittelteil (nach links überziehen)
+        x0 = max(0, R2 - overscan_left)
+        x1 = max(x0, width_px - R2)
+        d.rectangle((x0, 0, x1, H2), fill=255)
+
+        # Linke Kappe – nach links geschoben
+        d.ellipse((-overscan_left, 0, 2*R2 - overscan_left, H2), fill=255)
+
+        # Rechte Kappe – nur wenn breit genug
         if width_px > R2:
             cx = width_px - 2*R2
             d.ellipse((cx, 0, cx + 2*R2, H2), fill=255)
         return m
 
-    slot2 = capsule_mask(W2)
-    fill2 = capsule_mask(FW2)
+    # Slot: ohne Overscan (exakt)
+    slot2 = capsule_mask(W2, overscan_left=0)
 
-    # leicht aufblasen, damit keine AA-Pixel der Kante durchscheinen
+    # Füllung: mit Overscan nach links
+    fill2 = capsule_mask(FW2, overscan_left=LEFT_OVERSCAN)
+
+    # kleine Aufblähung, damit AA-Pixel verschwinden
     fill2 = fill2.filter(ImageFilter.MaxFilter(size=3))
 
+    # Clipping in den Slot (damit nichts über die weiße Schiene geht)
     final2 = ImageChops.multiply(slot2, fill2)
+
+    # Runterskalieren
     final_mask = final2.resize((inner_w, inner_h), Image.LANCZOS)
 
+    # Einfärben
     fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
