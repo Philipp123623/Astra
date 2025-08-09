@@ -969,7 +969,7 @@ class levelsystem(commands.Cog):
                                                 await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)",
                                                                   (msg.guild.id))
                                                 messageres = await cur.fetchone()
-    
+
                                                 if messageres is None:
                                                     await cur.execute(
                                                         "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
@@ -1015,7 +1015,7 @@ class levelsystem(commands.Cog):
                                                         embed = discord.Embed(title="Level-UP",
                                                                               description=finalmsg,
                                                                               color=discord.Color.green())
-    
+
                                                         await channel.send(msg.author.mention, embed=embed)
                                                     if not result5:
                                                         channel = self.bot.get_channel(int(result6[0]))
