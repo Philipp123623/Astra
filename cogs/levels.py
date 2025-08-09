@@ -7,7 +7,7 @@ from typing import Literal
 import discord
 from discord import app_commands, File
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageChops, ImageFont
+from PIL import Image, ImageDraw, ImageChops, ImageFont, ImageFilter
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Assets & Styles
