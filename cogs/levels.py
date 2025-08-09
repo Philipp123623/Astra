@@ -181,34 +181,39 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     bar = lay["bar"]
     inner_x = bar["x"] + bar.get("pad_x", 0)
     inner_y = bar["y"] + bar.get("pad_y", 0)
-    inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
-    inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
+    inner_w = max(1, bar["w"] - 2 * bar.get("pad_x", 0))
+    inner_h = max(1, bar["h"] - 2 * bar.get("pad_y", 0))
     inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
     fill_w = int(round(inner_w * perc))
-    if fill_w <= 0:
-        return
-    fill_w = min(fill_w, inner_w)
+    fill_w = max(1, min(fill_w, inner_w))
 
-    # 1) Slot-Maske
-    slot_mask = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(slot_mask).rounded_rectangle(
-        (0, 0, inner_w, inner_h), radius=inner_r, fill=255
-    )
+    # ---------- Supersampling (4x) ----------
+    SS = 4
+    W2, H2 = inner_w * SS, inner_h * SS
+    R2 = inner_r * SS
+    FW2 = fill_w * SS
 
-    # 2) Füllmaske = abgerundetes Rechteck mit gleichem Radius
-    fill_mask = Image.new("L", (inner_w, inner_h), 0)
-    r_fill = min(inner_r, fill_w // 2)  # bei schmaler Füllung Kappe nicht “überziehen”
-    ImageDraw.Draw(fill_mask).rounded_rectangle(
-        (0, 0, fill_w, inner_h), radius=r_fill, fill=255
-    )
+    # Slot-Maske (–1 px, weil inclusive)
+    slot2 = Image.new("L", (W2, H2), 0)
+    d = ImageDraw.Draw(slot2)
+    d.rounded_rectangle((0, 0, W2 - 1, H2 - 1), radius=R2, fill=255)
 
-    # 3) In den Slot clippen (kein Ausbluten, perfekte Kante)
-    final_mask = ImageChops.multiply(slot_mask, fill_mask)
+    # Füll-Maske (gleiches Prinzip)
+    fill2 = Image.new("L", (W2, H2), 0)
+    rf2 = min(R2, FW2 // 2)
+    ImageDraw.Draw(fill2).rounded_rectangle((0, 0, FW2 - 1, H2 - 1), radius=rf2, fill=255)
 
-    # 4) Einblenden
+    # Clippen in den Slot
+    final2 = ImageChops.multiply(slot2, fill2)
+
+    # Runterskalieren mit Lanczos (saubere Kanten, keine Lücken)
+    final_mask = final2.resize((inner_w, inner_h), Image.LANCZOS)
+
+    # Einfärben
     fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
