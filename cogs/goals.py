@@ -234,7 +234,7 @@ class CommunityGoalsGroup(app_commands.Group):
 
     @app_commands.command(name="erstellen", description="Setzt ein neues Communityziel via Modal.")
     @app_commands.describe(
-        ziel_kanal="Channel für das Ziel-Embed & Updates.",
+        channel="Channel für das Ziel-Embed & Updates.",
         belohnung_rolle="Optionale Rolle als Belohnung"
     )
     @app_commands.checks.has_permissions(manage_events=True)
