@@ -113,22 +113,22 @@ LAYOUTS = {
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar: etwas tiefer + flacher, Rundung enger
-        "bar":         {"x": 215, "y": 278, "w": 678, "h": 34, "r": 17, "pad_x": 0, "pad_y": 0},
+        # Progressbar: passgenau in den Slot
+        "bar":         {"x": 212, "y": 276, "w": 686, "h": 36, "r": 18, "pad_x": 0, "pad_y": 0},
     },
 
     # STANDARD (blau, Ring wird gezeichnet)
     "standard": {
-        # etwas stärkerer Ring + 2px höher für optisches Zentrieren
         "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar: Slot exakt eingepasst
-        "bar":         {"x": 206, "y": 276, "w": 684, "h": 36, "r": 18, "pad_x": 0, "pad_y": 0},
+        # Progressbar: Start/Ende genau in der Kurve
+        "bar":         {"x": 208, "y": 274, "w": 686, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0},
     }
 }
+
 STYLE_OVERRIDES = {}
 
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
