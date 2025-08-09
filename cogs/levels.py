@@ -58,6 +58,7 @@ def bar_color_for(style: str) -> str:
 # Alle neuen Karten verwenden NEW; nur "standard" nutzt STD.
 # Wenn du "standard" exakt wie NEW willst, setz LAYOUTS["standard"]=LAYOUTS["new"]
 # ──────────────────────────────────────────────────────────────────────────────
+
 BASE_W, BASE_H = 1075, 340
 
 LAYOUTS = {
@@ -67,17 +68,25 @@ LAYOUTS = {
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38},
         "xp_center":   {"x": 931, "y": 223, "font": 30},
-        "bar":         {"x": 209, "y": 276, "w": 675, "h": 36, "r": 6},
+        # Schiene (weißer Rahmen im PNG). Wir füllen NUR die innere Fläche:
+        "bar":         {
+            "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
+            "pad_x": 14, "pad_y": 6   # <- inneres Padding der Füllung
+        },
     },
-    "standard": {  # falls der Standard leicht abweicht – hier getrennt definieren
+    "standard": {  # Standard kann minimal anders sein
         "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38},
         "xp_center":   {"x": 931, "y": 223, "font": 30},
-        "bar":         {"x": 209, "y": 276, "w": 675, "h": 36, "r": 6},
+        "bar":         {
+            "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
+            "pad_x": 12, "pad_y": 6
+        },
     }
 }
+
 
 # Fonts
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
@@ -213,15 +222,22 @@ class Level(app_commands.Group):
         # xp pill center
         _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # progress bar fill (untere Schiene ist im PNG; wir füllen exakt hinein)
+        # --- Progressbar (exakt in die Schiene füllen)
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-        fill_w = int(bar["w"] * perc)
+
+        inner_x = bar["x"] + bar.get("pad_x", 0)
+        inner_y = bar["y"] + bar.get("pad_y", 0)
+        inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
+        inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
+        inner_r = max(1, int(bar.get("r", 6) * 0.8))  # innen etwas kleiner runden
+
+        fill_w = int(inner_w * perc)
         if fill_w > 0:
             draw.rounded_rectangle(
-                (bar["x"], bar["y"], bar["x"] + fill_w, bar["y"] + bar["h"]),
-                radius=bar["r"],
-                fill=bar_color_for(style_name)
+                (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
+                radius=inner_r,
+                fill=bar_color_for(style_name if 'style_name' in locals() else style)
             )
 
         buf = BytesIO()
@@ -335,14 +351,22 @@ class Level(app_commands.Group):
         _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
         _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
+        # --- Progressbar (exakt in die Schiene füllen)
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-        fill_w = int(bar["w"] * perc)
+
+        inner_x = bar["x"] + bar.get("pad_x", 0)
+        inner_y = bar["y"] + bar.get("pad_y", 0)
+        inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
+        inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
+        inner_r = max(1, int(bar.get("r", 6) * 0.8))  # innen etwas kleiner runden
+
+        fill_w = int(inner_w * perc)
         if fill_w > 0:
             draw.rounded_rectangle(
-                (bar["x"], bar["y"], bar["x"] + fill_w, bar["y"] + bar["h"]),
-                radius=bar["r"],
-                fill=bar_color_for(style)
+                (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
+                radius=inner_r,
+                fill=bar_color_for(style_name if 'style_name' in locals() else style)
             )
 
         buf = BytesIO()
