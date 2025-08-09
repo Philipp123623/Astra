@@ -105,29 +105,38 @@ def bar_color_for(style: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Pixelgenaue Layouts (ausgemessen!)
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Pixelgenaue Layouts (ausgemessen)
+# ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
     # NEUE Karten (türkis, Ring im PNG)
     "new": {
-        "avatar":      {"x": 58,  "y": 92,  "size": 154, "inset": 11, "draw_ring": False, "ring_width": 0},
+        # Avatar minimal nach unten + stärkerer inset, damit er genau im weißen Ring sitzt
+        "avatar":      {"x": 58,  "y": 96,  "size": 154, "inset": 12, "draw_ring": False, "ring_width": 0},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar: passgenau in den Slot
-        "bar":         {"x": 212, "y": 276, "w": 686, "h": 36, "r": 18, "pad_x": 0, "pad_y": 0},
+
+        # Progressbar (innere Schiene der PNG): etwas flacher + 1px tiefer
+        # => sitzt jetzt bündig in den Radien
+        "bar":         {"x": 216, "y": 279, "w": 678, "h": 32, "r": 16, "pad_x": 0, "pad_y": 0},
     },
 
     # STANDARD (blau, Ring wird gezeichnet)
     "standard": {
+        # Ring 12px, Avatar 2px tiefer für optisches Zentrum im gezeichneten Ring
         "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar: Start/Ende genau in der Kurve
-        "bar":         {"x": 208, "y": 274, "w": 686, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0},
+
+        # Progressbar (innere Schiene der PNG): minimal höher + etwas größerer Radius
+        "bar":         {"x": 206, "y": 276, "w": 684, "h": 34, "r": 18, "pad_x": 0, "pad_y": 0},
     }
 }
+
 
 STYLE_OVERRIDES = {}
 
@@ -273,7 +282,7 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # -------- Progressbar (pixelgenau, ohne linken Spalt) --------
+        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
@@ -281,15 +290,16 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = min(max(1, int(bar.get("r", 12))), inner_h // 2)
+
+        # Radius exakt als Pill (Hälfte der Höhe), aber durch Style begrenzt
+        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            bleed = 1  # minimaler Überlauf, um Anti-Alias-Spalten zu vermeiden
-            left = inner_x
-            right = min(inner_x + inner_w, inner_x + fill_w + bleed)
+            # 1px Bleed nach rechts gegen AA-Kanten, links exakt am Start
+            right = min(inner_x + inner_w, inner_x + fill_w + 1)
             draw.rounded_rectangle(
-                (left, inner_y, right, inner_y + inner_h),
+                (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
                 fill=bar_color_for(style_name)
             )
@@ -429,7 +439,7 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # Progressbar
+        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
@@ -437,17 +447,18 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = min(max(1, int(bar.get("r", 12))), inner_h // 2)
+
+        # Radius exakt als Pill (Hälfte der Höhe), aber durch Style begrenzt
+        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            bleed = 1
-            left = inner_x
-            right = min(inner_x + inner_w, inner_x + fill_w + bleed)
+            # 1px Bleed nach rechts gegen AA-Kanten, links exakt am Start
+            right = min(inner_x + inner_w, inner_x + fill_w + 1)
             draw.rounded_rectangle(
-                (left, inner_y, right, inner_y + inner_h),
+                (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style)
+                fill=bar_color_for(style_name)
             )
 
         buf = BytesIO()
