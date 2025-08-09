@@ -37,22 +37,20 @@ def style_to_path(style_name: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 def _layout_key_for_style(style: str) -> str:
     s = (style or "").lower()
-    # "standard" ODER Datei namens "levelcard_astra" sollen das BLAUE Layout bekommen
-    if s in ("levelcard_astra", "standard"):
+    if s in ("levelcard_astra", "standard"):   # blaue Standardkarte
         return "standard"
-    return "new"
+    return "new"                               # alle anderen = neue Karten
 
-# exakte PNG-Größen (gemessen)
 BASE_BY_GROUP = {
-    "new": (1075, 340),     # grüne / neue Karten
-    "standard": (1064, 339) # blaue Standardkarte
+    "new": (1075, 340),      # neue Karten (türkis)
+    "standard": (1064, 339), # Standardkarte (blau)
 }
 
 def _deepcopy(obj):
     import json as _json
     return _json.loads(_json.dumps(obj))
 
-def _merge_overrides(base: dict, ovr: dict) -> dict:
+def _merge_overrides(base: dict, ovr: dict | None) -> dict:
     res = _deepcopy(base)
     for k, v in (ovr or {}).items():
         if isinstance(v, dict) and isinstance(res.get(k), dict):
@@ -74,7 +72,7 @@ def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int
                 out[k] = int(round(v * sx))
             elif k in ("y","h","pad_y"):
                 out[k] = int(round(v * sy))
-            elif k == "font" or k == "min_font":
+            elif k in ("font","min_font"):
                 out[k] = max(8, int(round(v * sfont)))
             else:
                 out[k] = v
@@ -105,28 +103,29 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (Basiswerte)
+# Pixelgenaue Layouts (ausgemessen!)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # NEUE Karten (Ring ist im PNG) → Avatar leicht „inset“, KEIN eigener Ring
+    # NEUE Karten (Ring im PNG) – Avatar exakt in den weißen Ring einpassen
     "new": {
-        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 16, "draw_ring": False, "ring_width": 0},
+        # großer Frame + kleiner inset -> Avatar sitzt im Ring
+        "avatar":      {"x": 58,  "y": 94,  "size": 154, "inset": 9,  "draw_ring": False, "ring_width": 0},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Bar exakt in Schiene (leicht engeres Padding, etwas größerer Radius)
-        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 16, "pad_x": 8, "pad_y": 8 },
+        # innerer Slot der Schiene (pixelgenau)
+        "bar": { "x": 214, "y": 276, "w": 680, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0 },
     },
-    # STANDARD (ohne Ring) → weißen Ring zeichnen, Avatar nach innen versetzen
+    # STANDARD (ohne Ring) – weißen Ring selbst zeichnen
     "standard": {
         "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 0,  "draw_ring": True, "ring_width": 10},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Etwas anderes Padding für die blaue Schiene
-        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 16, "pad_x": 8, "pad_y": 8 },
+        # innerer Slot der Schiene (pixelgenau)
+        "bar": { "x": 208, "y": 275, "w": 680, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0 },
     }
 }
 STYLE_OVERRIDES = {}
@@ -240,10 +239,10 @@ class Level(app_commands.Group):
             draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
-        mask_size = (av_size - 2 * inset, av_size - 2 * inset)
-        mask = Image.new("L", mask_size, 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, mask_size[0], mask_size[1]), fill=255)
-        avatar_cropped = avatar_img.resize(mask_size)
+        inner_d = (av_size - 2 * inset, av_size - 2 * inset)
+        mask = Image.new("L", inner_d, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, inner_d[0], inner_d[1]), fill=255)
+        avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # -------- Username & Rang --------
@@ -273,7 +272,7 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # -------- Progressbar (pixelgenau, ohne linken Gap) --------
+        # -------- Progressbar (pixelgenau, ohne linken Spalt) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
@@ -281,20 +280,16 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = max(1, int(bar.get("r", 12)))
+        inner_r = min(max(1, int(bar.get("r", 12))), inner_h // 2)
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            # 1px „Bleed“ nach links/rechts, damit kein sichtbarer Spalt bleibt
-            bleed = 1
-            left = inner_x - bleed
-            right = inner_x + fill_w + bleed
-            # Clampen auf die innere Schiene
-            left = max(left, inner_x)
-            right = min(right, inner_x + inner_w)
+            bleed = 1  # minimaler Überlauf, um Anti-Alias-Spalten zu vermeiden
+            left = inner_x
+            right = min(inner_x + inner_w, inner_x + fill_w + bleed)
             draw.rounded_rectangle(
                 (left, inner_y, right, inner_y + inner_h),
-                radius=min(inner_r, inner_h // 2),
+                radius=inner_r,
                 fill=bar_color_for(style_name)
             )
 
@@ -400,10 +395,10 @@ class Level(app_commands.Group):
             draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
-        mask_size = (av_size - 2 * inset, av_size - 2 * inset)
-        mask = Image.new("L", mask_size, 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, mask_size[0], mask_size[1]), fill=255)
-        avatar_cropped = avatar_img.resize(mask_size)
+        inner_d = (av_size - 2 * inset, av_size - 2 * inset)
+        mask = Image.new("L", inner_d, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, inner_d[0], inner_d[1]), fill=255)
+        avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # Username & Rang
@@ -441,16 +436,16 @@ class Level(app_commands.Group):
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = max(1, int(bar.get("r", 12)))
+        inner_r = min(max(1, int(bar.get("r", 12))), inner_h // 2)
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
             bleed = 1
-            left = max(inner_x, inner_x - bleed)
+            left = inner_x
             right = min(inner_x + inner_w, inner_x + fill_w + bleed)
             draw.rounded_rectangle(
                 (left, inner_y, right, inner_y + inner_h),
-                radius=min(inner_r, inner_h // 2),
+                radius=inner_r,
                 fill=bar_color_for(style)
             )
 
@@ -462,6 +457,7 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{style}.png"),
             ephemeral=True
         )
+
 
 
     @app_commands.command(name="status")
