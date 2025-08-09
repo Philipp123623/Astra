@@ -12,6 +12,38 @@ from io import BytesIO
 
 from cogs.ticket import Ticket
 
+import os, json
+
+ASSETS_DIR = "cogs/assets/Levelcards"
+DEFAULT_STYLE = "standard"   # entspricht standard.png
+
+def list_styles():
+    """Liest alle PNGs aus dem Asset-Ordner und gibt die Namen ohne .png zurück."""
+    if not os.path.isdir(ASSETS_DIR):
+        return []
+    styles = []
+    for f in os.listdir(ASSETS_DIR):
+        if f.lower().endswith(".png"):
+            styles.append(os.path.splitext(f)[0])  # ohne .png
+    return sorted(styles)
+
+def style_to_path(style_name: str):
+    """Case-insensitive zu einer PNG im Asset-Ordner auflösen; Fallback auf default."""
+    files = [f for f in os.listdir(ASSETS_DIR) if f.lower().endswith(".png")]
+    for f in files:
+        if os.path.splitext(f)[0].lower() == style_name.lower():
+            return os.path.join(ASSETS_DIR, f)
+    # Fallback
+    return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
+
+async def style_autocomplete(interaction: discord.Interaction, current: str):
+    names = list_styles()
+    return [
+        app_commands.Choice(name=n, value=n)
+        for n in names if current.lower() in n.lower()
+    ][:25]
+
+
 
 ##########
 @app_commands.guild_only()
@@ -37,91 +69,205 @@ class Level(app_commands.Group):
                         ephemeral=True
                     )
 
-                await cur.execute("SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
-                                  (user.id, interaction.guild.id))
+                await cur.execute(
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                    (user.id, interaction.guild.id)
+                )
                 result = await cur.fetchone()
                 if not result:
                     return await interaction.response.send_message(
                         "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**", ephemeral=True
                     )
 
-                await interaction.response.defer(thinking=True)
-
-                xp_start, lvl_start = result
-                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
-
-                # --- Bild und Zeichner laden
-                background = Image.open("cogs/Levelcard_Astra.png").convert("RGBA")
-                draw = ImageDraw.Draw(background)
-
-                # --- Fonts laden (achte auf den richtigen Pfad und Dateinamen der Schriftart!)
-                font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
-                font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
-                font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
-                font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
-
-                # --- Avatar laden und einfügen
-                avatar_asset = user.display_avatar.replace(size=256)
-                avatar_bytes = await avatar_asset.read()
-                avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
-
-                mask = Image.new("L", (138, 138), 0)
-                mask_draw = ImageDraw.Draw(mask)
-                mask_draw.ellipse((0, 0, 138, 138), fill=255)
-
-                background.paste(avatar, (64, 100), mask)
-
-                # ✅ Umrandung zeichnen (leicht größer als Avatar)
-                draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
-
-                # --- Username zeichnen (fest positioniert)
-                draw.text((246, 95), str(user), font=font_username, fill="white")
-
-                # --- Rank (Platzierung) abrufen
+                # --- Style aus DB laden (User → sonst default)
                 await cur.execute(
-                    "SELECT client_id FROM levelsystem WHERE guild_id = (%s) ORDER BY user_level DESC, user_xp DESC",
-                    (interaction.guild.id,))
+                    "SELECT style FROM levelstyle WHERE guild_id=%s AND client_id=%s",
+                    (interaction.guild.id, user.id)
+                )
+                row = await cur.fetchone()
+                style_name = row[0] if row else DEFAULT_STYLE
+                bg_path = style_to_path(style_name)
+
+        await interaction.response.defer(thinking=True)
+
+        xp_start, lvl_start = result
+        xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
+
+        # --- Bild und Zeichner laden
+        background = Image.open(bg_path).convert("RGBA")
+        draw = ImageDraw.Draw(background)
+
+        # --- Fonts
+        font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
+        font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
+        font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
+        font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
+
+        # --- Avatar
+        avatar_asset = user.display_avatar.replace(size=256)
+        avatar_bytes = await avatar_asset.read()
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
+        mask = Image.new("L", (138, 138), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 138, 138), fill=255)
+        background.paste(avatar, (64, 100), mask)
+        draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
+
+        # --- Username
+        draw.text((246, 95), str(user), font=font_username, fill="white")
+
+        # --- Rank (Platzierung)
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id,)
+                )
                 result2 = await cur.fetchall()
-                rank = 0
-                if result2:
-                    for x in result2:
-                        rank += 1
-                        if int(x[0]) == user.id:
-                            break
+        rank_pos = 0
+        if result2:
+            for x in result2:
+                rank_pos += 1
+                if int(x[0]) == user.id:
+                    break
+        draw.text((393, 157), f"#{rank_pos}", font=font_rank, fill="white")
 
-                # --- Rank (#Platz) zeichnen
-                draw.text((393, 157), f"#{rank}", font=font_rank, fill="white")
+        # --- Level zentriert
+        level_text = f"{lvl_start}"
+        level_width = draw.textlength(level_text, font=font_level)
+        level_height = font_level.getbbox(level_text)[3] - font_level.getbbox(level_text)[1]
+        draw.text((931 - level_width // 2, 95 - level_height // 2), level_text, font=font_level, fill="white")
 
-                # LEVEL – vertikal & horizontal zentriert
-                level_text = f"{lvl_start}"
-                level_bbox = font_level.getbbox(level_text)
-                level_width = draw.textlength(level_text, font=font_level)
-                level_height = level_bbox[3] - level_bbox[1]
-                draw.text((931 - level_width // 2, 95 - level_height // 2), level_text, font=font_level, fill="white")
+        # --- XP zentriert
+        xp_text = f"{xp_start}/{round(xp_end)}"
+        xp_width = draw.textlength(xp_text, font=font_xp)
+        xp_height = font_xp.getbbox(xp_text)[3] - font_xp.getbbox(xp_text)[1]
+        draw.text((931 - xp_width // 2, 223 - xp_height // 2), xp_text, font=font_xp, fill="white")
 
-                # XP – vertikal & horizontal zentriert
-                percent = int((xp_start / xp_end) * 100)
-                xp_text = f"{xp_start}/{round(xp_end)}"
-                xp_bbox = font_xp.getbbox(xp_text)
-                xp_width = draw.textlength(xp_text, font=font_xp)
-                xp_height = xp_bbox[3] - xp_bbox[1]
-                draw.text((931 - xp_width // 2, 223 - xp_height // 2), xp_text, font=font_xp, fill="white")
+        # --- Progressbar
+        if xp_start > 5:
+            xp_percentage = (xp_start / xp_end) if xp_end > 0 else 0
+            bar_full_width = 675
+            bar_width = int(bar_full_width * max(0.0, min(1.0, xp_percentage)))
+            draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
 
-                # --- Progressbar zeichnen (wenn XP > 5)
-                if xp_start > 5:
-                    xp_percentage = (xp_start / xp_end)
-                    bar_full_width = 675
-                    bar_width = int(bar_full_width * xp_percentage)
-                    # Füllung
-                    draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
+        # --- Bild senden
+        buffer = BytesIO()
+        background.save(buffer, format="PNG")
+        buffer.seek(0)
+        file = File(fp=buffer, filename=f"rank_{style_name}.png")
+        await interaction.followup.send(file=file)
 
-                # --- Bild speichern und senden
-                buffer = BytesIO()
-                background.save(buffer, format="PNG")
-                buffer.seek(0)
+    # Autocomplete-Helfer (zeigt alle PNG-Namen ohne .png)
+    async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
+        names = list_styles()
+        return [
+                   app_commands.Choice(name=n, value=n)
+                   for n in names if current.lower() in n.lower()
+               ][:25]
 
-                file = File(fp=buffer, filename="card.png")
-                await interaction.followup.send(file=file)
+    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card (Name = Dateiname ohne .png).")
+    @app_commands.describe(style="Style-Name (z. B. standard, Halloween_stripes, türkis_stripes)")
+    @app_commands.autocomplete(style=_style_autocomplete)
+    async def setstyle(self, interaction: discord.Interaction, style: str):
+        names = list_styles()
+        if not names:
+            return await interaction.response.send_message(
+                "❌ Es sind aktuell keine Styles im Ordner vorhanden.",
+                ephemeral=True
+            )
+        if style not in names:
+            return await interaction.response.send_message(
+                f"❌ Unbekannter Style `{style}`.\nVerfügbar: {', '.join(names)}",
+                ephemeral=True
+            )
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Speichere den Style pro User & Guild (Upsert)
+                await cur.execute(
+                    """
+                    INSERT INTO levelstyle (guild_id, client_id, style)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE style = VALUES(style)
+                    """,
+                    (interaction.guild.id, interaction.user.id, style)
+                )
+
+        await interaction.response.send_message(
+            f"✅ Dein Rank-Card-Style wurde auf **{style}** gesetzt.",
+            ephemeral=True
+        )
+
+    @app_commands.command(name="previewstyle",
+                          description="Zeig dir deine Rankcard mit einem Style an (ohne zu speichern).")
+    @app_commands.describe(style="Style-Name (Dateiname ohne .png)")
+    @app_commands.autocomplete(style=style_autocomplete)
+    async def previewstyle(self, interaction: discord.Interaction, style: str):
+        names = list_styles()
+        if style not in names:
+            return await interaction.response.send_message(
+                f"❌ Unbekannter Style `{style}`. Verfügbar: {', '.join(names) or '—'}",
+                ephemeral=True
+            )
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        bg_path = style_to_path(style)
+
+        # Hier nutzen wir dieselbe Render-Logik wie bei /rank – nur ohne DB-Style-Lookup
+        # (Level/XP des aufrufenden Users nehmen)
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                    (interaction.user.id, interaction.guild.id)
+                )
+                res = await cur.fetchone()
+
+        xp_start, lvl_start = res if res else (0, 0)
+        xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
+
+        background = Image.open(bg_path).convert("RGBA")
+        draw = ImageDraw.Draw(background)
+        font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
+        font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
+        font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
+        font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
+
+        avatar_asset = interaction.user.display_avatar.replace(size=256)
+        avatar_bytes = await avatar_asset.read()
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
+        mask = Image.new("L", (138, 138), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 138, 138), fill=255)
+        background.paste(avatar, (64, 100), mask)
+        draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
+
+        draw.text((246, 95), str(interaction.user), font=font_username, fill="white")
+        draw.text((393, 157), f"#—", font=font_rank, fill="white")  # Rang lassen wir in Preview offen
+
+        level_text = f"{lvl_start}"
+        lw = draw.textlength(level_text, font=font_level)
+        lh = font_level.getbbox(level_text)[3] - font_level.getbbox(level_text)[1]
+        draw.text((931 - lw // 2, 95 - lh // 2), level_text, font=font_level, fill="white")
+
+        xp_text = f"{xp_start}/{round(xp_end)}"
+        xw = draw.textlength(xp_text, font=font_xp)
+        xh = font_xp.getbbox(xp_text)[3] - font_xp.getbbox(xp_text)[1]
+        draw.text((931 - xw // 2, 223 - xh // 2), xp_text, font=font_xp, fill="white")
+
+        if xp_start > 5 and xp_end > 0:
+            perc = max(0.0, min(1.0, xp_start / xp_end))
+            bar_full_width = 675
+            bar_width = int(bar_full_width * perc)
+            draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
+
+        buffer = BytesIO()
+        background.save(buffer, "PNG")
+        buffer.seek(0)
+        await interaction.followup.send(
+            content=f"**Preview:** `{style}`",
+            file=File(buffer, filename=f"preview_{style}.png"),
+            ephemeral=True
+        )
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)

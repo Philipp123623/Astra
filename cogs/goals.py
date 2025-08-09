@@ -237,17 +237,17 @@ class CommunityGoalsGroup(app_commands.Group):
         ziel_kanal="Channel für das Ziel-Embed & Updates.",
         belohnung_rolle="Optionale Rolle als Belohnung"
     )
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_events=True)
     async def erstellen(
         self,
         interaction: discord.Interaction,
-        ziel_kanal: discord.TextChannel,
+        channel: discord.TextChannel,
         belohnung_rolle: Optional[discord.Role] = None
     ):
-        await interaction.response.send_modal(GoalModalPage1(ziel_kanal, belohnung_rolle))
+        await interaction.response.send_modal(GoalModalPage1(channel, belohnung_rolle))
 
     @staticmethod
-    async def create_goal_from_modal(goal_data, ziel_kanal, interaction: discord.Interaction,
+    async def create_goal_from_modal(goal_data, channel, interaction: discord.Interaction,
                                      reward_role: Optional[discord.Role] = None):
         now_ts = int(time.time())
         ends_raw = goal_data.get("dauer", "")
@@ -310,9 +310,9 @@ class CommunityGoalsGroup(app_commands.Group):
             reward_role=reward_role
         )
 
-        goal_message = await ziel_kanal.send(embed=embed)
+        goal_message = await channel.send(embed=embed)
         msg_id = goal_message.id
-        ziel_kanal_id = ziel_kanal.id
+        ziel_kanal_id = channel.id
 
         async with interaction.client.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -343,12 +343,13 @@ class CommunityGoalsGroup(app_commands.Group):
 
         try:
             await interaction.response.send_message(
-                f"Community Goal wurde erstellt und im Channel {ziel_kanal.mention} gepostet!", ephemeral=True
+                f"Community Goal wurde erstellt und im Channel {channel.mention} gepostet!", ephemeral=True
             )
         except discord.InteractionResponded:
             pass
 
     @app_commands.command(name="status", description="Zeigt das aktuelle Communityziel und den Fortschritt.")
+    @app_commands.checks.has_permissions(manage_events=True)
     async def status(self, interaction: discord.Interaction):
         async with self.cog.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:

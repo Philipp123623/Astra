@@ -55,7 +55,7 @@ class HomeButton(discord.ui.Button):
         )
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
         embed.set_image(
-            url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+            url="https://cdn.discordapp.com/attachments/1141116983358804118/1403484979266195476/Neuer-Astra-Banner-animiert.gif")
 
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -111,7 +111,7 @@ class help(commands.Cog):
         self.bot = bot
         self.uptime = datetime.utcnow()
 
-    @app_commands.command(name="help")
+    @app_commands.command(name="help", description="Zeigt dir eine Liste aller Befehle an.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def help(self, interaction: discord.Interaction):
@@ -153,7 +153,7 @@ class help(commands.Cog):
             inline=False
         )
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-        embed.set_image(url="https://cdn.discordapp.com/attachments/842039866740178944/987332928767938630/Astra-premium3.gif")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1141116983358804118/1403484979266195476/Neuer-Astra-Banner-animiert.gif")
 
         await interaction.response.send_message(embed=embed, view=view)
 
