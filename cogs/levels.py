@@ -305,22 +305,19 @@ class Level(app_commands.Group):
 
         # -------- Progressbar (pixelgenau, bündig) --------
         bar = lay["bar"]
-        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = min(max(1, inner_h // 2), int(bar.get("r", inner_h // 2)))
+
+        # Fixer, exakter Radius:
+        inner_r = int(bar.get("r", max(1, inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px Bleed gegen AA-Spalte
-            draw.rounded_rectangle(
-                (inner_x, inner_y, right, inner_y + inner_h),
-                radius=inner_r,
-                fill=bar_color_for(style_name)
-            )
+            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
+            draw.rounded_rectangle((inner_x, inner_y, right, inner_y + inner_h),
+                                   radius=inner_r, fill=bar_color_for(style_name))
 
         buf = BytesIO()
         background.save(buf, "PNG")
@@ -450,22 +447,19 @@ class Level(app_commands.Group):
 
         # Progressbar
         bar = lay["bar"]
-        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = min(max(1, inner_h // 2), int(bar.get("r", inner_h // 2)))
+
+        # Fixer, exakter Radius:
+        inner_r = int(bar.get("r", max(1, inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            right = min(inner_x + inner_w, inner_x + fill_w + 1)
-            draw.rounded_rectangle(
-                (inner_x, inner_y, right, inner_y + inner_h),
-                radius=inner_r,
-                fill=bar_color_for(style)
-            )
+            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
+            draw.rounded_rectangle((inner_x, inner_y, right, inner_y + inner_h),
+                                   radius=inner_r, fill=bar_color_for(style))
 
         buf = BytesIO()
         background.save(buf, "PNG")
