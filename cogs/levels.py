@@ -1,77 +1,101 @@
-import discord
-from discord.ext import commands
-from discord import app_commands, File
-from discord.app_commands import Group
-from datetime import datetime
+import os
+import json
 import random
-from typing import Literal
-import math
-import asyncio
-from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+from typing import Literal
 
-from cogs.ticket import Ticket
+import discord
+from discord import app_commands, File
+from discord.ext import commands
+from PIL import Image, ImageDraw, ImageFont
 
-import os, json
+from cogs.ticket import Ticket  # falls du's brauchst
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Assets & Styles
+# ──────────────────────────────────────────────────────────────────────────────
 ASSETS_DIR = "cogs/assets/Levelcards"
-DEFAULT_STYLE = "standard"   # entspricht standard.png
+DEFAULT_STYLE = "standard"  # entspricht standard.png
 
-def list_styles():
-    """Liest alle PNGs aus dem Asset-Ordner und gibt die Namen ohne .png zurück."""
+def list_styles() -> list[str]:
+    """Alle .png-Dateien im Assets-Ordner (ohne .png)."""
     if not os.path.isdir(ASSETS_DIR):
         return []
-    styles = []
+    return sorted(
+        os.path.splitext(f)[0]
+        for f in os.listdir(ASSETS_DIR)
+        if f.lower().endswith(".png")
+    )
+
+def style_to_path(style_name: str) -> str:
+    """Case-insensitive PNG-Pfad zum Style; Fallback auf DEFAULT_STYLE."""
+    if not os.path.isdir(ASSETS_DIR):
+        return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
     for f in os.listdir(ASSETS_DIR):
         if f.lower().endswith(".png"):
-            styles.append(os.path.splitext(f)[0])  # ohne .png
-    return sorted(styles)
-
-def style_to_path(style_name: str):
-    """Case-insensitive zu einer PNG im Asset-Ordner auflösen; Fallback auf default."""
-    files = [f for f in os.listdir(ASSETS_DIR) if f.lower().endswith(".png")]
-    for f in files:
-        if os.path.splitext(f)[0].lower() == style_name.lower():
-            return os.path.join(ASSETS_DIR, f)
-    # Fallback
+            if os.path.splitext(f)[0].lower() == style_name.lower():
+                return os.path.join(ASSETS_DIR, f)
     return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
 
-async def style_autocomplete(interaction: discord.Interaction, current: str):
-    names = list_styles()
-    return [
-        app_commands.Choice(name=n, value=n)
-        for n in names if current.lower() in n.lower()
-    ][:25]
-
-# === Relative Layout (für 1075x340 entworfen; läuft prozentual auf allen Größen) ===
-REL = {
-    "avatar": { "x": 64/1075, "y": 100/340, "size_h": 138/340, "border_h": 6/340 },
-    "username": { "x": 246/1075, "y": 95/340, "max_w": 600/1075 },
-    "rank": { "x": 393/1075, "y": 157/340 },
-    "level_center": { "x": 931/1075, "y": 95/340 },
-    "xp_center":    { "x": 931/1075, "y": 223/340 },
-    "bar": { "x": 209/1075, "y": 276/340, "w": 675/1075, "h": 36/340, "radius_h": 6/340 }
+# Progressbar-Farbe pro Style (Fallback → DEFAULT_HEX)
+DEFAULT_HEX = "#61BFC4"  # teal
+BAR_COLORS: dict[str, str] = {
+    # deine Dateinamen aus dem Screenshot:
+    "türkis_stripes":            "#C980E8",  # lila, siehe Bild 1
+    "Halloween_stripes":         "#61BFC4",
+    "Christmas_stripes":         "#61BFC4",
+    "Easter_stripes":            "#61BFC4",
+    "standard_stripes_left_star":"#61BFC4",
+    "standard_stripes_right_star":"#61BFC4",
+    "standard":                  "#61BFC4",
 }
+
+def bar_color_for(style: str) -> str:
+    return BAR_COLORS.get(style, DEFAULT_HEX)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pixelgenaue Layouts (für 1075x340px Vorlagen)
+# Alle neuen Karten verwenden NEW; nur "standard" nutzt STD.
+# Wenn du "standard" exakt wie NEW willst, setz LAYOUTS["standard"]=LAYOUTS["new"]
+# ──────────────────────────────────────────────────────────────────────────────
 BASE_W, BASE_H = 1075, 340
-BASE_FONTS = { "username": 34, "rank": 53, "level": 38, "xp": 30 }  # aus deinem alten Layout
 
-def _scale_sizes(img_w, img_h):
-    # konservatives Scaling: orientier dich an der Höhe (Pillen/Abstände)
-    s = img_h / BASE_H
-    return s
+LAYOUTS = {
+    "new": {  # alle neuen Karten (gleiches Layout)
+        "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38},
+        "xp_center":   {"x": 931, "y": 223, "font": 30},
+        "bar":         {"x": 209, "y": 276, "w": 675, "h": 36, "r": 6},
+    },
+    "standard": {  # falls der Standard leicht abweicht – hier getrennt definieren
+        "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38},
+        "xp_center":   {"x": 931, "y": 223, "font": 30},
+        "bar":         {"x": 209, "y": 276, "w": 675, "h": 36, "r": 6},
+    }
+}
 
-def _px_w(img_w, r): return int(round(img_w * r))
-def _px_h(img_h, r): return int(round(img_h * r))
+# Fonts
+FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
-def _mk_font(path, base_size, s):
-    return ImageFont.truetype(path, size=max(8, int(round(base_size * s))))
+# ──────────────────────────────────────────────────────────────────────────────
+# Render-Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+def _mk_font(size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(FONT_PATH, size=max(8, int(size)))
 
-def _center_text(draw, cx, cy, text, font, fill):
+def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
+                 text: str, font: ImageFont.FreeTypeFont, fill: str):
     w = draw.textlength(text, font=font)
-    h = font.getbbox(text)[3] - font.getbbox(text)[1]
+    bbox = font.getbbox(text)
+    h = bbox[3] - bbox[1]
     draw.text((cx - w/2, cy - h/2), text, font=font, fill=fill)
 
-def _truncate_to_width(draw, text, font, max_px):
+def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
     if draw.textlength(text, font=font) <= max_px:
         return text
     ell = "…"
@@ -79,27 +103,33 @@ def _truncate_to_width(draw, text, font, max_px):
         text = text[:-1]
     return text + ell
 
+def _pick_layout(style: str) -> dict:
+    """Welche Layoutgruppe? alle neuen = 'new', nur 'standard' = 'standard'."""
+    return LAYOUTS["standard"] if style.lower() == "standard" else LAYOUTS["new"]
 
-##########
-@app_commands.guild_only()
+# ──────────────────────────────────────────────────────────────────────────────
+# Slash-Gruppe
+# ──────────────────────────────────────────────────────────────────────────────
 class Level(app_commands.Group):
     def __init__(self, bot):
-        self.bot = bot  # <--- Hinzufügen!
-        super().__init__(
-            name="levelsystem",
-            description="Alles rund ums Levelsystem."
-        )
+        self.bot = bot
+        super().__init__(name="levelsystem", description="Alles rund ums Levelsystem.")
 
-    # ---------- /rank ----------
+    # Autocomplete
+    async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
+        names = list_styles()
+        return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
+
+    # /rank
     @app_commands.command(name="rank", description="Sendet deine Levelcard.")
-    @commands.cooldown(1, 3, commands.BucketType.user)
+    @app_commands.checks.cooldown(1, 3)  # 1x alle 3s
     @app_commands.guild_only()
-    async def rank(self, interaction: discord.Interaction, user: discord.User = None):
+    async def rank(self, interaction: discord.Interaction, user: discord.User | None = None):
         user = user or interaction.user
 
-        # --- DB: enabled & user data ---
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
+                # enabled?
                 await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id=%s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
                 if not enabled or enabled[0] == 0:
@@ -107,7 +137,7 @@ class Level(app_commands.Group):
                         "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
                         ephemeral=True
                     )
-
+                # user data
                 await cur.execute(
                     "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
                     (user.id, interaction.guild.id)
@@ -121,7 +151,7 @@ class Level(app_commands.Group):
                 xp_start, lvl_start = row
                 xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                # Style laden (Fallback → DEFAULT_STYLE)
+                # style
                 await cur.execute(
                     "SELECT style FROM levelstyle WHERE guild_id=%s AND client_id=%s",
                     (interaction.guild.id, user.id)
@@ -130,7 +160,7 @@ class Level(app_commands.Group):
                 style_name = srow[0] if srow else DEFAULT_STYLE
                 bg_path = style_to_path(style_name)
 
-                # Rank-Position berechnen
+                # rank position
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id=%s ORDER BY user_level DESC, user_xp DESC",
                     (interaction.guild.id,)
@@ -145,99 +175,86 @@ class Level(app_commands.Group):
 
         await interaction.response.defer(thinking=True)
 
-        # --- Bild + Zeichner
+        # Render
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        W, H = background.size
-        S = _scale_sizes(W, H)
+        W, H = background.size  # erwartet 1075x340
+        lay = _pick_layout(style_name)
 
-        # --- Fonts (auto scaled)
-        font_username = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["username"], S)
-        font_rank = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["rank"], S)
-        font_level = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["level"], S)
-        font_xp = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["xp"], S)
+        # fonts
+        font_username = _mk_font(lay["username"]["font"])
+        font_rank     = _mk_font(lay["rank"]["font"])
+        font_level    = _mk_font(lay["level_center"]["font"])
+        font_xp       = _mk_font(lay["xp_center"]["font"])
 
-        # --- Avatar (relativ)
-        av_size = _px_h(H, REL["avatar"]["size_h"])
-        av_x = _px_w(W, REL["avatar"]["x"])
-        av_y = _px_h(H, REL["avatar"]["y"])
-        border = max(2, _px_h(H, REL["avatar"]["border_h"]))
-
+        # avatar
+        av = lay["avatar"]
+        av_size = av["size"]
+        av_x, av_y = av["x"], av["y"]
         avatar_asset = user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
         avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
         mask = Image.new("L", (av_size, av_size), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
         background.paste(avatar, (av_x, av_y), mask)
-        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=border)
+        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=av["border"])
 
-        # --- Username (relativ + ellipsis)
-        ux = _px_w(W, REL["username"]["x"])
-        uy = _px_h(H, REL["username"]["y"])
-        umax = _px_w(W, REL["username"]["max_w"])
-        uname = _truncate_to_width(draw, str(user), font_username, umax)
+        # username
+        ux, uy = lay["username"]["x"], lay["username"]["y"]
+        uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
         draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        # --- Rang
-        rx = _px_w(W, REL["rank"]["x"])
-        ry = _px_h(H, REL["rank"]["y"])
+        # rank number
+        rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # --- Level in Pille zentriert
-        lcx = _px_w(W, REL["level_center"]["x"])
-        lcy = _px_h(H, REL["level_center"]["y"])
-        _center_text(draw, lcx, lcy, f"{lvl_start}", font_level, "white")
+        # level pill center
+        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
+        # xp pill center
+        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # --- XP in Pille zentriert
-        xcx = _px_w(W, REL["xp_center"]["x"])
-        xcy = _px_h(H, REL["xp_center"]["y"])
-        _center_text(draw, xcx, xcy, f"{xp_start}/{round(xp_end)}", font_xp, "white")
-
-        # --- Progressbar exakt in die Schiene
-        bx = _px_w(W, REL["bar"]["x"])
-        by = _px_h(H, REL["bar"]["y"])
-        bw = _px_w(W, REL["bar"]["w"])
-        bh = _px_h(H, REL["bar"]["h"])
-        br = max(3, _px_h(H, REL["bar"]["radius_h"]))
+        # progress bar fill (untere Schiene ist im PNG; wir füllen exakt hinein)
+        bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-        fill_w = int(bw * perc)
+        fill_w = int(bar["w"] * perc)
         if fill_w > 0:
-            draw.rounded_rectangle((bx, by, bx + fill_w, by + bh), radius=br, fill="#54bbbd")
+            draw.rounded_rectangle(
+                (bar["x"], bar["y"], bar["x"] + fill_w, bar["y"] + bar["h"]),
+                radius=bar["r"],
+                fill=bar_color_for(style_name)
+            )
 
-        # --- Senden
-        buffer = BytesIO()
-        background.save(buffer, format="PNG")
-        buffer.seek(0)
-        await interaction.followup.send(file=File(buffer, filename=f"rank_{style_name}.png"))
-        return None
+        buf = BytesIO()
+        background.save(buf, "PNG")
+        buf.seek(0)
+        await interaction.followup.send(file=File(buf, filename=f"rank_{style_name}.png"))
 
-    # Autocomplete-Helfer (zeigt alle PNG-Namen ohne .png)
-    async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
-        names = list_styles()
-        return [
-                   app_commands.Choice(name=n, value=n)
-                   for n in names if current.lower() in n.lower()
-               ][:25]
-
-    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card (Name = Dateiname ohne .png).")
-    @app_commands.describe(style="Style-Name (z. B. standard, Halloween_stripes, türkis_stripes)")
+    # /setstyle
+    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card (Dateiname ohne .png).")
+    @app_commands.describe(style="Style-Name, z. B. standard, Halloween_stripes …")
     @app_commands.autocomplete(style=_style_autocomplete)
+    @app_commands.guild_only()
     async def setstyle(self, interaction: discord.Interaction, style: str):
         names = list_styles()
         if not names:
-            return await interaction.response.send_message(
-                "❌ Es sind aktuell keine Styles im Ordner vorhanden.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("❌ Keine Styles gefunden.", ephemeral=True)
         if style not in names:
             return await interaction.response.send_message(
-                f"❌ Unbekannter Style `{style}`.\nVerfügbar: {', '.join(names)}",
-                ephemeral=True
+                f"❌ Unbekannter Style `{style}`.\nVerfügbar: {', '.join(names)}", ephemeral=True
             )
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Speichere den Style pro User & Guild (Upsert)
+                await cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS levelstyle (
+                        guild_id  BIGINT NOT NULL,
+                        client_id BIGINT NOT NULL,
+                        style     VARCHAR(64) NOT NULL,
+                        PRIMARY KEY (guild_id, client_id)
+                    )
+                    """
+                )
                 await cur.execute(
                     """
                     INSERT INTO levelstyle (guild_id, client_id, style)
@@ -247,17 +264,14 @@ class Level(app_commands.Group):
                     (interaction.guild.id, interaction.user.id, style)
                 )
 
-        await interaction.response.send_message(
-            f"✅ Dein Rank-Card-Style wurde auf **{style}** gesetzt.",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
+        return None
 
-    # ---------- /previewstyle ----------
-    @app_commands.command(name="previewstyle", description="Zeigt deine Rankcard mit einem Style (ohne zu speichern).")
+    # /previewstyle
+    @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
     @app_commands.describe(style="Style-Name (Dateiname ohne .png)")
+    @app_commands.autocomplete(style=_style_autocomplete)
     @app_commands.guild_only()
-    @app_commands.autocomplete(
-        style=style_autocomplete)  # oder self._style_autocomplete, je nachdem wo deine Funktion liegt
     async def previewstyle(self, interaction: discord.Interaction, style: str):
         names = list_styles()
         if style not in names:
@@ -269,7 +283,7 @@ class Level(app_commands.Group):
         await interaction.response.defer(thinking=True, ephemeral=True)
         bg_path = style_to_path(style)
 
-        # --- Userdaten aus DB (für echte Werte in der Preview)
+        # Daten für echte Vorschau
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -292,71 +306,51 @@ class Level(app_commands.Group):
                             rank_pos = i
                             break
 
-        # --- Bild + Zeichner
+        # Render (identisch zu /rank)
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        W, H = background.size
-        S = _scale_sizes(W, H)
+        lay = _pick_layout(style)
 
-        # --- Fonts
-        font_username = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["username"], S)
-        font_rank = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["rank"], S)
-        font_level = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["level"], S)
-        font_xp = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["xp"], S)
+        font_username = _mk_font(lay["username"]["font"])
+        font_rank     = _mk_font(lay["rank"]["font"])
+        font_level    = _mk_font(lay["level_center"]["font"])
+        font_xp       = _mk_font(lay["xp_center"]["font"])
 
-        # --- Avatar
-        av_size = _px_h(H, REL["avatar"]["size_h"])
-        av_x = _px_w(W, REL["avatar"]["x"])
-        av_y = _px_h(H, REL["avatar"]["y"])
-        border = max(2, _px_h(H, REL["avatar"]["border_h"]))
-
+        av = lay["avatar"]
+        av_size = av["size"]
+        av_x, av_y = av["x"], av["y"]
         avatar_asset = interaction.user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
         avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
         mask = Image.new("L", (av_size, av_size), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
         background.paste(avatar, (av_x, av_y), mask)
-        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=border)
+        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=av["border"])
 
-        # --- Username
-        ux = _px_w(W, REL["username"]["x"])
-        uy = _px_h(H, REL["username"]["y"])
-        umax = _px_w(W, REL["username"]["max_w"])
-        uname = _truncate_to_width(draw, str(interaction.user), font_username, umax)
+        ux, uy = lay["username"]["x"], lay["username"]["y"]
+        uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
         draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        # --- Rang
-        rx = _px_w(W, REL["rank"]["x"])
-        ry = _px_h(H, REL["rank"]["y"])
-        draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
+        draw.text((lay["rank"]["x"], lay["rank"]["y"]), f"#{rank_pos or '—'}", font=font_rank, fill="white")
+        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
+        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # --- Level/XP zentriert
-        lcx = _px_w(W, REL["level_center"]["x"])
-        lcy = _px_h(H, REL["level_center"]["y"])
-        _center_text(draw, lcx, lcy, f"{lvl_start}", font_level, "white")
-
-        xcx = _px_w(W, REL["xp_center"]["x"])
-        xcy = _px_h(H, REL["xp_center"]["y"])
-        _center_text(draw, xcx, xcy, f"{xp_start}/{round(xp_end)}", font_xp, "white")
-
-        # --- Progressbar
-        bx = _px_w(W, REL["bar"]["x"])
-        by = _px_h(H, REL["bar"]["y"])
-        bw = _px_w(W, REL["bar"]["w"])
-        bh = _px_h(H, REL["bar"]["h"])
-        br = max(3, _px_h(H, REL["bar"]["radius_h"]))
+        bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-        fill_w = int(bw * perc)
+        fill_w = int(bar["w"] * perc)
         if fill_w > 0:
-            draw.rounded_rectangle((bx, by, bx + fill_w, by + bh), radius=br, fill="#54bbbd")
+            draw.rounded_rectangle(
+                (bar["x"], bar["y"], bar["x"] + fill_w, bar["y"] + bar["h"]),
+                radius=bar["r"],
+                fill=bar_color_for(style)
+            )
 
-        # --- Senden
-        buffer = BytesIO()
-        background.save(buffer, "PNG")
-        buffer.seek(0)
+        buf = BytesIO()
+        background.save(buf, "PNG")
+        buf.seek(0)
         await interaction.followup.send(
             content=f"**Preview:** `{style}`",
-            file=File(buffer, filename=f"preview_{style}.png"),
+            file=File(buf, filename=f"preview_{style}.png"),
             ephemeral=True
         )
         return None
