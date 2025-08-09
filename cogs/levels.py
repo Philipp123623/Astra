@@ -153,6 +153,30 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
+def _draw_progressbar(draw: ImageDraw.ImageDraw, lay: dict, xp_start: int | float,
+                      xp_end: int | float, style_key: str):
+    """Zeichnet die Progressbar exakt in die innere Schiene laut lay['bar']."""
+    # Anteil
+    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
+
+    bar = lay["bar"]
+    inner_x = bar["x"] + bar.get("pad_x", 0)
+    inner_y = bar["y"] + bar.get("pad_y", 0)
+    inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
+    inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
+
+    # Radius = Hälfte der Höhe → sitzt perfekt in den Ecken
+    inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
+
+    fill_w = int(round(inner_w * perc))
+    if fill_w > 0:
+        right = inner_x + min(fill_w, inner_w)  # kein Bleed
+        draw.rounded_rectangle(
+            (inner_x, inner_y, right, inner_y + inner_h),
+            radius=inner_r,
+            fill=bar_color_for(style_key)
+        )
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
 # ──────────────────────────────────────────────────────────────────────────────
@@ -273,26 +297,7 @@ class Level(app_commands.Group):
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
         # -------- Progressbar (EXAKT in der inneren Schiene) --------
-        # Anteil
-        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
-        bar = lay["bar"]
-        inner_x = bar["x"] + bar.get("pad_x", 0)
-        inner_y = bar["y"] + bar.get("pad_y", 0)
-        inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
-        inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-
-        # Radius = Hälfte der Höhe → passt in die Ecken
-        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
-
-        fill_w = int(round(inner_w * perc))
-        if fill_w > 0:
-            right = inner_x + min(fill_w, inner_w)  # kein Bleed
-            draw.rounded_rectangle(
-                (inner_x, inner_y, right, inner_y + inner_h),
-                radius=inner_r,
-                fill=bar_color_for(style_name)
-            )
+        _draw_progressbar(draw, lay, xp_start, xp_end, style_name)
 
         buf = BytesIO()
         background.save(buf, "PNG")
@@ -429,25 +434,8 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # Anteil
-        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
-        # Progressbar (exakt)
-        bar = lay["bar"]
-        inner_x = bar["x"] + bar.get("pad_x", 0)
-        inner_y = bar["y"] + bar.get("pad_y", 0)
-        inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
-        inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
-
-        fill_w = int(round(inner_w * perc))
-        if fill_w > 0:
-            right = inner_x + min(fill_w, inner_w)
-            draw.rounded_rectangle(
-                (inner_x, inner_y, right, inner_y + inner_h),
-                radius=inner_r,
-                fill=bar_color_for(style)
-            )
+        # Progressbar (exakt) – identisch wie /rank
+        _draw_progressbar(draw, lay, xp_start, xp_end, style)
 
         buf = BytesIO()
         background.save(buf, "PNG")
@@ -457,6 +445,7 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{style}.png"),
             ephemeral=True
         )
+
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
