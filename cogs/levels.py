@@ -43,6 +43,41 @@ async def style_autocomplete(interaction: discord.Interaction, current: str):
         for n in names if current.lower() in n.lower()
     ][:25]
 
+# === Relative Layout (für 1075x340 entworfen; läuft prozentual auf allen Größen) ===
+REL = {
+    "avatar": { "x": 64/1075, "y": 100/340, "size_h": 138/340, "border_h": 6/340 },
+    "username": { "x": 246/1075, "y": 95/340, "max_w": 600/1075 },
+    "rank": { "x": 393/1075, "y": 157/340 },
+    "level_center": { "x": 931/1075, "y": 95/340 },
+    "xp_center":    { "x": 931/1075, "y": 223/340 },
+    "bar": { "x": 209/1075, "y": 276/340, "w": 675/1075, "h": 36/340, "radius_h": 6/340 }
+}
+BASE_W, BASE_H = 1075, 340
+BASE_FONTS = { "username": 34, "rank": 53, "level": 38, "xp": 30 }  # aus deinem alten Layout
+
+def _scale_sizes(img_w, img_h):
+    # konservatives Scaling: orientier dich an der Höhe (Pillen/Abstände)
+    s = img_h / BASE_H
+    return s
+
+def _px_w(img_w, r): return int(round(img_w * r))
+def _px_h(img_h, r): return int(round(img_h * r))
+
+def _mk_font(path, base_size, s):
+    return ImageFont.truetype(path, size=max(8, int(round(base_size * s))))
+
+def _center_text(draw, cx, cy, text, font, fill):
+    w = draw.textlength(text, font=font)
+    h = font.getbbox(text)[3] - font.getbbox(text)[1]
+    draw.text((cx - w/2, cy - h/2), text, font=font, fill=fill)
+
+def _truncate_to_width(draw, text, font, max_px):
+    if draw.textlength(text, font=font) <= max_px:
+        return text
+    ell = "…"
+    while text and draw.textlength(text + ell, font=font) > max_px:
+        text = text[:-1]
+    return text + ell
 
 
 ##########
@@ -55,13 +90,17 @@ class Level(app_commands.Group):
             description="Alles rund ums Levelsystem."
         )
 
+    # ---------- /rank ----------
     @app_commands.command(name="rank", description="Sendet deine Levelcard.")
     @commands.cooldown(1, 3, commands.BucketType.user)
+    @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction, user: discord.User = None):
         user = user or interaction.user
+
+        # --- DB: enabled & user data ---
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
+                await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id=%s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
                 if not enabled or enabled[0] == 0:
                     return await interaction.response.send_message(
@@ -70,92 +109,107 @@ class Level(app_commands.Group):
                     )
 
                 await cur.execute(
-                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
                     (user.id, interaction.guild.id)
                 )
-                result = await cur.fetchone()
-                if not result:
+                row = await cur.fetchone()
+                if not row:
                     return await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**", ephemeral=True
+                        "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**",
+                        ephemeral=True
                     )
+                xp_start, lvl_start = row
+                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                # --- Style aus DB laden (User → sonst default)
+                # Style laden (Fallback → DEFAULT_STYLE)
                 await cur.execute(
                     "SELECT style FROM levelstyle WHERE guild_id=%s AND client_id=%s",
                     (interaction.guild.id, user.id)
                 )
-                row = await cur.fetchone()
-                style_name = row[0] if row else DEFAULT_STYLE
+                srow = await cur.fetchone()
+                style_name = srow[0] if srow else DEFAULT_STYLE
                 bg_path = style_to_path(style_name)
+
+                # Rank-Position berechnen
+                await cur.execute(
+                    "SELECT client_id FROM levelsystem WHERE guild_id=%s ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id,)
+                )
+                rows = await cur.fetchall()
+                rank_pos = 0
+                if rows:
+                    for i, r in enumerate(rows, start=1):
+                        if int(r[0]) == user.id:
+                            rank_pos = i
+                            break
 
         await interaction.response.defer(thinking=True)
 
-        xp_start, lvl_start = result
-        xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
-
-        # --- Bild und Zeichner laden
+        # --- Bild + Zeichner
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
+        W, H = background.size
+        S = _scale_sizes(W, H)
 
-        # --- Fonts
-        font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
-        font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
-        font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
-        font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
+        # --- Fonts (auto scaled)
+        font_username = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["username"], S)
+        font_rank = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["rank"], S)
+        font_level = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["level"], S)
+        font_xp = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["xp"], S)
 
-        # --- Avatar
+        # --- Avatar (relativ)
+        av_size = _px_h(H, REL["avatar"]["size_h"])
+        av_x = _px_w(W, REL["avatar"]["x"])
+        av_y = _px_h(H, REL["avatar"]["y"])
+        border = max(2, _px_h(H, REL["avatar"]["border_h"]))
+
         avatar_asset = user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
-        mask = Image.new("L", (138, 138), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, 138, 138), fill=255)
-        background.paste(avatar, (64, 100), mask)
-        draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
+        mask = Image.new("L", (av_size, av_size), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
+        background.paste(avatar, (av_x, av_y), mask)
+        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=border)
 
-        # --- Username
-        draw.text((246, 95), str(user), font=font_username, fill="white")
+        # --- Username (relativ + ellipsis)
+        ux = _px_w(W, REL["username"]["x"])
+        uy = _px_h(H, REL["username"]["y"])
+        umax = _px_w(W, REL["username"]["max_w"])
+        uname = _truncate_to_width(draw, str(user), font_username, umax)
+        draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        # --- Rank (Platzierung)
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "SELECT client_id FROM levelsystem WHERE guild_id = %s ORDER BY user_level DESC, user_xp DESC",
-                    (interaction.guild.id,)
-                )
-                result2 = await cur.fetchall()
-        rank_pos = 0
-        if result2:
-            for x in result2:
-                rank_pos += 1
-                if int(x[0]) == user.id:
-                    break
-        draw.text((393, 157), f"#{rank_pos}", font=font_rank, fill="white")
+        # --- Rang
+        rx = _px_w(W, REL["rank"]["x"])
+        ry = _px_h(H, REL["rank"]["y"])
+        draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # --- Level zentriert
-        level_text = f"{lvl_start}"
-        level_width = draw.textlength(level_text, font=font_level)
-        level_height = font_level.getbbox(level_text)[3] - font_level.getbbox(level_text)[1]
-        draw.text((931 - level_width // 2, 95 - level_height // 2), level_text, font=font_level, fill="white")
+        # --- Level in Pille zentriert
+        lcx = _px_w(W, REL["level_center"]["x"])
+        lcy = _px_h(H, REL["level_center"]["y"])
+        _center_text(draw, lcx, lcy, f"{lvl_start}", font_level, "white")
 
-        # --- XP zentriert
-        xp_text = f"{xp_start}/{round(xp_end)}"
-        xp_width = draw.textlength(xp_text, font=font_xp)
-        xp_height = font_xp.getbbox(xp_text)[3] - font_xp.getbbox(xp_text)[1]
-        draw.text((931 - xp_width // 2, 223 - xp_height // 2), xp_text, font=font_xp, fill="white")
+        # --- XP in Pille zentriert
+        xcx = _px_w(W, REL["xp_center"]["x"])
+        xcy = _px_h(H, REL["xp_center"]["y"])
+        _center_text(draw, xcx, xcy, f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # --- Progressbar
-        if xp_start > 5:
-            xp_percentage = (xp_start / xp_end) if xp_end > 0 else 0
-            bar_full_width = 675
-            bar_width = int(bar_full_width * max(0.0, min(1.0, xp_percentage)))
-            draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
+        # --- Progressbar exakt in die Schiene
+        bx = _px_w(W, REL["bar"]["x"])
+        by = _px_h(H, REL["bar"]["y"])
+        bw = _px_w(W, REL["bar"]["w"])
+        bh = _px_h(H, REL["bar"]["h"])
+        br = max(3, _px_h(H, REL["bar"]["radius_h"]))
+        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+        fill_w = int(bw * perc)
+        if fill_w > 0:
+            draw.rounded_rectangle((bx, by, bx + fill_w, by + bh), radius=br, fill="#54bbbd")
 
-        # --- Bild senden
+        # --- Senden
         buffer = BytesIO()
         background.save(buffer, format="PNG")
         buffer.seek(0)
-        file = File(fp=buffer, filename=f"rank_{style_name}.png")
-        await interaction.followup.send(file=file)
+        await interaction.followup.send(file=File(buffer, filename=f"rank_{style_name}.png"))
+        return None
 
     # Autocomplete-Helfer (zeigt alle PNG-Namen ohne .png)
     async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
@@ -198,10 +252,12 @@ class Level(app_commands.Group):
             ephemeral=True
         )
 
-    @app_commands.command(name="previewstyle",
-                          description="Zeig dir deine Rankcard mit einem Style an (ohne zu speichern).")
+    # ---------- /previewstyle ----------
+    @app_commands.command(name="previewstyle", description="Zeigt deine Rankcard mit einem Style (ohne zu speichern).")
     @app_commands.describe(style="Style-Name (Dateiname ohne .png)")
-    @app_commands.autocomplete(style=style_autocomplete)
+    @app_commands.guild_only()
+    @app_commands.autocomplete(
+        style=style_autocomplete)  # oder self._style_autocomplete, je nachdem wo deine Funktion liegt
     async def previewstyle(self, interaction: discord.Interaction, style: str):
         names = list_styles()
         if style not in names:
@@ -213,53 +269,88 @@ class Level(app_commands.Group):
         await interaction.response.defer(thinking=True, ephemeral=True)
         bg_path = style_to_path(style)
 
-        # Hier nutzen wir dieselbe Render-Logik wie bei /rank – nur ohne DB-Style-Lookup
-        # (Level/XP des aufrufenden Users nehmen)
+        # --- Userdaten aus DB (für echte Werte in der Preview)
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
                     (interaction.user.id, interaction.guild.id)
                 )
-                res = await cur.fetchone()
+                row = await cur.fetchone()
+                xp_start, lvl_start = row if row else (0, 0)
+                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-        xp_start, lvl_start = res if res else (0, 0)
-        xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
+                await cur.execute(
+                    "SELECT client_id FROM levelsystem WHERE guild_id=%s ORDER BY user_level DESC, user_xp DESC",
+                    (interaction.guild.id,)
+                )
+                rows = await cur.fetchall()
+                rank_pos = 0
+                if rows:
+                    for i, r in enumerate(rows, start=1):
+                        if int(r[0]) == interaction.user.id:
+                            rank_pos = i
+                            break
 
+        # --- Bild + Zeichner
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        font_username = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=34)
-        font_rank = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=53)
-        font_level = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=38)
-        font_xp = ImageFont.truetype("cogs/fonts/Poppins-SemiBold.ttf", size=30)
+        W, H = background.size
+        S = _scale_sizes(W, H)
+
+        # --- Fonts
+        font_username = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["username"], S)
+        font_rank = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["rank"], S)
+        font_level = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["level"], S)
+        font_xp = _mk_font("cogs/fonts/Poppins-SemiBold.ttf", BASE_FONTS["xp"], S)
+
+        # --- Avatar
+        av_size = _px_h(H, REL["avatar"]["size_h"])
+        av_x = _px_w(W, REL["avatar"]["x"])
+        av_y = _px_h(H, REL["avatar"]["y"])
+        border = max(2, _px_h(H, REL["avatar"]["border_h"]))
 
         avatar_asset = interaction.user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((138, 138))
-        mask = Image.new("L", (138, 138), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, 138, 138), fill=255)
-        background.paste(avatar, (64, 100), mask)
-        draw.ellipse((64, 100, 64 + 138, 100 + 138), outline="white", width=6)
+        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
+        mask = Image.new("L", (av_size, av_size), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
+        background.paste(avatar, (av_x, av_y), mask)
+        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=border)
 
-        draw.text((246, 95), str(interaction.user), font=font_username, fill="white")
-        draw.text((393, 157), f"#—", font=font_rank, fill="white")  # Rang lassen wir in Preview offen
+        # --- Username
+        ux = _px_w(W, REL["username"]["x"])
+        uy = _px_h(H, REL["username"]["y"])
+        umax = _px_w(W, REL["username"]["max_w"])
+        uname = _truncate_to_width(draw, str(interaction.user), font_username, umax)
+        draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        level_text = f"{lvl_start}"
-        lw = draw.textlength(level_text, font=font_level)
-        lh = font_level.getbbox(level_text)[3] - font_level.getbbox(level_text)[1]
-        draw.text((931 - lw // 2, 95 - lh // 2), level_text, font=font_level, fill="white")
+        # --- Rang
+        rx = _px_w(W, REL["rank"]["x"])
+        ry = _px_h(H, REL["rank"]["y"])
+        draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
-        xp_text = f"{xp_start}/{round(xp_end)}"
-        xw = draw.textlength(xp_text, font=font_xp)
-        xh = font_xp.getbbox(xp_text)[3] - font_xp.getbbox(xp_text)[1]
-        draw.text((931 - xw // 2, 223 - xh // 2), xp_text, font=font_xp, fill="white")
+        # --- Level/XP zentriert
+        lcx = _px_w(W, REL["level_center"]["x"])
+        lcy = _px_h(H, REL["level_center"]["y"])
+        _center_text(draw, lcx, lcy, f"{lvl_start}", font_level, "white")
 
-        if xp_start > 5 and xp_end > 0:
-            perc = max(0.0, min(1.0, xp_start / xp_end))
-            bar_full_width = 675
-            bar_width = int(bar_full_width * perc)
-            draw.rounded_rectangle((209, 276, 209 + bar_width, 276 + 36), radius=6, fill="#54bbbd")
+        xcx = _px_w(W, REL["xp_center"]["x"])
+        xcy = _px_h(H, REL["xp_center"]["y"])
+        _center_text(draw, xcx, xcy, f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
+        # --- Progressbar
+        bx = _px_w(W, REL["bar"]["x"])
+        by = _px_h(H, REL["bar"]["y"])
+        bw = _px_w(W, REL["bar"]["w"])
+        bh = _px_h(H, REL["bar"]["h"])
+        br = max(3, _px_h(H, REL["bar"]["radius_h"]))
+        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+        fill_w = int(bw * perc)
+        if fill_w > 0:
+            draw.rounded_rectangle((bx, by, bx + fill_w, by + bh), radius=br, fill="#54bbbd")
+
+        # --- Senden
         buffer = BytesIO()
         background.save(buffer, "PNG")
         buffer.seek(0)
@@ -268,6 +359,7 @@ class Level(app_commands.Group):
             file=File(buffer, filename=f"preview_{style}.png"),
             ephemeral=True
         )
+        return None
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
