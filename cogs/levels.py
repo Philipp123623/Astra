@@ -10,13 +10,12 @@ from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFont
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Assets & Styles
+# Assets & Styles (unverändert)
 # ──────────────────────────────────────────────────────────────────────────────
 ASSETS_DIR = "cogs/assets/Levelcards"
 DEFAULT_STYLE = "standard"  # entspricht standard.png
 
 def list_styles():
-    """Alle .png-Dateien im Assets-Ordner (ohne .png)."""
     if not os.path.isdir(ASSETS_DIR):
         return []
     return sorted(
@@ -26,34 +25,27 @@ def list_styles():
     )
 
 def style_to_path(style_name: str) -> str:
-    """Case-insensitive PNG-Pfad zum Style; Fallback auf DEFAULT_STYLE."""
     if not os.path.isdir(ASSETS_DIR):
         return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
     for f in os.listdir(ASSETS_DIR):
-        if f.lower().endswith(".png"):
-            if os.path.splitext(f)[0].lower() == style_name.lower():
-                return os.path.join(ASSETS_DIR, f)
+        if f.lower().endswith(".png") and os.path.splitext(f)[0].lower() == style_name.lower():
+            return os.path.join(ASSETS_DIR, f)
     return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Layout-Gruppen + Skalierung
 # ──────────────────────────────────────────────────────────────────────────────
-
 def _layout_key_for_style(style: str) -> str:
-    """
-    Mappt den konkreten Style-Namen (PNG-Dateiname ohne .png)
-    auf 'new' oder 'standard'.
-    Alles außer exakt 'Levelcard_Astra' → 'new'
-    """
     s = (style or "").lower()
+    # "standard" ODER Datei namens "levelcard_astra" sollen das BLAUE Layout bekommen
     if s in ("levelcard_astra", "standard"):
         return "standard"
     return "new"
 
-# Basispixel pro Layout-Gruppe (so wurden die Koordinaten gemessen)
+# exakte PNG-Größen (gemessen)
 BASE_BY_GROUP = {
-    "new": (1075, 340),
-    "standard": (1064, 339),  # Levelcard_Astra.png
+    "new": (1075, 340),     # grüne Karte
+    "standard": (1064, 339) # blaue Karte
 }
 
 def _deepcopy(obj):
@@ -70,44 +62,36 @@ def _merge_overrides(base: dict, ovr: dict) -> dict:
     return res
 
 def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int) -> dict:
-    """Skaliert alle relevanten Koordinaten/Felder vom Basismaß auf die Bildgröße."""
     sx = dst_w / float(base_w)
     sy = dst_h / float(base_h)
-    sfont = (sx + sy) / 2.0  # Fonts mittlerer Skalierungsfaktor
-
-    def scale_dict(d: dict) -> dict:
+    sfont = (sx + sy) / 2.0
+    def sc(d: dict) -> dict:
         out = {}
         for k, v in d.items():
             if isinstance(v, dict):
-                out[k] = scale_dict(v)
-            elif k in ("x", "w", "size", "border", "pad_x", "r", "max_w"):
+                out[k] = sc(v)
+            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset"):
                 out[k] = int(round(v * sx))
-            elif k in ("y", "h", "pad_y"):
+            elif k in ("y","h","pad_y"):
                 out[k] = int(round(v * sy))
-            elif k == "font":
+            elif k == "font" or k == "min_font":
                 out[k] = max(8, int(round(v * sfont)))
             else:
                 out[k] = v
         return out
-
-    return scale_dict(layout)
+    return sc(layout)
 
 def _resolved_layout(style: str, img_w: int, img_h: int) -> dict:
-    """
-    Layout für gegebenen Style berechnen:
-    Basislayout wählen, Overrides mergen, anschließend auf die Zielbildgröße skalieren.
-    """
     key = _layout_key_for_style(style)
     base = LAYOUTS[key]
-    ovr  = STYLE_OVERRIDES.get(key, {})
-    merged = _merge_overrides(base, ovr)
+    merged = _merge_overrides(base, STYLE_OVERRIDES.get(key))
     bw, bh = BASE_BY_GROUP[key]
     return _scale_layout(merged, img_w, img_h, bw, bh)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Progressbar-Farben
 # ──────────────────────────────────────────────────────────────────────────────
-DEFAULT_HEX = "#61BFC4"  # teal
+DEFAULT_HEX = "#61BFC4"
 BAR_COLORS = {
     "türkis_stripes":              "#C980E8",
     "Halloween_stripes":           "#61BFC4",
@@ -123,42 +107,27 @@ def bar_color_for(style: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Pixelgenaue Layouts (Basiswerte)
 # ──────────────────────────────────────────────────────────────────────────────
-BASE_W, BASE_H = 1075, 340  # historisch; wird durch BASE_BY_GROUP ersetzt
-
 LAYOUTS = {
-    "new": {  # alle neuen Karten (gleiches Layout, 1075×340)
-        "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38},
-        "xp_center":   {"x": 931, "y": 223, "font": 30},
-        "bar": {
-            "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
-            "pad_x": 14, "pad_y": 6
-        },
-    },
-    "standard": {  # Levelcard_Astra (1064×339) – leicht anderes Padding
-        "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38},
-        "xp_center":   {"x": 931, "y": 223, "font": 30},
-        "bar": {
-            "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
-            "pad_x": 12, "pad_y": 6
-        },
-    }
-}
-
-# Nur Abweichungen vom Basislayout (hier redundant, aber vorbereitet)
-STYLE_OVERRIDES = {
+    # GRÜN (mit Ring IM PNG) → Avatar leicht "inset", KEIN eigener Ring zeichnen
     "new": {
-        "bar": {"x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 14, "pad_y": 6},
+        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 10, "draw_ring": False, "ring_width": 0},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 14, "pad_y": 6 },
     },
+    # BLAU (ohne Ring) → weißen Ring zeichnen, Avatar um "ring_width" einrücken
     "standard": {
-        "bar": {"x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 12, "pad_y": 6},
+        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 0,  "draw_ring": True, "ring_width": 10},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 12, "pad_y": 6 },
     }
 }
+STYLE_OVERRIDES = { }  # aktuell keine extra Overrides
 
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
@@ -202,7 +171,7 @@ class Level(app_commands.Group):
 
     # /rank
     @app_commands.command(name="rank", description="Sendet deine Levelcard.")
-    @commands.cooldown(1, 3, commands.BucketType.user)  # richtig für Slash
+    @commands.cooldown(1, 3, commands.BucketType.user)
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction, user: discord.User | None = None):
         user = user or interaction.user
@@ -261,39 +230,54 @@ class Level(app_commands.Group):
         img_w, img_h = background.size
         lay = _resolved_layout(style_name, img_w, img_h)
 
-        # fonts
-        font_username = _mk_font(lay["username"]["font"])
-        font_rank     = _mk_font(lay["rank"]["font"])
-        font_level    = _mk_font(lay["level_center"]["font"])
-        font_xp       = _mk_font(lay["xp_center"]["font"])
-
-        # avatar
+        # -------- Avatar (Ring korrekt + exakt einpassen) --------
         av = lay["avatar"]
         av_size = av["size"]
         av_x, av_y = av["x"], av["y"]
+
         avatar_asset = user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
-        mask = Image.new("L", (av_size, av_size), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
-        background.paste(avatar, (av_x, av_y), mask)
-        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=av["border"])
+        avatar_img = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
 
-        # username
+        inset = av.get("inset", 0)
+        if av.get("draw_ring", False):
+            ring_w = av.get("ring_width", 10)
+            draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
+            inset = max(inset, ring_w)
+
+        mask = Image.new("L", (av_size - 2 * inset, av_size - 2 * inset), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, mask.size[0], mask.size[1]), fill=255)
+        avatar_cropped = avatar_img.resize(mask.size)
+        background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
+
+        # -------- Username & Rang --------
+        font_username = _mk_font(lay["username"]["font"])
+        font_rank = _mk_font(lay["rank"]["font"])
+
         ux, uy = lay["username"]["x"], lay["username"]["y"]
         uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
         draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        # rank number
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # level pill center
-        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
-        # xp pill center
-        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
+        # -------- Level & XP (mittig + auto Font-Fit) --------
+        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
+            size = base_size
+            font = _mk_font(size)
+            while draw.textlength(text, font=font) > max_w and size > min_size:
+                size -= 1
+                font = _mk_font(size)
+            _center_text(draw, cx, cy, text, font, "white")
 
-        # progressbar exakt in die Schiene
+        lev_cfg = lay["level_center"]
+        xp_cfg = lay["xp_center"]
+        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
+                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
+        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
+                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
+
+        # -------- Progressbar (pixelgenau) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
         inner_x = bar["x"] + bar.get("pad_x", 0)
@@ -390,37 +374,60 @@ class Level(app_commands.Group):
                             rank_pos = i
                             break
 
-        # Render (identisch zu /rank)
+        # Render
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
         img_w, img_h = background.size
         lay = _resolved_layout(style, img_w, img_h)
 
-        font_username = _mk_font(lay["username"]["font"])
-        font_rank     = _mk_font(lay["rank"]["font"])
-        font_level    = _mk_font(lay["level_center"]["font"])
-        font_xp       = _mk_font(lay["xp_center"]["font"])
-
+        # -------- Avatar --------
         av = lay["avatar"]
         av_size = av["size"]
         av_x, av_y = av["x"], av["y"]
+
         avatar_asset = interaction.user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
-        avatar = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
-        mask = Image.new("L", (av_size, av_size), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, av_size, av_size), fill=255)
-        background.paste(avatar, (av_x, av_y), mask)
-        draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=av["border"])
+        avatar_img = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
+
+        inset = av.get("inset", 0)
+        if av.get("draw_ring", False):
+            ring_w = av.get("ring_width", 10)
+            draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
+            inset = max(inset, ring_w)
+
+        mask = Image.new("L", (av_size - 2 * inset, av_size - 2 * inset), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, mask.size[0], mask.size[1]), fill=255)
+        avatar_cropped = avatar_img.resize(mask.size)
+        background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
+
+        # -------- Username & Rang --------
+        font_username = _mk_font(lay["username"]["font"])
+        font_rank = _mk_font(lay["rank"]["font"])
 
         ux, uy = lay["username"]["x"], lay["username"]["y"]
         uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
         draw.text((ux, uy), uname, font=font_username, fill="white")
 
-        draw.text((lay["rank"]["x"], lay["rank"]["y"]), f"#{rank_pos or '—'}", font=font_rank, fill="white")
-        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font=font_level, fill="white")
-        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font=font_xp, fill="white")
+        rx, ry = lay["rank"]["x"], lay["rank"]["y"]
+        draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
-        # progressbar
+        # -------- Level & XP (mittig + auto Font-Fit) --------
+        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
+            size = base_size
+            font = _mk_font(size)
+            while draw.textlength(text, font=font) > max_w and size > min_size:
+                size -= 1
+                font = _mk_font(size)
+            _center_text(draw, cx, cy, text, font, "white")
+
+        lev_cfg = lay["level_center"]
+        xp_cfg = lay["xp_center"]
+        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
+                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
+        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
+                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
+
+        # -------- Progressbar --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
         inner_x = bar["x"] + bar.get("pad_x", 0)
