@@ -7,7 +7,7 @@ from typing import Literal
 import discord
 from discord import app_commands, File
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageChops, ImageFont
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Assets & Styles
@@ -166,9 +166,11 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
-def _draw_progressbar(draw: ImageDraw.ImageDraw, lay: dict, xp_start: int | float,
-                      xp_end: int | float, style_key: str):
-    """Zeichnet die Progressbar exakt in die innere Schiene laut lay['bar']."""
+def _draw_progressbar(background: Image.Image, lay: dict,
+                      xp_start: int | float, xp_end: int | float,
+                      style_key: str):
+    """Zeichnet die Progressbar exakt in die innere Schiene – mit Masking,
+    damit die linke Rundung unabhängig von der Breite sauber bleibt."""
     # Anteil
     perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
 
@@ -177,18 +179,27 @@ def _draw_progressbar(draw: ImageDraw.ImageDraw, lay: dict, xp_start: int | floa
     inner_y = bar["y"] + bar.get("pad_y", 0)
     inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
     inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-
-    # Radius = Hälfte der Höhe → sitzt perfekt in den Ecken
     inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
     fill_w = int(round(inner_w * perc))
-    if fill_w > 0:
-        right = inner_x + min(fill_w, inner_w)  # kein Bleed
-        draw.rounded_rectangle(
-            (inner_x, inner_y, right, inner_y + inner_h),
-            radius=inner_r,
-            fill=bar_color_for(style_key)
-        )
+    if fill_w <= 0:
+        return
+
+    # 1) Maske mit kompletter Pillenform (volle Breite) erzeugen
+    pill_mask = Image.new("L", (inner_w, inner_h), 0)
+    mdraw = ImageDraw.Draw(pill_mask)
+    mdraw.rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
+
+    # 2) Rechteck-Maske mit gewünschter Füllbreite
+    clip_mask = Image.new("L", (inner_w, inner_h), 0)
+    ImageDraw.Draw(clip_mask).rectangle((0, 0, fill_w, inner_h), fill=255)
+
+    # 3) Masken kombinieren (so bleibt links die Rundung erhalten)
+    final_mask = ImageChops.multiply(pill_mask, clip_mask)
+
+    # 4) Farbfläche erzeugen und in den Hintergrund einfügen
+    fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
+    background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
@@ -310,7 +321,7 @@ class Level(app_commands.Group):
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
         # -------- Progressbar (EXAKT in der inneren Schiene) --------
-        _draw_progressbar(draw, lay, xp_start, xp_end, style_name)
+        _draw_progressbar(background, lay, xp_start, xp_end, style_name)
 
         buf = BytesIO()
         background.save(buf, "PNG")
@@ -457,7 +468,7 @@ class Level(app_commands.Group):
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
         # Progressbar (exakt)
-        _draw_progressbar(draw, lay, xp_start, xp_end, internal_style)
+        _draw_progressbar(background, lay, xp_start, xp_end, style_name)
 
         buf = BytesIO()
         background.save(buf, "PNG")
