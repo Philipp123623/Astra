@@ -144,10 +144,16 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
+                await cur.execute("""
+                                  CREATE TABLE IF NOT EXISTS levelstyle
+                                  (
+                                      guild_id  BIGINT       NOT NULL,
+                                      client_id BIGINT       NOT NULL,
+                                      style     VARCHAR(128) NOT NULL,
+                                      PRIMARY KEY (guild_id, client_id)
+                                  )
+                                  """)
 
-                await cur.execute("DROP TABLE community_goal_conditions;")
-                await cur.execute("DROP TABLE community_goals;")
-                await cur.execute("DROP TABLE goal_bans;")
                 await cur.execute(
                     "CREATE TABLE community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at BIGINT NOT NULL, ends_at BIGINT NOT NULL, reward_role_id BIGINT NULL, reward_text VARCHAR(255) NULL, active BOOLEAN DEFAULT TRUE, channel_id BIGINT NOT NULL, msg_id BIGINT NOT NULL)")
 
