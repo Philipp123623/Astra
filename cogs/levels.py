@@ -175,7 +175,7 @@ def _draw_progressbar(background: Image.Image, lay: dict,
                       style_key: str):
     """Füllt die innere Schiene pixelgenau. Linke Rundung entspricht IMMER der Slot-Rundung."""
     # Anteil
-    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end))))
+    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
     if perc <= 0.0:
         return
 
