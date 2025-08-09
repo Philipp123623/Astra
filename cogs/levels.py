@@ -10,7 +10,7 @@ from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFont
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Assets & Styles (unverändert)
+# Assets & Styles
 # ──────────────────────────────────────────────────────────────────────────────
 ASSETS_DIR = "cogs/assets/Levelcards"
 DEFAULT_STYLE = "standard"  # entspricht standard.png
@@ -44,8 +44,8 @@ def _layout_key_for_style(style: str) -> str:
 
 # exakte PNG-Größen (gemessen)
 BASE_BY_GROUP = {
-    "new": (1075, 340),     # grüne Karte
-    "standard": (1064, 339) # blaue Karte
+    "new": (1075, 340),     # grüne / neue Karten
+    "standard": (1064, 339) # blaue Standardkarte
 }
 
 def _deepcopy(obj):
@@ -108,26 +108,28 @@ def bar_color_for(style: str) -> str:
 # Pixelgenaue Layouts (Basiswerte)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # GRÜN (mit Ring IM PNG) → Avatar leicht "inset", KEIN eigener Ring zeichnen
+    # NEUE Karten (Ring ist im PNG) → Avatar leicht „inset“, KEIN eigener Ring
     "new": {
-        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 10, "draw_ring": False, "ring_width": 0},
+        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 16, "draw_ring": False, "ring_width": 0},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 14, "pad_y": 6 },
+        # Bar exakt in Schiene (leicht engeres Padding, etwas größerer Radius)
+        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 16, "pad_x": 8, "pad_y": 8 },
     },
-    # BLAU (ohne Ring) → weißen Ring zeichnen, Avatar um "ring_width" einrücken
+    # STANDARD (ohne Ring) → weißen Ring zeichnen, Avatar nach innen versetzen
     "standard": {
         "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 0,  "draw_ring": True, "ring_width": 10},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 12, "pad_y": 6 },
+        # Etwas anderes Padding für die blaue Schiene
+        "bar": { "x": 209, "y": 276, "w": 675, "h": 36, "r": 16, "pad_x": 8, "pad_y": 8 },
     }
 }
-STYLE_OVERRIDES = { }  # aktuell keine extra Overrides
+STYLE_OVERRIDES = {}
 
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
@@ -152,10 +154,6 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
-def _pick_layout(style: str) -> dict:
-    """Welche Layoutgruppe? alle neuen = 'new', nur 'standard' = 'standard'."""
-    return LAYOUTS["standard"] if style.lower() == "standard" else LAYOUTS["new"]
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
 # ──────────────────────────────────────────────────────────────────────────────
@@ -178,7 +176,6 @@ class Level(app_commands.Group):
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # enabled?
                 await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id=%s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
                 if not enabled or enabled[0] == 0:
@@ -186,7 +183,7 @@ class Level(app_commands.Group):
                         "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
                         ephemeral=True
                     )
-                # user data
+
                 await cur.execute(
                     "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
                     (user.id, interaction.guild.id)
@@ -200,7 +197,6 @@ class Level(app_commands.Group):
                 xp_start, lvl_start = row
                 xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
-                # style
                 await cur.execute(
                     "SELECT style FROM levelstyle WHERE guild_id=%s AND client_id=%s",
                     (interaction.guild.id, user.id)
@@ -209,7 +205,6 @@ class Level(app_commands.Group):
                 style_name = srow[0] if srow else DEFAULT_STYLE
                 bg_path = style_to_path(style_name)
 
-                # rank position
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id=%s ORDER BY user_level DESC, user_xp DESC",
                     (interaction.guild.id,)
@@ -230,7 +225,7 @@ class Level(app_commands.Group):
         img_w, img_h = background.size
         lay = _resolved_layout(style_name, img_w, img_h)
 
-        # -------- Avatar (Ring korrekt + exakt einpassen) --------
+        # -------- Avatar --------
         av = lay["avatar"]
         av_size = av["size"]
         av_x, av_y = av["x"], av["y"]
@@ -245,9 +240,10 @@ class Level(app_commands.Group):
             draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
-        mask = Image.new("L", (av_size - 2 * inset, av_size - 2 * inset), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, mask.size[0], mask.size[1]), fill=255)
-        avatar_cropped = avatar_img.resize(mask.size)
+        mask_size = (av_size - 2 * inset, av_size - 2 * inset)
+        mask = Image.new("L", mask_size, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, mask_size[0], mask_size[1]), fill=255)
+        avatar_cropped = avatar_img.resize(mask_size)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # -------- Username & Rang --------
@@ -261,7 +257,7 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # -------- Level & XP (mittig + auto Font-Fit) --------
+        # -------- Level & XP (mittig + Auto-Fit) --------
         def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
             size = base_size
             font = _mk_font(size)
@@ -277,19 +273,28 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # -------- Progressbar (pixelgenau) --------
+        # -------- Progressbar (pixelgenau, ohne linken Gap) --------
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = max(1, int(bar.get("r", 6) * 0.8))
+        inner_r = max(1, int(bar.get("r", 12)))
+
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
+            # 1px „Bleed“ nach links/rechts, damit kein sichtbarer Spalt bleibt
+            bleed = 1
+            left = inner_x - bleed
+            right = inner_x + fill_w + bleed
+            # Clampen auf die innere Schiene
+            left = max(left, inner_x)
+            right = min(right, inner_x + inner_w)
             draw.rounded_rectangle(
-                (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
-                radius=inner_r,
+                (left, inner_y, right, inner_y + inner_h),
+                radius=min(inner_r, inner_h // 2),
                 fill=bar_color_for(style_name)
             )
 
@@ -380,7 +385,7 @@ class Level(app_commands.Group):
         img_w, img_h = background.size
         lay = _resolved_layout(style, img_w, img_h)
 
-        # -------- Avatar --------
+        # Avatar
         av = lay["avatar"]
         av_size = av["size"]
         av_x, av_y = av["x"], av["y"]
@@ -395,12 +400,13 @@ class Level(app_commands.Group):
             draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
-        mask = Image.new("L", (av_size - 2 * inset, av_size - 2 * inset), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, mask.size[0], mask.size[1]), fill=255)
-        avatar_cropped = avatar_img.resize(mask.size)
+        mask_size = (av_size - 2 * inset, av_size - 2 * inset)
+        mask = Image.new("L", mask_size, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, mask_size[0], mask_size[1]), fill=255)
+        avatar_cropped = avatar_img.resize(mask_size)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # -------- Username & Rang --------
+        # Username & Rang
         font_username = _mk_font(lay["username"]["font"])
         font_rank = _mk_font(lay["rank"]["font"])
 
@@ -411,7 +417,7 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
-        # -------- Level & XP (mittig + auto Font-Fit) --------
+        # Level & XP
         def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
             size = base_size
             font = _mk_font(size)
@@ -427,19 +433,24 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # -------- Progressbar --------
+        # Progressbar
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
-        inner_r = max(1, int(bar.get("r", 6) * 0.8))
+        inner_r = max(1, int(bar.get("r", 12)))
+
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
+            bleed = 1
+            left = max(inner_x, inner_x - bleed)
+            right = min(inner_x + inner_w, inner_x + fill_w + bleed)
             draw.rounded_rectangle(
-                (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
-                radius=inner_r,
+                (left, inner_y, right, inner_y + inner_h),
+                radius=min(inner_r, inner_h // 2),
                 fill=bar_color_for(style)
             )
 
@@ -451,6 +462,7 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{style}.png"),
             ephemeral=True
         )
+
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
