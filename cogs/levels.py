@@ -35,6 +35,10 @@ def style_to_path(style_name: str) -> str:
                 return os.path.join(ASSETS_DIR, f)
     return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Layout-Gruppen + Skalierung
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _layout_key_for_style(style: str) -> str:
     """
     Mappt den konkreten Style-Namen (PNG-Dateiname ohne .png)
@@ -46,30 +50,66 @@ def _layout_key_for_style(style: str) -> str:
         return "standard"
     return "new"
 
-def _resolved_layout(style: str) -> dict:
-    """
-    Nimmt das Basislayout ('new' oder 'standard') und merged die Overrides rein.
-    """
-    base_key = _layout_key_for_style(style)
-    base = LAYOUTS[base_key]
+# Basispixel pro Layout-Gruppe (so wurden die Koordinaten gemessen)
+BASE_BY_GROUP = {
+    "new": (1075, 340),
+    "standard": (1064, 339),  # Levelcard_Astra.png
+}
 
-    # deep copy, damit wir das Original nicht anfassen
+def _deepcopy(obj):
     import json as _json
-    res = _json.loads(_json.dumps(base))
+    return _json.loads(_json.dumps(obj))
 
-    ovr = STYLE_OVERRIDES.get(base_key, {})
-    for k, v in ovr.items():
-        if isinstance(v, dict) and k in res:
+def _merge_overrides(base: dict, ovr: dict) -> dict:
+    res = _deepcopy(base)
+    for k, v in (ovr or {}).items():
+        if isinstance(v, dict) and isinstance(res.get(k), dict):
             res[k].update(v)
         else:
             res[k] = v
     return res
 
+def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int) -> dict:
+    """Skaliert alle relevanten Koordinaten/Felder vom Basismaß auf die Bildgröße."""
+    sx = dst_w / float(base_w)
+    sy = dst_h / float(base_h)
+    sfont = (sx + sy) / 2.0  # Fonts mittlerer Skalierungsfaktor
 
-# Progressbar-Farbe pro Style (Fallback → DEFAULT_HEX)
+    def scale_dict(d: dict) -> dict:
+        out = {}
+        for k, v in d.items():
+            if isinstance(v, dict):
+                out[k] = scale_dict(v)
+            elif k in ("x", "w", "size", "border", "pad_x", "r", "max_w"):
+                out[k] = int(round(v * sx))
+            elif k in ("y", "h", "pad_y"):
+                out[k] = int(round(v * sy))
+            elif k == "font":
+                out[k] = max(8, int(round(v * sfont)))
+            else:
+                out[k] = v
+        return out
+
+    return scale_dict(layout)
+
+def _resolved_layout(style: str, img_w: int, img_h: int) -> dict:
+    """
+    Layout für gegebenen Style berechnen:
+    Basislayout wählen, Overrides mergen, anschließend auf die Zielbildgröße skalieren.
+    """
+    key = _layout_key_for_style(style)
+    base = LAYOUTS[key]
+    ovr  = STYLE_OVERRIDES.get(key, {})
+    merged = _merge_overrides(base, ovr)
+    bw, bh = BASE_BY_GROUP[key]
+    return _scale_layout(merged, img_w, img_h, bw, bh)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Progressbar-Farben
+# ──────────────────────────────────────────────────────────────────────────────
 DEFAULT_HEX = "#61BFC4"  # teal
 BAR_COLORS = {
-    "türkis_stripes":              "#C980E8",  # lila (wie in deinem Beispiel)
+    "türkis_stripes":              "#C980E8",
     "Halloween_stripes":           "#61BFC4",
     "Christmas_stripes":           "#61BFC4",
     "Easter_stripes":              "#61BFC4",
@@ -81,25 +121,23 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (für 1075x340px Vorlagen)
-# Alle neuen Karten verwenden NEW; nur "standard" nutzt STD.
+# Pixelgenaue Layouts (Basiswerte)
 # ──────────────────────────────────────────────────────────────────────────────
-BASE_W, BASE_H = 1075, 340
+BASE_W, BASE_H = 1075, 340  # historisch; wird durch BASE_BY_GROUP ersetzt
 
 LAYOUTS = {
-    "new": {  # alle neuen Karten (gleiches Layout)
+    "new": {  # alle neuen Karten (gleiches Layout, 1075×340)
         "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38},
         "xp_center":   {"x": 931, "y": 223, "font": 30},
-        # Schiene (weißer Rahmen im PNG). Wir füllen NUR die innere Fläche:
         "bar": {
             "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
             "pad_x": 14, "pad_y": 6
         },
     },
-    "standard": {  # Standard leicht anders (Pills / Schiene minimal versetzt)
+    "standard": {  # Levelcard_Astra (1064×339) – leicht anderes Padding
         "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
@@ -111,19 +149,14 @@ LAYOUTS = {
         },
     }
 }
-# Nur die Abweichungen vom Basislayout
+
+# Nur Abweichungen vom Basislayout (hier redundant, aber vorbereitet)
 STYLE_OVERRIDES = {
-    "new": {  # alle neuen Karten
-        "bar": {
-            "x": 209, "y": 276, "w": 675, "h": 36,
-            "r": 12, "pad_x": 14, "pad_y": 6
-        },
+    "new": {
+        "bar": {"x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 14, "pad_y": 6},
     },
-    "standard": {  # alte Standardkarte
-        "bar": {
-            "x": 209, "y": 276, "w": 675, "h": 36,
-            "r": 12, "pad_x": 12, "pad_y": 6
-        },
+    "standard": {
+        "bar": {"x": 209, "y": 276, "w": 675, "h": 36, "r": 12, "pad_x": 12, "pad_y": 6},
     }
 }
 
@@ -225,7 +258,8 @@ class Level(app_commands.Group):
         # Render
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        lay = _resolved_layout(style_name)
+        img_w, img_h = background.size
+        lay = _resolved_layout(style_name, img_w, img_h)
 
         # fonts
         font_username = _mk_font(lay["username"]["font"])
@@ -264,10 +298,10 @@ class Level(app_commands.Group):
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
-        inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
-        inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
+        inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
+        inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
         inner_r = max(1, int(bar.get("r", 6) * 0.8))
-        fill_w = int(inner_w * perc)
+        fill_w = int(round(inner_w * perc))
         if fill_w > 0:
             draw.rounded_rectangle(
                 (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
@@ -359,7 +393,8 @@ class Level(app_commands.Group):
         # Render (identisch zu /rank)
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        lay = _resolved_layout(style)
+        img_w, img_h = background.size
+        lay = _resolved_layout(style, img_w, img_h)
 
         font_username = _mk_font(lay["username"]["font"])
         font_rank     = _mk_font(lay["rank"]["font"])
@@ -382,18 +417,18 @@ class Level(app_commands.Group):
         draw.text((ux, uy), uname, font=font_username, fill="white")
 
         draw.text((lay["rank"]["x"], lay["rank"]["y"]), f"#{rank_pos or '—'}", font=font_rank, fill="white")
-        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
-        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
+        _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font=font_level, fill="white")
+        _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font=font_xp, fill="white")
 
         # progressbar
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
-        inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
-        inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
+        inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
+        inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
         inner_r = max(1, int(bar.get("r", 6) * 0.8))
-        fill_w = int(inner_w * perc)
+        fill_w = int(round(inner_w * perc))
         if fill_w > 0:
             draw.rounded_rectangle(
                 (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
