@@ -107,28 +107,26 @@ def bar_color_for(style: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
     "new": {
-        "avatar":      {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
-
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
+        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
+        "rank": {"x": 393, "y": 157, "font": 53},
+        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
 
         # Progressbar (innen)
-        # radius_adj -> macht die Rundung "flacher"
-        # ox/oy -> feiner Versatz, falls das PNG minimal verschoben gerastert ist
-        "bar": {"x": 214, "y": 276, "w": 679, "h": 37, "r": 16, "pad_x": 0, "pad_y": 0},
+        "bar": {"x": 214, "y": 276, "w": 679, "h": 37, "r": 13, "pad_x": 0, "pad_y": 0, "oy": -1}
+        # r = 13 (flacher), oy = -1 (1px nach oben)
     },
 
     "standard": {
-        "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
-        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
-        "rank":        {"x": 393, "y": 157, "font": 53},
-        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
+        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
+        "rank": {"x": 393, "y": 157, "font": 53},
+        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
 
-        # Progressbar (innen)
-        "bar": {"x": 208, "y": 275, "w": 679, "h": 37, "r": 15, "pad_x": 0, "pad_y": 0},
+        "bar": {"x": 208, "y": 275, "w": 679, "h": 37, "r": 12, "pad_x": 0, "pad_y": 0}
+        # r = 12 für die Standardkarte
     }
 }
 
