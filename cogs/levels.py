@@ -359,7 +359,7 @@ class Level(app_commands.Group):
         # Render (identisch zu /rank)
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        lay = _resolved_layout(style_name)
+        lay = _resolved_layout(style)
 
         font_username = _mk_font(lay["username"]["font"])
         font_rank     = _mk_font(lay["rank"]["font"])
