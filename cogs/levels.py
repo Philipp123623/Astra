@@ -106,26 +106,27 @@ def bar_color_for(style: str) -> str:
 # Pixelgenaue Layouts (ausgemessen!)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # NEUE Karten (Ring im PNG) – Avatar exakt in den weißen Ring einpassen
+    # NEUE Karten (türkis, Ring im PNG)
     "new": {
-        # großer Frame + kleiner inset -> Avatar sitzt im Ring
-        "avatar":      {"x": 58,  "y": 94,  "size": 154, "inset": 9,  "draw_ring": False, "ring_width": 0},
+        "avatar":      {"x": 58,  "y": 92,  "size": 154, "inset": 11, "draw_ring": False, "ring_width": 0},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # innerer Slot der Schiene (pixelgenau)
-        "bar": { "x": 214, "y": 276, "w": 680, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0 },
+        # Progressbar: etwas tiefer + flacher, Rundung enger
+        "bar":         {"x": 215, "y": 278, "w": 678, "h": 34, "r": 17, "pad_x": 0, "pad_y": 0},
     },
-    # STANDARD (ohne Ring) – weißen Ring selbst zeichnen
+
+    # STANDARD (blau, Ring wird gezeichnet)
     "standard": {
-        "avatar":      {"x": 64,  "y": 100, "size": 138, "inset": 0,  "draw_ring": True, "ring_width": 10},
+        # etwas stärkerer Ring + 2px höher für optisches Zentrieren
+        "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # innerer Slot der Schiene (pixelgenau)
-        "bar": { "x": 208, "y": 275, "w": 680, "h": 38, "r": 19, "pad_x": 0, "pad_y": 0 },
+        # Progressbar: Slot exakt eingepasst
+        "bar":         {"x": 206, "y": 276, "w": 684, "h": 36, "r": 18, "pad_x": 0, "pad_y": 0},
     }
 }
 STYLE_OVERRIDES = {}
