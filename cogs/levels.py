@@ -120,7 +120,7 @@ LAYOUTS = {
 
         # Progressbar (Außen: 209..898 / 271..318 ; Innen: 214..893 / 276..313)
         # → pad = 5 in beide Richtungen, r als Pill (H/2)
-        "bar": {"x": 209, "y": 271, "w": 898-209, "h": 318-271, "r": 999, "pad_x": 5, "pad_y": 5},
+        "bar": {"x": 209, "y": 271, "w": 898-209, "h": 318-271, "r": 18, "pad_x": 5, "pad_y": 5},
     },
 
     # STANDARD (Blau, Ring wird gezeichnet)
@@ -134,7 +134,7 @@ LAYOUTS = {
         "rank": {"x": 393, "y": 157, "font": 53},
 
         # Progressbar (Außen: 203..892 / 270..317 ; Innen: 208..887 / 275..312)
-        "bar": {"x": 203, "y": 270, "w": 892-203, "h": 317-270, "r": 999, "pad_x": 5, "pad_y": 5},
+        "bar": {"x": 203, "y": 270, "w": 892-203, "h": 317-270, "r": 18, "pad_x": 5, "pad_y": 5},
     }
 }
 
@@ -303,21 +303,28 @@ class Level(app_commands.Group):
         if lay.get("xp_box"):
             draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        # -------- Progressbar (pixelgenau, bündig) --------
+        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
         bar = lay["bar"]
+
+        # Prozentanteil berechnen
+        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
 
-        # Fixer, exakter Radius:
+        # Fixer, exakter Radius
         inner_r = int(bar.get("r", max(1, inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
             right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
-            draw.rounded_rectangle((inner_x, inner_y, right, inner_y + inner_h),
-                                   radius=inner_r, fill=bar_color_for(style_name))
+            draw.rounded_rectangle(
+                (inner_x, inner_y, right, inner_y + inner_h),
+                radius=inner_r,
+                fill=bar_color_for(style_name)
+            )
 
         buf = BytesIO()
         background.save(buf, "PNG")
@@ -445,21 +452,28 @@ class Level(app_commands.Group):
         if lay.get("xp_box"):
             draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        # Progressbar
+        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
         bar = lay["bar"]
+
+        # Prozentanteil berechnen
+        perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
 
-        # Fixer, exakter Radius:
+        # Fixer, exakter Radius
         inner_r = int(bar.get("r", max(1, inner_h // 2)))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
             right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
-            draw.rounded_rectangle((inner_x, inner_y, right, inner_y + inner_h),
-                                   radius=inner_r, fill=bar_color_for(style))
+            draw.rounded_rectangle(
+                (inner_x, inner_y, right, inner_y + inner_h),
+                radius=inner_r,
+                fill=bar_color_for(style_name)
+            )
 
         buf = BytesIO()
         background.save(buf, "PNG")
