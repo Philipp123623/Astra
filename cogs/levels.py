@@ -35,6 +35,37 @@ def style_to_path(style_name: str) -> str:
                 return os.path.join(ASSETS_DIR, f)
     return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
 
+def _layout_key_for_style(style: str) -> str:
+    """
+    Mappt den konkreten Style-Namen (PNG-Dateiname ohne .png)
+    auf 'new' oder 'standard'.
+    Alles außer exakt 'Levelcard_Astra' → 'new'
+    """
+    s = (style or "").lower()
+    if s in ("levelcard_astra", "standard"):
+        return "standard"
+    return "new"
+
+def _resolved_layout(style: str) -> dict:
+    """
+    Nimmt das Basislayout ('new' oder 'standard') und merged die Overrides rein.
+    """
+    base_key = _layout_key_for_style(style)
+    base = LAYOUTS[base_key]
+
+    # deep copy, damit wir das Original nicht anfassen
+    import json as _json
+    res = _json.loads(_json.dumps(base))
+
+    ovr = STYLE_OVERRIDES.get(base_key, {})
+    for k, v in ovr.items():
+        if isinstance(v, dict) and k in res:
+            res[k].update(v)
+        else:
+            res[k] = v
+    return res
+
+
 # Progressbar-Farbe pro Style (Fallback → DEFAULT_HEX)
 DEFAULT_HEX = "#61BFC4"  # teal
 BAR_COLORS = {
@@ -77,6 +108,21 @@ LAYOUTS = {
         "bar": {
             "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
             "pad_x": 12, "pad_y": 6
+        },
+    }
+}
+# Nur die Abweichungen vom Basislayout
+STYLE_OVERRIDES = {
+    "new": {  # alle neuen Karten
+        "bar": {
+            "x": 209, "y": 276, "w": 675, "h": 36,
+            "r": 12, "pad_x": 14, "pad_y": 6
+        },
+    },
+    "standard": {  # alte Standardkarte
+        "bar": {
+            "x": 209, "y": 276, "w": 675, "h": 36,
+            "r": 12, "pad_x": 12, "pad_y": 6
         },
     }
 }
@@ -179,7 +225,7 @@ class Level(app_commands.Group):
         # Render
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        lay = _pick_layout(style_name)
+        lay = _resolved_layout(style_name)
 
         # fonts
         font_username = _mk_font(lay["username"]["font"])
@@ -313,7 +359,7 @@ class Level(app_commands.Group):
         # Render (identisch zu /rank)
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        lay = _pick_layout(style)
+        lay = _resolved_layout(style_name)
 
         font_username = _mk_font(lay["username"]["font"])
         font_rank     = _mk_font(lay["rank"]["font"])
