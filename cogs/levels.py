@@ -132,6 +132,19 @@ LAYOUTS = {
 STYLE_OVERRIDES = {}
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
+# -------------------------------------------
+# Pretty names -> interne Dateinamen (ohne .png)
+# -------------------------------------------
+PRETTY_TO_FILENAME = {
+    "Standard": "standard",
+    "Türkis Stripes": "türkis_stripes",
+    "Halloween Stripes": "Halloween_stripes",
+    "Christmas Stripes": "Christmas_stripes",
+    "Easter Stripes": "Easter_stripes",
+    "Standard Stripes Left Star": "standard_stripes_left_star",
+    "Standard Stripes Right Star": "standard_stripes_right_star",
+}
+PRETTY_CHOICES = tuple(PRETTY_TO_FILENAME.keys())
 # ──────────────────────────────────────────────────────────────────────────────
 # Render-Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -305,26 +318,31 @@ class Level(app_commands.Group):
         await interaction.followup.send(file=File(buf, filename=f"rank_{style_name}.png"))
 
     # /setstyle
-    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card (Dateiname ohne .png).")
-    @app_commands.describe(style="Style-Name, z. B. standard, Halloween_stripes …")
-    @app_commands.autocomplete(style=_style_autocomplete)
+    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card.")
+    @app_commands.describe(style="Style-Name")
     @app_commands.guild_only()
-    async def setstyle(self, interaction: discord.Interaction, style: str):
-        names = list_styles()
-        if not names:
-            return await interaction.response.send_message("❌ Keine Styles gefunden.", ephemeral=True)
-        if style not in names:
+    async def setstyle(
+            self,
+            interaction: discord.Interaction,
+            style: Literal[PRETTY_CHOICES],  # zeigt hübsche Namen ohne Unterstriche
+    ):
+        internal_style = PRETTY_TO_FILENAME[style]  # map auf Dateiname
+
+        # optional: Existenzcheck im Assets-Ordner
+        available = set(list_styles())
+        if internal_style not in available:
             return await interaction.response.send_message(
-                f"❌ Unbekannter Style `{style}`.\nVerfügbar: {', '.join(names)}", ephemeral=True
+                f"❌ Der Style **{style}** ist (noch) nicht verfügbar.", ephemeral=True
             )
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS levelstyle (
-                        guild_id  BIGINT NOT NULL,
-                        client_id BIGINT NOT NULL,
+                    CREATE TABLE IF NOT EXISTS levelstyle
+                    (
+                        guild_id  BIGINT      NOT NULL,
+                        client_id BIGINT      NOT NULL,
                         style     VARCHAR(64) NOT NULL,
                         PRIMARY KEY (guild_id, client_id)
                     )
@@ -336,26 +354,30 @@ class Level(app_commands.Group):
                     VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE style = VALUES(style)
                     """,
-                    (interaction.guild.id, interaction.user.id, style)
+                    (interaction.guild.id, interaction.user.id, internal_style)
                 )
 
         await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
 
     # /previewstyle
     @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
-    @app_commands.describe(style="Style-Name (Dateiname ohne .png)")
-    @app_commands.autocomplete(style=_style_autocomplete)
+    @app_commands.describe(style="Style-Name")
     @app_commands.guild_only()
-    async def previewstyle(self, interaction: discord.Interaction, style: str):
-        names = list_styles()
-        if style not in names:
+    async def previewstyle(
+            self,
+            interaction: discord.Interaction,
+            style: Literal[PRETTY_CHOICES],
+    ):
+        internal_style = PRETTY_TO_FILENAME[style]
+
+        # optional: Existenzcheck
+        if internal_style not in set(list_styles()):
             return await interaction.response.send_message(
-                f"❌ Unbekannter Style `{style}`. Verfügbar: {', '.join(names) or '—'}",
-                ephemeral=True
+                f"❌ Der Style **{style}** ist (noch) nicht verfügbar.", ephemeral=True
             )
 
         await interaction.response.defer(thinking=True, ephemeral=True)
-        bg_path = style_to_path(style)
+        bg_path = style_to_path(internal_style)
 
         # Daten für echte Vorschau
         async with self.bot.pool.acquire() as conn:
@@ -384,7 +406,7 @@ class Level(app_commands.Group):
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
         img_w, img_h = background.size
-        lay = _resolved_layout(style, img_w, img_h)
+        lay = _resolved_layout(internal_style, img_w, img_h)
 
         # Avatar
         av = lay["avatar"]
@@ -407,7 +429,7 @@ class Level(app_commands.Group):
         avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # Username & Rang (unverändert)
+        # Username & Rang
         font_username = _mk_font(lay["username"]["font"])
         font_rank = _mk_font(lay["rank"]["font"])
 
@@ -434,15 +456,15 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # Progressbar (exakt) – identisch wie /rank
-        _draw_progressbar(draw, lay, xp_start, xp_end, style)
+        # Progressbar (exakt)
+        _draw_progressbar(draw, lay, xp_start, xp_end, internal_style)
 
         buf = BytesIO()
         background.save(buf, "PNG")
         buf.seek(0)
         await interaction.followup.send(
             content=f"**Preview:** `{style}`",
-            file=File(buf, filename=f"preview_{style}.png"),
+            file=File(buf, filename=f"preview_{internal_style}.png"),
             ephemeral=True
         )
 
