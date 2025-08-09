@@ -479,7 +479,7 @@ class Level(app_commands.Group):
             draw.rounded_rectangle(
                 (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style_name)  # bzw. bar_color_for(style) in preview
+                fill=bar_color_for(style)  # bzw. bar_color_for(style) in preview
             )
 
         buf = BytesIO()
