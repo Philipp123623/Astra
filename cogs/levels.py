@@ -103,40 +103,46 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (deine exakten Maße)
+# Pixelgenaue Layouts (exakt nach deinen Maßen)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # NEUE Karten (Türkis, Ring im PNG)
+    # NEUE Karten (1075x340) – Ring ist im PNG
     "new": {
-        # Avatar: Ring im PNG → innerer Kreis hat 8px Rand (155 outer, 139 inner)
-        "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
+        # Avatar exakt in den weißen Ring (Außen 155px, Innen 139px → inset 8)
+        "avatar":      {"x": 57,  "y": 93,  "size": 155, "inset": 8,  "draw_ring": False, "ring_width": 0},
 
-        # Textboxen (optisch mittig per draw_text_in_box)
-        "name_box":  {"x1": 238, "y1": 89,  "x2": 813, "y2": 143, "font": 34, "min_font": 18, "pad": 8},
-        "level_box": {"x1": 853, "y1": 89,  "x2": 1021,"y2": 129, "font": 38, "min_font": 22, "pad": 6},
-        "xp_box":    {"x1": 853, "y1": 204, "x2": 1021,"y2": 244, "font": 30, "min_font": 18, "pad": 6},
+        # Textboxen: mittig im Feld (aus deinen Koordinaten gemittelt), max_w = rechte - linke Kante
+        "username":    {"x": 526, "y": 116, "max_w": 575, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},   # wie gehabt
 
-        "rank": {"x": 393, "y": 157, "font": 53},
+        # Level/XP Boxen
+        # Breite: 853–1021 → max_w=168, Höhe: 89–129 → y=109
+        "level_center":{"x": 937, "y": 109, "font": 38, "min_font": 22, "max_w": 168},
+        # Breite: 853–1021 → max_w=168, Höhe: 204–244 → y=224
+        "xp_center":   {"x": 937, "y": 224, "font": 30, "min_font": 18, "max_w": 168},
 
-        # Progressbar (Außen: 209..898 / 271..318 ; Innen: 214..893 / 276..313)
-        # → pad = 5 in beide Richtungen, r als Pill (H/2)
-        "bar": {"x": 209, "y": 271, "w": 898-209, "h": 318-271, "r": 18, "pad_x": 5, "pad_y": 5},
+        # Progressbar (INNEN): 214–893 (w=679), 276–313 (h=37), Radius = floor(h/2)=18
+        "bar":         {"x": 214, "y": 276, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0},
     },
 
-    # STANDARD (Blau, Ring wird gezeichnet)
+    # STANDARD Karten (1064x339) – Ring wird gezeichnet
     "standard": {
-        "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
+        # Avatar: optisch mittig, 12px Ring
+        "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
 
-        "name_box":  {"x1": 232, "y1": 88,  "x2": 808, "y2": 142, "font": 34, "min_font": 18, "pad": 8},
-        "level_box": {"x1": 847, "y1": 88,  "x2": 1015,"y2": 128, "font": 38, "min_font": 22, "pad": 6},
-        "xp_box":    {"x1": 847, "y1": 205, "x2": 1015,"y2": 243, "font": 30, "min_font": 18, "pad": 6},
+        # Box vom Namen: 232–808 (→ max_w=576), Höhe 88–142 (→ y=115)
+        "username":    {"x": 520, "y": 115, "max_w": 576, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
 
-        "rank": {"x": 393, "y": 157, "font": 53},
+        # Level/XP Boxen (847–1015 → max_w=168)
+        "level_center":{"x": 931, "y": 108, "font": 38, "min_font": 22, "max_w": 168},
+        "xp_center":   {"x": 931, "y": 224, "font": 30, "min_font": 18, "max_w": 168},
 
-        # Progressbar (Außen: 203..892 / 270..317 ; Innen: 208..887 / 275..312)
-        "bar": {"x": 203, "y": 270, "w": 892-203, "h": 317-270, "r": 18, "pad_x": 5, "pad_y": 5},
+        # Progressbar (INNEN): 208–887 (w=679), 275–312 (h=37), Radius = 18
+        "bar":         {"x": 208, "y": 275, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0},
     }
 }
+
 
 STYLE_OVERRIDES = {}
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
@@ -303,27 +309,27 @@ class Level(app_commands.Group):
         if lay.get("xp_box"):
             draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
-        bar = lay["bar"]
-
         # Prozentanteil berechnen
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
 
+        # -------- Progressbar (pixelgenau, bündig in der inneren Schiene) --------
+        bar = lay["bar"]
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
 
-        # Fixer, exakter Radius
-        inner_r = int(bar.get("r", max(1, inner_h // 2)))
+        # Pill-Radius exakt zur Slot-Höhe
+        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
+            # KEIN Bleed – füllt exakt bis zur rechten Innenkante
+            right = inner_x + min(fill_w, inner_w)
             draw.rounded_rectangle(
                 (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style_name)
+                fill=bar_color_for(style_name)  # bzw. bar_color_for(style) in preview
             )
 
         buf = BytesIO()
@@ -452,27 +458,28 @@ class Level(app_commands.Group):
         if lay.get("xp_box"):
             draw_text_in_box(draw, f"{xp_start}/{round(xp_end)}", lay["xp_box"], fill="white")
 
-        # -------- Progressbar (pixelgenau, bündig in der Schiene) --------
-        bar = lay["bar"]
-
         # Prozentanteil berechnen
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
+
+        # -------- Progressbar (pixelgenau, bündig in der inneren Schiene) --------
+        bar = lay["bar"]
 
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = max(0, bar["w"] - 2 * bar.get("pad_x", 0))
         inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
 
-        # Fixer, exakter Radius
-        inner_r = int(bar.get("r", max(1, inner_h // 2)))
+        # Pill-Radius exakt zur Slot-Höhe
+        inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
         fill_w = int(round(inner_w * perc))
         if fill_w > 0:
-            right = min(inner_x + inner_w, inner_x + fill_w + 1)  # 1px nur rechts
+            # KEIN Bleed – füllt exakt bis zur rechten Innenkante
+            right = inner_x + min(fill_w, inner_w)
             draw.rounded_rectangle(
                 (inner_x, inner_y, right, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style_name)
+                fill=bar_color_for(style_name)  # bzw. bar_color_for(style) in preview
             )
 
         buf = BytesIO()
