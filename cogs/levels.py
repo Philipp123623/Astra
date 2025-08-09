@@ -194,7 +194,7 @@ def _draw_progressbar(background: Image.Image, lay: dict,
 
     # >>> Geheimwaffe: ein paar Pixel LINKS überziehen (im SS-Raster),
     # danach clippen wir mit dem Slot -> kein Spalt möglich.
-    LEFT_OVERSCAN = 4  # SS-Pixel; 4 == 1 px im finalen Bild
+    LEFT_OVERSCAN = 8  # SS-Pixel; 4 == 1 px im finalen Bild
 
     def capsule_mask(width_px: int, overscan_left: int = 0) -> Image.Image:
         m = Image.new("L", (W2, H2), 0)
@@ -221,7 +221,7 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     fill2 = capsule_mask(FW2, overscan_left=LEFT_OVERSCAN)
 
     # kleine Aufblähung, damit AA-Pixel verschwinden
-    fill2 = fill2.filter(ImageFilter.MaxFilter(size=3))
+    fill2 = fill2.filter(ImageFilter.MaxFilter(size=5))
 
     # Clipping in den Slot (damit nichts über die weiße Schiene geht)
     final2 = ImageChops.multiply(slot2, fill2)
