@@ -169,10 +169,8 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
-    """Zeichnet die Progressbar exakt in die innere Schiene – mit Masking,
-    damit die linke Rundung unabhängig von der Breite sauber bleibt."""
     # Anteil
-    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
+    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end))))
 
     bar = lay["bar"]
     inner_x = bar["x"] + bar.get("pad_x", 0)
@@ -185,20 +183,32 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     if fill_w <= 0:
         return
 
-    # 1) Maske mit kompletter Pillenform (volle Breite) erzeugen
+    color = bar_color_for(style_key)
+
+    # 1) Breite genug? -> direkt zeichnen (passt perfekt zur Schiene)
+    if fill_w >= inner_r * 2:
+        bleed_right = 1
+        right = inner_x + min(fill_w + bleed_right, inner_w)
+        ImageDraw.Draw(background).rounded_rectangle(
+            (inner_x, inner_y, right, inner_y + inner_h),
+            radius=inner_r,
+            fill=color
+        )
+        return
+
+    # 2) Sehr schmal -> Masken-Variante (damit linke Rundung schön bleibt)
     pill_mask = Image.new("L", (inner_w, inner_h), 0)
     mdraw = ImageDraw.Draw(pill_mask)
     mdraw.rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
 
-    # 2) Rechteck-Maske mit gewünschter Füllbreite
     clip_mask = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(clip_mask).rectangle((0, 0, fill_w, inner_h), fill=255)
+    # kleiner Right-Bleed auch hier
+    bleed_right = 1
+    ImageDraw.Draw(clip_mask).rectangle((0, 0, min(fill_w + bleed_right, inner_w), inner_h), fill=255)
 
-    # 3) Masken kombinieren (so bleibt links die Rundung erhalten)
     final_mask = ImageChops.multiply(pill_mask, clip_mask)
 
-    # 4) Farbfläche erzeugen und in den Hintergrund einfügen
-    fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
+    fill_img = Image.new("RGBA", (inner_w, inner_h), color)
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -468,7 +478,7 @@ class Level(app_commands.Group):
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
         # Progressbar (exakt)
-        _draw_progressbar(background, lay, xp_start, xp_end, style_name)
+        _draw_progressbar(background, lay, xp_start, xp_end, internal_style)
 
         buf = BytesIO()
         background.save(buf, "PNG")
