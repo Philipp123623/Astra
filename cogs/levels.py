@@ -173,7 +173,11 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
-    """Füllt die innere Schiene pixelgenau. Linke Rundung entspricht IMMER der Slot-Rundung."""
+    """
+    Füllt die innere Schiene pixelgenau.
+    Linke Kante = GERADE, startet 1px rechts vom inneren Schienenrand.
+    Oben/unten bleiben durch die Slot-Maske sauber rund.
+    """
     # Anteil
     perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
     if perc <= 0.0:
@@ -186,29 +190,31 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
     inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
-    # Zielbreite der Füllung
-    fill_w = int(round(inner_w * perc))
-    if fill_w <= 0:
+    # gewünschter Start: 1px rechts vom inneren linken Rand
+    START_INSET = 1
+    OVERFILL_RIGHT = 1  # 1px nach rechts gegen AA-Säume
+
+    # Zielbreite der Füllung in Slot-Koordinaten
+    raw_fill_w = int(round(inner_w * perc))
+    # Wenn die Füllung kleiner als der Startversatz ist, sieht man nichts
+    if raw_fill_w <= START_INSET:
         return
 
-    # Slot-Maske (runde Pille) – definiert die exakten Außenkanten
+    # Slot-Maske (runde Pille) – definiert Top/Bottom und rechte Ecke
     slot_mask = Image.new("L", (inner_w, inner_h), 0)
     ImageDraw.Draw(slot_mask).rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
 
-    # Clip der aktuellen Füllbreite – etwas rechts "überfüllen", um Anti-Alias-Säume zu vermeiden
-    # und optional minimal links überlappen (negative x) – wird durch Intersection sauber abgeschnitten.
-    OVERFILL_RIGHT = 1   # 1px nach rechts, gegen Spaltenbildung
-    OVERLAP_LEFT   = 1   # 1px nach links, gegen dunklen Halbmond
+    # Clip-Rechteck mit gerader linker Kante
     clip_mask = Image.new("L", (inner_w, inner_h), 0)
-    ImageDraw.Draw(clip_mask).rectangle(
-        (-OVERLAP_LEFT, 0, min(fill_w + OVERFILL_RIGHT, inner_w), inner_h), fill=255
-    )
+    left  = START_INSET
+    right = min(raw_fill_w + OVERFILL_RIGHT, inner_w)
+    ImageDraw.Draw(clip_mask).rectangle((left, 0, right, inner_h), fill=255)
 
     final_mask = ImageChops.multiply(slot_mask, clip_mask)
 
-    # Farbe füllen und exakt in den Slot einpassen
     fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
