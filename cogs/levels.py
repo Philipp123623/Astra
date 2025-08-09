@@ -117,8 +117,7 @@ LAYOUTS = {
         # Progressbar (innen)
         # radius_adj -> macht die Rundung "flacher"
         # ox/oy -> feiner Versatz, falls das PNG minimal verschoben gerastert ist
-        "bar": {"x": 214, "y": 276, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0,
-                "radius_adj": 1, "ox": 0, "oy": 0},
+        "bar": {"x": 214, "y": 276, "w": 679, "h": 37, "r": 16, "pad_x": 0, "pad_y": 0},
     },
 
     "standard": {
@@ -129,8 +128,7 @@ LAYOUTS = {
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
 
         # Progressbar (innen)
-        "bar": {"x": 208, "y": 275, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0,
-                "radius_adj": 2, "ox": 0, "oy": 0},
+        "bar": {"x": 208, "y": 275, "w": 679, "h": 37, "r": 15, "pad_x": 0, "pad_y": 0},
     }
 }
 
@@ -172,62 +170,54 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
+from PIL import Image, ImageDraw, ImageChops, ImageFilter
+
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
-
     perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
     if perc <= 0.0:
         return
 
     bar = lay["bar"]
-    inner_x = bar["x"] + bar.get("pad_x", 0) + bar.get("ox", 0)   # <- Offset
-    inner_y = bar["y"] + bar.get("pad_y", 0) + bar.get("oy", 0)   # <- Offset
+    inner_x = bar["x"] + bar.get("pad_x", 0)
+    inner_y = bar["y"] + bar.get("pad_y", 0)
     inner_w = max(1, bar["w"] - 2 * bar.get("pad_x", 0))
     inner_h = max(1, bar["h"] - 2 * bar.get("pad_y", 0))
 
-    # Slot-Radius, leicht „flacher“ machen
-    inner_r = min(bar.get("r", inner_h // 2), inner_h // 2)
-    inner_r = max(1, inner_r - bar.get("radius_adj", 0))
+    # <-- WICHTIG: den kleineren, festen Radius verwenden
+    inner_r = max(1, min(bar.get("r", inner_h // 2), inner_h // 2))
 
-    fill_w = int(round(inner_w * perc))
-    fill_w = max(1, min(fill_w, inner_w))
+    fill_w = max(1, min(int(round(inner_w * perc)), inner_w))
 
-    # ---------- Supersampling ----------
+    # Supersampling (saubere Kanten)
     SS = 4
-    W2, H2 = inner_w * SS, inner_h * SS
-    FW2 = fill_w * SS
-    R2  = min(inner_r * SS, H2 // 2)  # Sicherheitsklemme
+    W2, H2, FW2, R2 = inner_w*SS, inner_h*SS, fill_w*SS, inner_r*SS
 
-    def capsule_mask(width_px: int, rad_px: int, full_w: int, full_h: int) -> Image.Image:
-        m = Image.new("L", (full_w, full_h), 0)
+    def capsule_mask(width_px: int) -> Image.Image:
+        m = Image.new("L", (W2, H2), 0)
         d = ImageDraw.Draw(m)
         # Mittelteil
-        left_rect = rad_px
-        right_rect = max(left_rect, width_px - rad_px)
-        d.rectangle((left_rect, 0, right_rect, full_h), fill=255)
+        left_rect = R2
+        right_rect = max(left_rect, width_px - R2)
+        d.rectangle((left_rect, 0, right_rect, H2), fill=255)
         # Linke Kappe
-        d.ellipse((0, 0, 2*rad_px, full_h), fill=255)
-        # Rechte Kappe (nur wenn breit genug)
-        if width_px > rad_px:
-            cx = width_px - 2*rad_px
-            d.ellipse((cx, 0, cx + 2*rad_px, full_h), fill=255)
+        d.ellipse((0, 0, 2*R2, H2), fill=255)
+        # Rechte Kappe nur wenn breit genug
+        if width_px > R2:
+            cx = width_px - 2*R2
+            d.ellipse((cx, 0, cx + 2*R2, H2), fill=255)
         return m
 
-    # Slot- und Füllmaske
-    slot2 = capsule_mask(W2, R2, W2, H2)
-    fill2 = capsule_mask(FW2, R2, W2, H2)
+    slot2 = capsule_mask(W2)
+    fill2 = capsule_mask(FW2)
 
-    # kleine Aufblähung, damit AA-Pixel verschwinden (1 px im SS-Raster)
+    # leicht aufblasen, damit keine AA-Pixel der Kante durchscheinen
     fill2 = fill2.filter(ImageFilter.MaxFilter(size=3))
 
-    # Clipping verhindert Überlauf über die weiße Schiene
     final2 = ImageChops.multiply(slot2, fill2)
-
-    # Zurückskalieren
     final_mask = final2.resize((inner_w, inner_h), Image.LANCZOS)
 
-    # Einfärben
     fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
 
