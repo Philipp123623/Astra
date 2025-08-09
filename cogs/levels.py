@@ -106,25 +106,29 @@ def bar_color_for(style: str) -> str:
 # Pixelgenaue Layouts (nur Progressbar nach deinen Innenmaßen)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
-    # NEUE Karten (türkis, Ring im PNG)
     "new": {
-        "avatar":      {"x": 58,  "y": 96,  "size": 154, "inset": 12, "draw_ring": False, "ring_width": 0},
+        # Avatar exakt nach deinen Maßen:
+        # Außenkreis: links=57, oben=93, Größe=155
+        # Innenkreis: 139 → inset = 8
+        "avatar":      {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
+
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar INNEN: 214–893 (w=679), 276–313 (h=37), r=18
+
+        # Progressbar (innen) exakt wie von dir angegeben
         "bar":         {"x": 214, "y": 276, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0},
     },
 
-    # STANDARD (blau, Ring wird gezeichnet)
     "standard": {
         "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
         "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-        # Progressbar INNEN: 208–887 (w=679), 275–312 (h=37), r=18
+
+        # Progressbar (innen) exakt wie von dir angegeben
         "bar":         {"x": 208, "y": 275, "w": 679, "h": 37, "r": 18, "pad_x": 0, "pad_y": 0},
     }
 }
@@ -169,8 +173,11 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
+    """Füllt die innere Schiene pixelgenau. Linke Rundung entspricht IMMER der Slot-Rundung."""
     # Anteil
-    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
+    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end))))
+    if perc <= 0.0:
+        return
 
     bar = lay["bar"]
     inner_x = bar["x"] + bar.get("pad_x", 0)
@@ -179,37 +186,30 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     inner_h = max(0, bar["h"] - 2 * bar.get("pad_y", 0))
     inner_r = min(max(1, inner_h // 2), bar.get("r", inner_h // 2))
 
+    # Zielbreite der Füllung
     fill_w = int(round(inner_w * perc))
     if fill_w <= 0:
         return
 
-    color = bar_color_for(style_key)
+    # Slot-Maske (runde Pille) – definiert die exakten Außenkanten
+    slot_mask = Image.new("L", (inner_w, inner_h), 0)
+    ImageDraw.Draw(slot_mask).rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
 
-    # 1) Breite genug? -> direkt zeichnen (passt perfekt zur Schiene)
-    if fill_w >= inner_r * 2:
-        bleed_right = 1
-        right = inner_x + min(fill_w + bleed_right, inner_w)
-        ImageDraw.Draw(background).rounded_rectangle(
-            (inner_x, inner_y, right, inner_y + inner_h),
-            radius=inner_r,
-            fill=color
-        )
-        return
-
-    # 2) Sehr schmal -> Masken-Variante (damit linke Rundung schön bleibt)
-    pill_mask = Image.new("L", (inner_w, inner_h), 0)
-    mdraw = ImageDraw.Draw(pill_mask)
-    mdraw.rounded_rectangle((0, 0, inner_w, inner_h), radius=inner_r, fill=255)
-
+    # Clip der aktuellen Füllbreite – etwas rechts "überfüllen", um Anti-Alias-Säume zu vermeiden
+    # und optional minimal links überlappen (negative x) – wird durch Intersection sauber abgeschnitten.
+    OVERFILL_RIGHT = 1   # 1px nach rechts, gegen Spaltenbildung
+    OVERLAP_LEFT   = 1   # 1px nach links, gegen dunklen Halbmond
     clip_mask = Image.new("L", (inner_w, inner_h), 0)
-    # kleiner Right-Bleed auch hier
-    bleed_right = 1
-    ImageDraw.Draw(clip_mask).rectangle((0, 0, min(fill_w + bleed_right, inner_w), inner_h), fill=255)
+    ImageDraw.Draw(clip_mask).rectangle(
+        (-OVERLAP_LEFT, 0, min(fill_w + OVERFILL_RIGHT, inner_w), inner_h), fill=255
+    )
 
-    final_mask = ImageChops.multiply(pill_mask, clip_mask)
+    final_mask = ImageChops.multiply(slot_mask, clip_mask)
 
-    fill_img = Image.new("RGBA", (inner_w, inner_h), color)
+    # Farbe füllen und exakt in den Slot einpassen
+    fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
     background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
