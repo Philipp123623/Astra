@@ -9,15 +9,13 @@ from discord import app_commands, File
 from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFont
 
-from cogs.ticket import Ticket  # falls du's brauchst
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Assets & Styles
 # ──────────────────────────────────────────────────────────────────────────────
 ASSETS_DIR = "cogs/assets/Levelcards"
 DEFAULT_STYLE = "standard"  # entspricht standard.png
 
-def list_styles() -> list[str]:
+def list_styles():
     """Alle .png-Dateien im Assets-Ordner (ohne .png)."""
     if not os.path.isdir(ASSETS_DIR):
         return []
@@ -39,26 +37,22 @@ def style_to_path(style_name: str) -> str:
 
 # Progressbar-Farbe pro Style (Fallback → DEFAULT_HEX)
 DEFAULT_HEX = "#61BFC4"  # teal
-BAR_COLORS: dict[str, str] = {
-    # deine Dateinamen aus dem Screenshot:
-    "türkis_stripes":            "#C980E8",  # lila, siehe Bild 1
-    "Halloween_stripes":         "#61BFC4",
-    "Christmas_stripes":         "#61BFC4",
-    "Easter_stripes":            "#61BFC4",
-    "standard_stripes_left_star":"#61BFC4",
-    "standard_stripes_right_star":"#61BFC4",
-    "standard":                  "#61BFC4",
+BAR_COLORS = {
+    "türkis_stripes":              "#C980E8",  # lila (wie in deinem Beispiel)
+    "Halloween_stripes":           "#61BFC4",
+    "Christmas_stripes":           "#61BFC4",
+    "Easter_stripes":              "#61BFC4",
+    "standard_stripes_left_star":  "#61BFC4",
+    "standard_stripes_right_star": "#61BFC4",
+    "standard":                    "#61BFC4",
 }
-
 def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pixelgenaue Layouts (für 1075x340px Vorlagen)
 # Alle neuen Karten verwenden NEW; nur "standard" nutzt STD.
-# Wenn du "standard" exakt wie NEW willst, setz LAYOUTS["standard"]=LAYOUTS["new"]
 # ──────────────────────────────────────────────────────────────────────────────
-
 BASE_W, BASE_H = 1075, 340
 
 LAYOUTS = {
@@ -69,26 +63,24 @@ LAYOUTS = {
         "level_center":{"x": 931, "y": 95,  "font": 38},
         "xp_center":   {"x": 931, "y": 223, "font": 30},
         # Schiene (weißer Rahmen im PNG). Wir füllen NUR die innere Fläche:
-        "bar":         {
+        "bar": {
             "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
-            "pad_x": 14, "pad_y": 6   # <- inneres Padding der Füllung
+            "pad_x": 14, "pad_y": 6
         },
     },
-    "standard": {  # Standard kann minimal anders sein
+    "standard": {  # Standard leicht anders (Pills / Schiene minimal versetzt)
         "avatar":      {"x": 64,  "y": 100, "size": 138, "border": 6},
         "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
         "rank":        {"x": 393, "y": 157, "font": 53},
         "level_center":{"x": 931, "y": 95,  "font": 38},
         "xp_center":   {"x": 931, "y": 223, "font": 30},
-        "bar":         {
+        "bar": {
             "x": 209, "y": 276, "w": 675, "h": 36, "r": 12,
             "pad_x": 12, "pad_y": 6
         },
     }
 }
 
-
-# Fonts
 FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -117,7 +109,7 @@ def _pick_layout(style: str) -> dict:
     return LAYOUTS["standard"] if style.lower() == "standard" else LAYOUTS["new"]
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Slash-Gruppe
+# Slash-Gruppe nur für Levelkarten
 # ──────────────────────────────────────────────────────────────────────────────
 class Level(app_commands.Group):
     def __init__(self, bot):
@@ -131,7 +123,7 @@ class Level(app_commands.Group):
 
     # /rank
     @app_commands.command(name="rank", description="Sendet deine Levelcard.")
-    @app_commands.checks.cooldown(1, 3)  # 1x alle 3s
+    @commands.cooldown(1, 3, commands.BucketType.user)  # richtig für Slash
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction, user: discord.User | None = None):
         user = user or interaction.user
@@ -187,7 +179,6 @@ class Level(app_commands.Group):
         # Render
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
-        W, H = background.size  # erwartet 1075x340
         lay = _pick_layout(style_name)
 
         # fonts
@@ -222,22 +213,20 @@ class Level(app_commands.Group):
         # xp pill center
         _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # --- Progressbar (exakt in die Schiene füllen)
+        # progressbar exakt in die Schiene
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
         inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
-        inner_r = max(1, int(bar.get("r", 6) * 0.8))  # innen etwas kleiner runden
-
+        inner_r = max(1, int(bar.get("r", 6) * 0.8))
         fill_w = int(inner_w * perc)
         if fill_w > 0:
             draw.rounded_rectangle(
                 (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style_name if 'style_name' in locals() else style)
+                fill=bar_color_for(style_name)
             )
 
         buf = BytesIO()
@@ -281,7 +270,6 @@ class Level(app_commands.Group):
                 )
 
         await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
-        return None
 
     # /previewstyle
     @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
@@ -351,22 +339,20 @@ class Level(app_commands.Group):
         _center_text(draw, lay["level_center"]["x"], lay["level_center"]["y"], f"{lvl_start}", font_level, "white")
         _center_text(draw, lay["xp_center"]["x"], lay["xp_center"]["y"], f"{xp_start}/{round(xp_end)}", font_xp, "white")
 
-        # --- Progressbar (exakt in die Schiene füllen)
+        # progressbar
         bar = lay["bar"]
         perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, xp_start / xp_end))
-
         inner_x = bar["x"] + bar.get("pad_x", 0)
         inner_y = bar["y"] + bar.get("pad_y", 0)
         inner_w = bar["w"] - 2 * bar.get("pad_x", 0)
         inner_h = bar["h"] - 2 * bar.get("pad_y", 0)
-        inner_r = max(1, int(bar.get("r", 6) * 0.8))  # innen etwas kleiner runden
-
+        inner_r = max(1, int(bar.get("r", 6) * 0.8))
         fill_w = int(inner_w * perc)
         if fill_w > 0:
             draw.rounded_rectangle(
                 (inner_x, inner_y, inner_x + fill_w, inner_y + inner_h),
                 radius=inner_r,
-                fill=bar_color_for(style_name if 'style_name' in locals() else style)
+                fill=bar_color_for(style)
             )
 
         buf = BytesIO()
@@ -377,7 +363,6 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{style}.png"),
             ephemeral=True
         )
-        return None
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
