@@ -36,13 +36,13 @@ def style_to_path(style_name: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 def _layout_key_for_style(style: str) -> str:
     s = (style or "").lower()
-    if s in ("levelcard_astra", "standard"):   # blaue Standardkarte
+    if s in ("levelcard_astra", "standard"):
         return "standard"
-    return "new"                               # alle anderen = neue Karten
+    return "new"
 
 BASE_BY_GROUP = {
-    "new": (1075, 340),       # neue Karten (türkis)
-    "standard": (1064, 339),  # Standardkarte (blau)
+    "new": (1075, 340),
+    "standard": (1064, 339),
 }
 
 def _deepcopy(obj):
@@ -111,12 +111,12 @@ LAYOUTS = {
         "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Name-Box: Breite 238..813, Höhe 89..143 -> exakt zentrieren
-        "name_box":  {"x0": 238, "y0": 89,  "x1": 813, "y1": 143, "base_font": 36, "min_font": 24, "pad": 22},
+        # Name-Box leicht nach rechts; zentriert im Balken
+        "name_box":  {"x0": 252, "y0": 89,  "x1": 818, "y1": 143, "base_font": 36, "min_font": 24, "pad_x": 22, "pad_y": 10},
 
-        # Level/XP-Boxen (exakt aus deinen Koordinaten)
-        "level_box": {"x0": 853, "y0": 89,  "x1": 1021, "y1": 129, "base_font": 46, "min_font": 24, "pad": 10},
-        "xp_box":    {"x0": 853, "y0": 204, "x1": 1021, "y1": 244, "base_font": 34, "min_font": 20, "pad": 10},
+        # Level/XP-Boxen – hohe Schrift möglich dank kleiner pad_y
+        "level_box": {"x0": 853, "y0": 89,  "x1": 1021, "y1": 129, "base_font": 52, "min_font": 24, "pad_x": 10, "pad_y": 4},
+        "xp_box":    {"x0": 853, "y0": 204, "x1": 1021, "y1": 244, "base_font": 40, "min_font": 20, "pad_x": 10, "pad_y": 6},
     },
 
     # Standard (1064 x 339)
@@ -124,12 +124,11 @@ LAYOUTS = {
         "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Name-Box: Breite 232..808, Höhe 88..142 -> exakt zentrieren
-        "name_box":  {"x0": 232, "y0": 88,  "x1": 808, "y1": 142, "base_font": 36, "min_font": 24, "pad": 22},
+        # Name-Box etwas nach rechts verschoben (vorher 232..808)
+        "name_box":  {"x0": 246, "y0": 88,  "x1": 813, "y1": 142, "base_font": 36, "min_font": 24, "pad_x": 22, "pad_y": 10},
 
-        # Level/XP
-        "level_box": {"x0": 847, "y0": 88,  "x1": 1015, "y1": 128, "base_font": 46, "min_font": 24, "pad": 10},
-        "xp_box":    {"x0": 847, "y0": 205, "x1": 1015, "y1": 243, "base_font": 34, "min_font": 20, "pad": 10},
+        "level_box": {"x0": 847, "y0": 88,  "x1": 1015, "y1": 128, "base_font": 52, "min_font": 24, "pad_x": 10, "pad_y": 4},
+        "xp_box":    {"x0": 847, "y0": 205, "x1": 1015, "y1": 243, "base_font": 40, "min_font": 20, "pad_x": 10, "pad_y": 6},
     }
 }
 
@@ -146,8 +145,8 @@ PRETTY_TO_FILENAME = {
     "Christmas Stripes": "Christmas_stripes",
     "Easter Stripes": "Easter_stripes",
     "Easter_stripes": "Easter_stripes",
-    "Standard Stripes Left Star": "standard_stripes_left_star",
-    "Standard Stripes Right Star": "standard_stripes_right_star",
+    "standard_stripes_left_star": "standard_stripes_left_star",
+    "standard_stripes_right_star": "standard_stripes_right_star",
 }
 PRETTY_CHOICES = tuple(PRETTY_TO_FILENAME.keys())
 
@@ -164,8 +163,8 @@ PB_GEOM = {
             881:(275,312), 882:(276,311), 883:(276,311), 884:(277,310),
             885:(278,309), 886:(279,308), 887:(281,306),
         },
-        "y_full": (275, 312),     # inklusiv
-        "x_span": (208, 887),     # inklusiv
+        "y_full": (275, 312),
+        "x_span": (208, 887),
     },
     "new": {       # 1075 x 340
         "left_cap": {
@@ -225,9 +224,6 @@ def _mk_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_PATH, size=max(8, int(size)))
 
 def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
-    """
-    Kürzt Text mit '…', falls er breiter ist als max_px.
-    """
     if draw.textlength(text, font=font) <= max_px:
         return text
     ell = "…"
@@ -237,29 +233,28 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
 
 def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
                  text: str, font: ImageFont.FreeTypeFont, fill: str):
-    """
-    Zentriert Text exakt um (cx, cy), baseline-korrigiert.
-    """
     w = draw.textlength(text, font=font)
     x0, y0, x1, y1 = font.getbbox(text)
     y_mid = (y0 + y1) / 2.0
     draw.text((cx - w / 2.0, cy - y_mid), text, font=font, fill=fill)
 
 def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
-                          base_font: int, min_font: int, fill: str = "white", pad: int = 8):
+                          base_font: int, min_font: int, fill: str = "white", pad: int | None = None):
     """
-    Zentriert Text in Box {x0,y0,x1,y1}.
-    Skaliert so groß wie möglich innerhalb von min_font..∞.
+    Zentriert Text in Box {x0,y0,x1,y1} und skaliert ihn maximal hinein.
+    Unterstützt pad_x/pad_y (falls nicht vorhanden -> pad oder 0).
     """
     x0, y0, x1, y1 = box["x0"], box["y0"], box["x1"], box["y1"]
-    max_w = max(1, (x1 - x0) - 2 * pad)
-    max_h = max(1, (y1 - y0) - 2 * pad)
+    pad_x = box.get("pad_x", pad if pad is not None else 0)
+    pad_y = box.get("pad_y", pad if pad is not None else 0)
 
-    # Startgröße
+    max_w = max(1, (x1 - x0) - 2 * pad_x)
+    max_h = max(1, (y1 - y0) - 2 * pad_y)
+
     size = int(base_font)
     font = _mk_font(size)
 
-    # Wenn zu groß → verkleinern
+    # ggf. verkleinern
     while True:
         w = draw.textlength(text, font=font)
         bx0, by0, bx1, by1 = font.getbbox(text)
@@ -271,22 +266,21 @@ def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
             break
         font = _mk_font(size)
 
-    # Wenn noch Platz → vergrößern
+    # so lange vergrößern, bis knapp vor Limit
     while True:
         w = draw.textlength(text, font=font)
         bx0, by0, bx1, by1 = font.getbbox(text)
         h = by1 - by0
         if w >= max_w or h >= max_h:
             break
-        size += 1
-        font = _mk_font(size)
-        w2 = draw.textlength(text, font=font)
-        bx0, by0, bx1, by1 = font.getbbox(text)
+        test = _mk_font(size + 1)
+        w2 = draw.textlength(text, font=test)
+        bx0, by0, bx1, by1 = test.getbbox(text)
         h2 = by1 - by0
         if w2 > max_w or h2 > max_h:
-            size -= 1
-            font = _mk_font(size)
             break
+        size += 1
+        font = test
 
     cx = (x0 + x1) // 2
     cy = (y0 + y1) // 2
@@ -419,15 +413,15 @@ class Level(app_commands.Group):
         # Name exakt in Name-Box
         name_box = lay["name_box"]
         _draw_centered_in_box(draw, str(user.display_name), name_box,
-                              name_box["base_font"], name_box["min_font"], fill="white", pad=name_box["pad"])
+                              name_box["base_font"], name_box["min_font"], fill="white")
 
-        # Level & XP — exakt in die Boxen zentriert (größer, wie gewünscht)
+        # Level & XP — exakt zentriert, maximal groß
         level_box = lay["level_box"]
         xp_box    = lay["xp_box"]
         _draw_centered_in_box(draw, f"{lvl_start}", level_box,
-                              level_box["base_font"], level_box["min_font"], fill="white", pad=level_box["pad"])
+                              level_box["base_font"], level_box["min_font"], fill="white")
         _draw_centered_in_box(draw, f"{xp_start}/{round(xp_end)}", xp_box,
-                              xp_box["base_font"], xp_box["min_font"], fill="white", pad=xp_box["pad"])
+                              xp_box["base_font"], xp_box["min_font"], fill="white")
 
         # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, style_name)
@@ -544,15 +538,15 @@ class Level(app_commands.Group):
         # Name in Name-Box
         name_box = lay["name_box"]
         _draw_centered_in_box(draw, str(interaction.user.display_name), name_box,
-                              name_box["base_font"], name_box["min_font"], fill="white", pad=name_box["pad"])
+                              name_box["base_font"], name_box["min_font"], fill="white")
 
         # Level & XP – exakt zentriert
         level_box = lay["level_box"]
         xp_box    = lay["xp_box"]
         _draw_centered_in_box(draw, f"{lvl_start}", level_box,
-                              level_box["base_font"], level_box["min_font"], fill="white", pad=level_box["pad"])
+                              level_box["base_font"], level_box["min_font"], fill="white")
         _draw_centered_in_box(draw, f"{xp_start}/{round(xp_end)}", xp_box,
-                              xp_box["base_font"], xp_box["min_font"], fill="white", pad=xp_box["pad"])
+                              xp_box["base_font"], xp_box["min_font"], fill="white")
 
         # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, internal_style)
@@ -566,7 +560,6 @@ class Level(app_commands.Group):
             ephemeral=True
         )
         return None
-
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
