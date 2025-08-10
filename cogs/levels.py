@@ -71,7 +71,7 @@ def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int
                 out[k] = int(round(v * sx))
             elif k in ("y","h","pad_y","y0","y1"):
                 out[k] = int(round(v * sy))
-            elif k in ("font","min_font"):
+            elif k in ("font","min_font","base_font"):
                 out[k] = max(8, int(round(v * sfont)))
             else:
                 out[k] = v
@@ -93,6 +93,7 @@ BAR_COLORS = {
     "türkis_stripes":              "#C980E8",
     "Halloween_stripes":           "#61BFC4",
     "Christmas_stripes":           "#61BFC4",
+    "Easter Stripes":              "#61BFC4",
     "Easter_stripes":              "#61BFC4",
     "standard_stripes_left_star":  "#61BFC4",
     "standard_stripes_right_star": "#61BFC4",
@@ -102,29 +103,33 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (Avatar/Text + exakte Boxen für Level/XP)
+# Pixelgenaue Layouts (Avatar/Text + exakte Boxen für Name/Level/XP)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
+    # Alle anderen (1075 x 340)
     "new": {
         "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
-        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Level/XP-Boxen (aus deinen Koordinaten berechnet):
-        # Breite: 853..1021; Höhe: 89..129  => Mittelpunkt (937, 109)
-        "level_box": {"x0": 853, "y0": 89, "x1": 1021, "y1": 129, "base_font": 38, "min_font": 20, "pad": 10},
-        # Breite: 853..1021; Höhe: 204..244 => Mittelpunkt (937, 224)
-        "xp_box":    {"x0": 853, "y0": 204,"x1": 1021, "y1": 244, "base_font": 30, "min_font": 18, "pad": 10},
+        # Name-Box: Breite 238..813, Höhe 89..143 -> exakt zentrieren
+        "name_box":  {"x0": 238, "y0": 89,  "x1": 813, "y1": 143, "base_font": 36, "min_font": 24, "pad": 22},
+
+        # Level/XP-Boxen (exakt aus deinen Koordinaten)
+        "level_box": {"x0": 853, "y0": 89,  "x1": 1021, "y1": 129, "base_font": 46, "min_font": 24, "pad": 10},
+        "xp_box":    {"x0": 853, "y0": 204, "x1": 1021, "y1": 244, "base_font": 34, "min_font": 20, "pad": 10},
     },
+
+    # Standard (1064 x 339)
     "standard": {
         "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
-        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Breite: 847..1015; Höhe: 88..128 => Mittelpunkt (931, 108)
-        "level_box": {"x0": 847, "y0": 88, "x1": 1015, "y1": 128, "base_font": 38, "min_font": 20, "pad": 10},
-        # Breite: 847..1015; Höhe: 205..243 => Mittelpunkt (931, 224)
-        "xp_box":    {"x0": 847, "y0": 205,"x1": 1015, "y1": 243, "base_font": 30, "min_font": 18, "pad": 10},
+        # Name-Box: Breite 232..808, Höhe 88..142 -> exakt zentrieren
+        "name_box":  {"x0": 232, "y0": 88,  "x1": 808, "y1": 142, "base_font": 36, "min_font": 24, "pad": 22},
+
+        # Level/XP
+        "level_box": {"x0": 847, "y0": 88,  "x1": 1015, "y1": 128, "base_font": 46, "min_font": 24, "pad": 10},
+        "xp_box":    {"x0": 847, "y0": 205, "x1": 1015, "y1": 243, "base_font": 34, "min_font": 20, "pad": 10},
     }
 }
 
@@ -140,6 +145,7 @@ PRETTY_TO_FILENAME = {
     "Halloween Stripes": "Halloween_stripes",
     "Christmas Stripes": "Christmas_stripes",
     "Easter Stripes": "Easter_stripes",
+    "Easter_stripes": "Easter_stripes",
     "Standard Stripes Left Star": "standard_stripes_left_star",
     "Standard Stripes Right Star": "standard_stripes_right_star",
 }
@@ -228,28 +234,21 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
     while text and draw.textlength(text + ell, font=font) > max_px:
         text = text[:-1]
     return text + ell
-# --- drop-in replacement ---
 
 def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
                  text: str, font: ImageFont.FreeTypeFont, fill: str):
     """
     Zentriert Text exakt um (cx, cy), baseline-korrigiert.
-    Wichtig: getbbox() liefert y relativ zur Baseline -> (y0+y1)/2.
     """
-    # horizontale Breite
     w = draw.textlength(text, font=font)
-    # bounding box relativ zur Baseline
     x0, y0, x1, y1 = font.getbbox(text)
-    # vertikaler Mittelpunkt der BBox relativ zur Baseline
     y_mid = (y0 + y1) / 2.0
-    # zeichnen: links = cx - w/2, top = cy - y_mid
     draw.text((cx - w / 2.0, cy - y_mid), text, font=font, fill=fill)
 
 def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
                           base_font: int, min_font: int, fill: str = "white", pad: int = 8):
     """
-    Zentriert Text in Box {x0,y0,x1,y1}. Font bleibt bei base_font,
-    wird nur verkleinert falls Breite ODER Höhe (inkl. Padding) überschreitet.
+    Zentriert Text in Box {x0,y0,x1,y1}. Font wird bei Bedarf kleiner (nie größer).
     """
     x0, y0, x1, y1 = box["x0"], box["y0"], box["x1"], box["y1"]
     max_w = max(1, (x1 - x0) - 2 * pad)
@@ -258,7 +257,6 @@ def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
     size = int(base_font)
     font = _mk_font(size)
 
-    # Nur shrink-to-fit; niemals größer machen
     while True:
         w = draw.textlength(text, font=font)
         bx0, by0, bx1, by1 = font.getbbox(text)
@@ -393,18 +391,17 @@ class Level(app_commands.Group):
         avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # Username & Rang
-        font_username = _mk_font(34)
-        font_rank = _mk_font(53)
-
-        ux, uy = lay["username"]["x"], lay["username"]["y"]
-        uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
-        draw.text((ux, uy), uname, font=font_username, fill="white")
-
+        # Rang
+        font_rank = _mk_font(lay["rank"]["font"])
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # Level & XP — exakt in die Boxen zentriert
+        # Name exakt in Name-Box
+        name_box = lay["name_box"]
+        _draw_centered_in_box(draw, str(user.display_name), name_box,
+                              name_box["base_font"], name_box["min_font"], fill="white", pad=name_box["pad"])
+
+        # Level & XP — exakt in die Boxen zentriert (größer, wie gewünscht)
         level_box = lay["level_box"]
         xp_box    = lay["xp_box"]
         _draw_centered_in_box(draw, f"{lvl_start}", level_box,
@@ -519,16 +516,15 @@ class Level(app_commands.Group):
         avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # Username & Rang
-        font_username = _mk_font(34)
-        font_rank = _mk_font(53)
-
-        ux, uy = lay["username"]["x"], lay["username"]["y"]
-        uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
-        draw.text((ux, uy), uname, font=font_username, fill="white")
-
+        # Rang
+        font_rank = _mk_font(lay["rank"]["font"])
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
+
+        # Name in Name-Box
+        name_box = lay["name_box"]
+        _draw_centered_in_box(draw, str(interaction.user.display_name), name_box,
+                              name_box["base_font"], name_box["min_font"], fill="white", pad=name_box["pad"])
 
         # Level & XP – exakt zentriert
         level_box = lay["level_box"]
@@ -545,11 +541,12 @@ class Level(app_commands.Group):
         background.save(buf, "PNG")
         buf.seek(0)
         await interaction.followup.send(
-            content=f"**Preview:** `{style}`",
+            content=f"**Preview:** {style}",
             file=File(buf, filename=f"preview_{internal_style}.png"),
             ephemeral=True
         )
         return None
+
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
