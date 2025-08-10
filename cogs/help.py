@@ -86,9 +86,14 @@ class help(commands.Cog):
                 "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
                 f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
                 f"**Ping**: {self.bot.latency * 1000:.0f} ms\n\n"
-                "> <:Astra_support:1141303923752325210> **Astra** ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben."
             )
 
+        )
+        embed.add_field(
+            name="Über Astra",
+            value=(
+                "> <:Astra_support:1141303923752325210> **Astra** ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben.\n\n"
+            )
         )
         embed.add_field(
             name="Letzte Updates",
