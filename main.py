@@ -532,8 +532,10 @@ async def on_dbl_vote(data):
 
             await cur.execute(
                 """
-                INSERT INTO voterole (userID, time) VALUES (%s, %s)
-                ON DUPLICATE KEY UPDATE time = VALUES(time)
+                INSERT INTO voterole AS v (userID, time)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY
+                UPDATE time = v.time
                 """,
                 (user_id, next_vote_time)
             )

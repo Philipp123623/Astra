@@ -83,7 +83,7 @@ class help(commands.Cog):
             description=(
                 "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
                 "Hier findest du alle Commands.\n"
-                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
+                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/eatdJPfjWc).\n\n"
                 f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
                 f"**Ping**: {self.bot.latency * 1000:.0f} ms\n\n"
             )
@@ -110,7 +110,7 @@ class help(commands.Cog):
             name="Links",
             value=(
                 "**[Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)"
-                " | [Support](https://discord.gg/NH9DdSUJrE)"
+                " | [Support](https://discord.gg/eatdJPfjWc)"
                 " | [Voten](https://top.gg/bot/1113403511045107773/vote)**"
             ),
             inline=False
