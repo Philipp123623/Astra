@@ -1202,6 +1202,64 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message(
                                 f"<:Astra_accept:1141303821176422460> **Der User {member.mention} wurde auf Level `{level}` gesetzt.**")
 
+    @app_commands.command(name="setxp")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def levelsystem_setxp(self, interaction: discord.Interaction, member: discord.Member, xp: int):
+        """Setzt die XP eines Users innerhalb seines aktuellen Levels."""
+        # Negatives/Null sofort abfangen
+        if xp < 1:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> **XP muss mindestens 1 sein.**",
+                ephemeral=True
+            )
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # System aktiv?
+                await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (interaction.guild.id,))
+                enabled = await cur.fetchone()
+                if not enabled or enabled[0] == 0:
+                    return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
+                        ephemeral=True
+                    )
+
+                # User-Datensatz laden
+                await cur.execute(
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = (%s) AND guild_id = (%s)",
+                    (member.id, interaction.guild.id)
+                )
+                row = await cur.fetchone()
+                if not row:
+                    return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**",
+                        ephemeral=True
+                    )
+
+                current_level = int(row[1])
+
+                # Ziel-XP-Grenzen ermitteln (gleiches Modell wie überall)
+                xp_end = 5.5 * (current_level ** 2) + 30 * current_level
+
+                # Hard Cap wie in deinem Level-Up-Code
+                if current_level >= 100 or xp_end >= 58000.0:
+                    xp_end = 58000.0
+
+                # Clamp: mindestens 1, höchstens xp_end-1 (damit kein sofortiger Level-Up erzwungen wird)
+                max_xp_in_level = max(1, int(xp_end) - 1)
+                new_xp = max(1, min(int(xp), max_xp_in_level))
+
+                await cur.execute(
+                    "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
+                    (new_xp, member.id, interaction.guild.id)
+                )
+
+        await interaction.response.send_message(
+            f"<:Astra_accept:1141303821176422460> **XP von {member.mention} auf `{new_xp}` gesetzt (Level `{current_level}`, Ziel `{int(xp_end)}`).**"
+        )
+
+
 async def setup(bot):
     await bot.add_cog(levelsystem(bot))
     bot.tree.add_command(Level(bot))
