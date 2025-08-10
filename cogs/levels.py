@@ -1,6 +1,4 @@
 import os
-import json
-import random
 from io import BytesIO
 from typing import Literal
 
@@ -14,15 +12,14 @@ from PIL import Image, ImageDraw, ImageChops, ImageFont, ImageFilter
 # ──────────────────────────────────────────────────────────────────────────────
 ASSETS_DIR = "cogs/assets/Levelcards"
 DEFAULT_STYLE = "standard"  # entspricht standard.png
+FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
 def list_styles():
     if not os.path.isdir(ASSETS_DIR):
         return []
-    return sorted(
-        os.path.splitext(f)[0]
-        for f in os.listdir(ASSETS_DIR)
-        if f.lower().endswith(".png")
-    )
+    return sorted(os.path.splitext(f)[0]
+                  for f in os.listdir(ASSETS_DIR)
+                  if f.lower().endswith(".png"))
 
 def style_to_path(style_name: str) -> str:
     if not os.path.isdir(ASSETS_DIR):
@@ -32,59 +29,17 @@ def style_to_path(style_name: str) -> str:
             return os.path.join(ASSETS_DIR, f)
     return os.path.join(ASSETS_DIR, f"{DEFAULT_STYLE}.png")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Layout-Gruppen + Skalierung
-# ──────────────────────────────────────────────────────────────────────────────
-def _layout_key_for_style(style: str) -> str:
-    s = (style or "").lower()
-    if s in ("levelcard_astra", "standard"):   # blaue Standardkarte
-        return "standard"
-    return "new"                               # alle anderen = neue Karten
-
-BASE_BY_GROUP = {
-    "new": (1075, 340),      # neue Karten (türkis)
-    "standard": (1064, 339), # Standardkarte (blau)
+# hübsche Namen (Dropdown) -> Dateinamen (ohne .png)
+PRETTY_TO_FILENAME = {
+    "Standard": "standard",
+    "Türkis Stripes": "türkis_stripes",
+    "Halloween Stripes": "Halloween_stripes",
+    "Christmas Stripes": "Christmas_stripes",
+    "Easter Stripes": "Easter_stripes",
+    "Standard Stripes Left Star": "standard_stripes_left_star",
+    "Standard Stripes Right Star": "standard_stripes_right_star",
 }
-
-def _deepcopy(obj):
-    import json as _json
-    return _json.loads(_json.dumps(obj))
-
-def _merge_overrides(base: dict, ovr: dict | None) -> dict:
-    res = _deepcopy(base)
-    for k, v in (ovr or {}).items():
-        if isinstance(v, dict) and isinstance(res.get(k), dict):
-            res[k].update(v)
-        else:
-            res[k] = v
-    return res
-
-def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int) -> dict:
-    sx = dst_w / float(base_w)
-    sy = dst_h / float(base_h)
-    sfont = (sx + sy) / 2.0
-    def sc(d: dict) -> dict:
-        out = {}
-        for k, v in d.items():
-            if isinstance(v, dict):
-                out[k] = sc(v)
-            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset"):
-                out[k] = int(round(v * sx))
-            elif k in ("y","h","pad_y"):
-                out[k] = int(round(v * sy))
-            elif k in ("font","min_font"):
-                out[k] = max(8, int(round(v * sfont)))
-            else:
-                out[k] = v
-        return out
-    return sc(layout)
-
-def _resolved_layout(style: str, img_w: int, img_h: int) -> dict:
-    key = _layout_key_for_style(style)
-    base = LAYOUTS[key]
-    merged = _merge_overrides(base, STYLE_OVERRIDES.get(key))
-    bw, bh = BASE_BY_GROUP[key]
-    return _scale_layout(merged, img_w, img_h, bw, bh)
+PRETTY_CHOICES = tuple(PRETTY_TO_FILENAME.keys())
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Progressbar-Farben
@@ -100,53 +55,66 @@ BAR_COLORS = {
     "standard":                    "#61BFC4",
 }
 def bar_color_for(style: str) -> str:
-    return BAR_COLORS.get(style, DEFAULT_HEX)
+    return BAR_COLORS.get((style or "").lower(), DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (nur Progressbar nach deinen Innenmaßen)
+# Basis-Auflösungen + pixelgenaue Layouts (deine Innenmaße!)
 # ──────────────────────────────────────────────────────────────────────────────
+BASE_BY_GROUP = {
+    "standard": (1064, 339),  # blaue Standard-Karte
+    "new":      (1075, 340),  # alle anderen
+}
+
 LAYOUTS = {
-    "new": {
-        "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
-        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
-        "rank": {"x": 393, "y": 157, "font": 53},
-        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-
-        # Progressbar (innen)
-        "bar": {"x": 214, "y": 276, "w": 679, "h": 37, "r": 13, "pad_x": 0, "pad_y": 0, "oy": -1}
-        # r = 13 (flacher), oy = -1 (1px nach oben)
-    },
-
     "standard": {
-        "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
-        "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
-        "rank": {"x": 393, "y": 157, "font": 53},
-        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
-
-        "bar": {"x": 208, "y": 275, "w": 679, "h": 37, "r": 12, "pad_x": 0, "pad_y": 0}
-        # r = 12 für die Standardkarte
+        # AVATAR + TEXT Positionen
+        "avatar":      {"x": 64,  "y": 98,  "size": 142, "inset": 0,  "draw_ring": True, "ring_width": 12},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        # Progressbar innen (exakt)
+        "bar":         {"x": 208, "y": 275, "w": 679, "h": 37, "r": 18},
+    },
+    "new": {
+        "avatar":      {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
+        "username":    {"x": 246, "y": 95,  "max_w": 600, "font": 34},
+        "rank":        {"x": 393, "y": 157, "font": 53},
+        "level_center":{"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":   {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        # Progressbar innen (exakt)
+        "bar":         {"x": 214, "y": 276, "w": 679, "h": 37, "r": 18},
     }
 }
 
+def _layout_key(img_w: int, img_h: int, style_name: str) -> str:
+    s = (style_name or "").lower()
+    if s in ("standard", "levelcard_astra"):
+        return "standard"
+    # falls nur Größe bekannt:
+    if (img_w, img_h) == (1064, 339):
+        return "standard"
+    return "new"
 
-STYLE_OVERRIDES = {}
-FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
+def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int) -> dict:
+    sx, sy = dst_w / float(base_w), dst_h / float(base_h)
+    out = {}
+    for k, v in layout.items():
+        if isinstance(v, dict):
+            out[k] = _scale_layout(v, dst_w, dst_h, base_w, base_h)
+        else:
+            if k in ("x", "w", "size", "ring_width", "inset", "max_w", "r"):
+                out[k] = int(round(v * sx))
+            elif k in ("y", "h"):
+                out[k] = int(round(v * sy))
+            elif k in ("font", "min_font"):
+                # mittlere Skalierung für Fonts
+                sfont = (sx + sy) / 2.0
+                out[k] = max(8, int(round(v * sfont)))
+            else:
+                out[k] = v
+    return out
 
-# -------------------------------------------
-# Pretty names -> interne Dateinamen (ohne .png)
-# -------------------------------------------
-PRETTY_TO_FILENAME = {
-    "Standard": "standard",
-    "Türkis Stripes": "türkis_stripes",
-    "Halloween Stripes": "Halloween_stripes",
-    "Christmas Stripes": "Christmas_stripes",
-    "Easter Stripes": "Easter_stripes",
-    "Standard Stripes Left Star": "standard_stripes_left_star",
-    "Standard Stripes Right Star": "standard_stripes_right_star",
-}
-PRETTY_CHOICES = tuple(PRETTY_TO_FILENAME.keys())
 # ──────────────────────────────────────────────────────────────────────────────
 # Render-Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -156,8 +124,7 @@ def _mk_font(size: int) -> ImageFont.FreeTypeFont:
 def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
                  text: str, font: ImageFont.FreeTypeFont, fill: str):
     w = draw.textlength(text, font=font)
-    bbox = font.getbbox(text)
-    h = bbox[3] - bbox[1]
+    h = font.getbbox(text)[3] - font.getbbox(text)[1]
     draw.text((cx - w/2, cy - h/2), text, font=font, fill=fill)
 
 def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
@@ -168,81 +135,54 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
-def _draw_progressbar(background: Image.Image, lay: dict,
-                      xp_start: int | float, xp_end: int | float,
-                      style_key: str):
-    perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
-    if perc <= 0.0:
+def _draw_progressbar(bg: Image.Image, lay: dict, xp: float, xp_needed: float, style_key: str):
+    """Kapsel-Füllung exakt in die innere Schiene, ohne Spalte."""
+    if xp_needed <= 0:
         return
+    p = max(0.0, min(1.0, float(xp)/float(xp_needed)))
 
     bar = lay["bar"]
-    inner_x = bar["x"] + bar.get("pad_x", 0) + bar.get("ox", 0)
-    inner_y = bar["y"] + bar.get("pad_y", 0) + bar.get("oy", 0)
-    inner_w = max(1, bar["w"] - 2 * bar.get("pad_x", 0))
-    inner_h = max(1, bar["h"] - 2 * bar.get("pad_y", 0))
-    r      = max(1, min(bar.get("r", inner_h // 2), inner_h // 2))
+    x, y, w, h = bar["x"], bar["y"], bar["w"], bar["h"]
+    r = max(1, min(bar.get("r", h//2), h//2))
 
-    fill_w = max(1, min(int(round(inner_w * perc)), inner_w))
+    fill_w = max(1, min(int(round(w * p)), w))
 
-    # ---------- Supersampling ----------
+    # Supersampling + Overscan links -> clippen mit Slot
     SS = 4
-    W2, H2 = inner_w * SS, inner_h * SS
-    FW2    = fill_w * SS
-    R2     = r * SS
+    W2, H2 = w*SS, h*SS
+    FW2 = fill_w*SS
+    R2 = r*SS
+    OVER = 8  # in SS-Pixeln (~2 px final)
 
-    # >>> Geheimwaffe: ein paar Pixel LINKS überziehen (im SS-Raster),
-    # danach clippen wir mit dem Slot -> kein Spalt möglich.
-    LEFT_OVERSCAN = 8  # SS-Pixel; 4 == 1 px im finalen Bild
-
-    def capsule_mask(width_px: int, overscan_left: int = 0) -> Image.Image:
+    def cap_mask(width_px, overscan_left=0):
         m = Image.new("L", (W2, H2), 0)
         d = ImageDraw.Draw(m)
 
-        # Mittelteil (nach links überziehen)
         x0 = max(0, R2 - overscan_left)
         x1 = max(x0, width_px - R2)
         d.rectangle((x0, 0, x1, H2), fill=255)
 
-        # Linke Kappe – nach links geschoben
-        d.ellipse((-overscan_left, 0, 2*R2 - overscan_left, H2), fill=255)
-
-        # Rechte Kappe – nur wenn breit genug
+        d.ellipse((-overscan_left, 0, 2*R2-overscan_left, H2), fill=255)
         if width_px > R2:
             cx = width_px - 2*R2
             d.ellipse((cx, 0, cx + 2*R2, H2), fill=255)
         return m
 
-    # Slot: ohne Overscan (exakt)
-    slot2 = capsule_mask(W2, overscan_left=0)
-
-    # Füllung: mit Overscan nach links
-    fill2 = capsule_mask(FW2, overscan_left=LEFT_OVERSCAN)
-
-    # kleine Aufblähung, damit AA-Pixel verschwinden
-    fill2 = fill2.filter(ImageFilter.MaxFilter(size=5))
-
-    # Clipping in den Slot (damit nichts über die weiße Schiene geht)
+    slot2 = cap_mask(W2, overscan_left=0)
+    fill2 = cap_mask(FW2, overscan_left=OVER).filter(ImageFilter.MaxFilter(5))
     final2 = ImageChops.multiply(slot2, fill2)
+    mask = final2.resize((w, h), Image.LANCZOS)
 
-    # Runterskalieren
-    final_mask = final2.resize((inner_w, inner_h), Image.LANCZOS)
-
-    # Einfärben
-    fill_img = Image.new("RGBA", (inner_w, inner_h), bar_color_for(style_key))
-    background.paste(fill_img, (inner_x, inner_y), mask=final_mask)
+    fill_img = Image.new("RGBA", (w, h), bar_color_for(style_key))
+    bg.paste(fill_img, (x, y), mask)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Slash-Gruppe nur für Levelkarten
+# Slash-Gruppe: nur Rank/Preview
 # ──────────────────────────────────────────────────────────────────────────────
 class Level(app_commands.Group):
     def __init__(self, bot):
         self.bot = bot
         super().__init__(name="levelsystem", description="Alles rund ums Levelsystem.")
-
-    # Autocomplete
-    async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
-        names = list_styles()
-        return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
 
     # /rank
     @app_commands.command(name="rank", description="Sendet deine Levelcard.")
@@ -253,14 +193,15 @@ class Level(app_commands.Group):
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
+                # enabled?
                 await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id=%s", (interaction.guild.id,))
                 enabled = await cur.fetchone()
                 if not enabled or enabled[0] == 0:
                     return await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
-                        ephemeral=True
+                        "❌ Das Levelsystem ist auf diesem Server deaktiviert.", ephemeral=True
                     )
 
+                # user daten
                 await cur.execute(
                     "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
                     (user.id, interaction.guild.id)
@@ -268,12 +209,12 @@ class Level(app_commands.Group):
                 row = await cur.fetchone()
                 if not row:
                     return await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Keine Einträge für diesen User gefunden.**",
-                        ephemeral=True
+                        "❌ Keine Einträge für diesen User gefunden.", ephemeral=True
                     )
                 xp_start, lvl_start = row
                 xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
 
+                # style
                 await cur.execute(
                     "SELECT style FROM levelstyle WHERE guild_id=%s AND client_id=%s",
                     (interaction.guild.id, user.id)
@@ -282,6 +223,7 @@ class Level(app_commands.Group):
                 style_name = srow[0] if srow else DEFAULT_STYLE
                 bg_path = style_to_path(style_name)
 
+                # rang ermitteln
                 await cur.execute(
                     "SELECT client_id FROM levelsystem WHERE guild_id=%s ORDER BY user_level DESC, user_xp DESC",
                     (interaction.guild.id,)
@@ -300,13 +242,13 @@ class Level(app_commands.Group):
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
         img_w, img_h = background.size
-        lay = _resolved_layout(style_name, img_w, img_h)
 
-        # -------- Avatar --------
-        av = lay["avatar"]
-        av_size = av["size"]
-        av_x, av_y = av["x"], av["y"]
+        key = _layout_key(img_w, img_h, style_name)
+        base_w, base_h = BASE_BY_GROUP[key]
+        lay = _scale_layout(LAYOUTS[key], img_w, img_h, base_w, base_h)
 
+        # Avatar
+        av = lay["avatar"]; av_size = av["size"]; av_x, av_y = av["x"], av["y"]
         avatar_asset = user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
         avatar_img = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
@@ -323,7 +265,7 @@ class Level(app_commands.Group):
         avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # -------- Username & Rang -------- (unverändert)
+        # Username & Rang
         font_username = _mk_font(lay["username"]["font"])
         font_rank = _mk_font(lay["rank"]["font"])
 
@@ -334,7 +276,7 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # -------- Level & XP (mittig + Auto-Fit) --------
+        # Level & XP (mittig + Auto-Fit)
         def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
             size = base_size
             font = _mk_font(size)
@@ -350,7 +292,7 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # -------- Progressbar (EXAKT in der inneren Schiene) --------
+        # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, style_name)
 
         buf = BytesIO()
@@ -358,60 +300,12 @@ class Level(app_commands.Group):
         buf.seek(0)
         await interaction.followup.send(file=File(buf, filename=f"rank_{style_name}.png"))
 
-    # /setstyle
-    @app_commands.command(name="setstyle", description="Wähle deine Rank-Card.")
-    @app_commands.describe(style="Style-Name")
-    @app_commands.guild_only()
-    async def setstyle(
-            self,
-            interaction: discord.Interaction,
-            style: Literal[PRETTY_CHOICES],  # zeigt hübsche Namen ohne Unterstriche
-    ):
-        internal_style = PRETTY_TO_FILENAME[style]  # map auf Dateiname
-
-        # optional: Existenzcheck im Assets-Ordner
-        available = set(list_styles())
-        if internal_style not in available:
-            return await interaction.response.send_message(
-                f"❌ Der Style **{style}** ist (noch) nicht verfügbar.", ephemeral=True
-            )
-
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS levelstyle
-                    (
-                        guild_id  BIGINT      NOT NULL,
-                        client_id BIGINT      NOT NULL,
-                        style     VARCHAR(64) NOT NULL,
-                        PRIMARY KEY (guild_id, client_id)
-                    )
-                    """
-                )
-                await cur.execute(
-                    """
-                    INSERT INTO levelstyle (guild_id, client_id, style)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE style = VALUES(style)
-                    """,
-                    (interaction.guild.id, interaction.user.id, internal_style)
-                )
-
-        await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
-
     # /previewstyle
     @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
     @app_commands.describe(style="Style-Name")
     @app_commands.guild_only()
-    async def previewstyle(
-            self,
-            interaction: discord.Interaction,
-            style: Literal[PRETTY_CHOICES],
-    ):
+    async def previewstyle(self, interaction: discord.Interaction, style: Literal[PRETTY_CHOICES]):
         internal_style = PRETTY_TO_FILENAME[style]
-
-        # optional: Existenzcheck
         if internal_style not in set(list_styles()):
             return await interaction.response.send_message(
                 f"❌ Der Style **{style}** ist (noch) nicht verfügbar.", ephemeral=True
@@ -420,7 +314,7 @@ class Level(app_commands.Group):
         await interaction.response.defer(thinking=True, ephemeral=True)
         bg_path = style_to_path(internal_style)
 
-        # Daten für echte Vorschau
+        # echte Daten für Vorschau
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -447,13 +341,13 @@ class Level(app_commands.Group):
         background = Image.open(bg_path).convert("RGBA")
         draw = ImageDraw.Draw(background)
         img_w, img_h = background.size
-        lay = _resolved_layout(internal_style, img_w, img_h)
+
+        key = _layout_key(img_w, img_h, internal_style)
+        base_w, base_h = BASE_BY_GROUP[key]
+        lay = _scale_layout(LAYOUTS[key], img_w, img_h, base_w, base_h)
 
         # Avatar
-        av = lay["avatar"]
-        av_size = av["size"]
-        av_x, av_y = av["x"], av["y"]
-
+        av = lay["avatar"]; av_size = av["size"]; av_x, av_y = av["x"], av["y"]
         avatar_asset = interaction.user.display_avatar.replace(size=256)
         avatar_bytes = await avatar_asset.read()
         avatar_img = Image.open(BytesIO(avatar_bytes)).convert("RGBA").resize((av_size, av_size))
@@ -497,7 +391,7 @@ class Level(app_commands.Group):
         _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
                          xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
 
-        # Progressbar (exakt)
+        # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, internal_style)
 
         buf = BytesIO()
@@ -508,6 +402,7 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{internal_style}.png"),
             ephemeral=True
         )
+
 
 
     @app_commands.command(name="status")
