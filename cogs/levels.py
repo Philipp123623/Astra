@@ -2,7 +2,7 @@ import os
 import json
 from io import BytesIO
 from typing import Literal
-
+import random
 import discord
 from discord import app_commands, File
 from discord.ext import commands
