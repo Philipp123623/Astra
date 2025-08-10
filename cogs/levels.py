@@ -218,6 +218,16 @@ def _slot_mask_from_coords(img_w: int, img_h: int, layout_key: str) -> Image.Ima
 def _mk_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_PATH, size=max(8, int(size)))
 
+def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
+    """
+    Kürzt Text mit '…', falls er breiter ist als max_px.
+    """
+    if draw.textlength(text, font=font) <= max_px:
+        return text
+    ell = "…"
+    while text and draw.textlength(text + ell, font=font) > max_px:
+        text = text[:-1]
+    return text + ell
 # --- drop-in replacement ---
 
 def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
