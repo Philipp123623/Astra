@@ -218,42 +218,45 @@ def _slot_mask_from_coords(img_w: int, img_h: int, layout_key: str) -> Image.Ima
 def _mk_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_PATH, size=max(8, int(size)))
 
+# --- drop-in replacement ---
+
 def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
                  text: str, font: ImageFont.FreeTypeFont, fill: str):
+    """
+    Zentriert Text exakt um (cx, cy), baseline-korrigiert.
+    Wichtig: getbbox() liefert y relativ zur Baseline -> (y0+y1)/2.
+    """
+    # horizontale Breite
     w = draw.textlength(text, font=font)
-    bbox = font.getbbox(text)
-    h = bbox[3] - bbox[1]
-    draw.text((cx - w/2, cy - h/2), text, font=font, fill=fill)
-
-def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
-    if draw.textlength(text, font=font) <= max_px:
-        return text
-    ell = "…"
-    while text and draw.textlength(text + ell, font=font) > max_px:
-        text = text[:-1]
-    return text + ell
+    # bounding box relativ zur Baseline
+    x0, y0, x1, y1 = font.getbbox(text)
+    # vertikaler Mittelpunkt der BBox relativ zur Baseline
+    y_mid = (y0 + y1) / 2.0
+    # zeichnen: links = cx - w/2, top = cy - y_mid
+    draw.text((cx - w / 2.0, cy - y_mid), text, font=font, fill=fill)
 
 def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
                           base_font: int, min_font: int, fill: str = "white", pad: int = 8):
     """
-    Zentriert Text exakt in einer Box {x0,y0,x1,y1}.
-    Skaliert den Font herunter, bis er horizontal *und* vertikal mit Padding passt.
+    Zentriert Text in Box {x0,y0,x1,y1}. Font bleibt bei base_font,
+    wird nur verkleinert falls Breite ODER Höhe (inkl. Padding) überschreitet.
     """
     x0, y0, x1, y1 = box["x0"], box["y0"], box["x1"], box["y1"]
-    max_w = max(1, (x1 - x0) - 2*pad)
-    max_h = max(1, (y1 - y0) - 2*pad)
+    max_w = max(1, (x1 - x0) - 2 * pad)
+    max_h = max(1, (y1 - y0) - 2 * pad)
 
-    size = base_font
+    size = int(base_font)
     font = _mk_font(size)
-    # shrink-to-fit width & height
+
+    # Nur shrink-to-fit; niemals größer machen
     while True:
         w = draw.textlength(text, font=font)
-        bbox = font.getbbox(text)
-        h = bbox[3] - bbox[1]
+        bx0, by0, bx1, by1 = font.getbbox(text)
+        h = by1 - by0
         if w <= max_w and h <= max_h:
             break
         size -= 1
-        if size < min_font:
+        if size < int(min_font):
             break
         font = _mk_font(size)
 
