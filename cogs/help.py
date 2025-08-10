@@ -81,12 +81,12 @@ class help(commands.Cog):
             colour=discord.Colour.blue(),
             title="Help Menü",
             description=(
-                "> <:Astra_support:1141303923752325210> **Astra** ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben.\n\n"
                 "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
                 "Hier findest du alle Commands.\n"
                 "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
                 f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
-                f"**Ping**: {self.bot.latency * 1000:.0f} ms"
+                f"**Ping**: {self.bot.latency * 1000:.0f} ms\n\n"
+                "> <:Astra_support:1141303923752325210> **Astra** ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben."
             )
 
         )
