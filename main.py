@@ -70,6 +70,8 @@ class Astra(commands.Bot):
         self.task3 = False
         self.pool = None  # Pool-Objekt hier zentral gespeichert
         self.initial_extensions = [
+            "cogs.notifier",
+            "cogs.backups",
             "cogs.help",
             "cogs.goals",
             "cogs.dev",
