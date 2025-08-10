@@ -67,9 +67,9 @@ def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int
         for k, v in d.items():
             if isinstance(v, dict):
                 out[k] = sc(v)
-            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset"):
+            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset","left","right"):
                 out[k] = int(round(v * sx))
-            elif k in ("y","h","pad_y"):
+            elif k in ("y","h","pad_y","top","bottom"):
                 out[k] = int(round(v * sy))
             elif k in ("font","min_font"):
                 out[k] = max(8, int(round(v * sfont)))
@@ -102,22 +102,33 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (Avatar/Text; Progressbar-Position nicht nötig für Füllung)
+# Pixelgenaue Layouts (Avatar/Text + Boxen zum Zentrieren von Level/XP)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
     "new": {
         "avatar": {"x": 57, "y": 93, "size": 155, "inset": 8, "draw_ring": False, "ring_width": 0},
         "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
-        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+
+        # Boxen (Alle anderen: Breite 853–1021, Höhe 89–129 bzw. 204–244)
+        "level_box": {"left": 853, "top": 89,  "right": 1021, "bottom": 129},
+        "xp_box":    {"left": 853, "top": 204, "right": 1021, "bottom": 244},
+
+        # (optional beibehalten)
+        "level_center": {"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":    {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
     },
     "standard": {
         "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
         "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
-        "level_center": {"x": 931, "y": 95, "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center": {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+
+        # Boxen (Standard: Breite 847–1015, Höhe 88–128 bzw. 205–243)
+        "level_box": {"left": 847, "top": 88,  "right": 1015, "bottom": 128},
+        "xp_box":    {"left": 847, "top": 205, "right": 1015, "bottom": 243},
+
+        "level_center": {"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
+        "xp_center":    {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
     }
 }
 
@@ -232,6 +243,42 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
     while text and draw.textlength(text + ell, font=font) > max_px:
         text = text[:-1]
     return text + ell
+
+def _fit_center_text_in_box(draw: ImageDraw.ImageDraw, box: dict, text: str,
+                            base_size: int, min_size: int, padding: int = 0,
+                            fill: str = "white"):
+    """
+    Zentriert Text in der Box (left, top, right, bottom) und skaliert die Schrift,
+    bis sie in Breite UND Höhe (minus padding) passt.
+    """
+    left, top, right, bottom = box["left"], box["top"], box["right"], box["bottom"]
+    max_w = max(1, right - left - 2 * padding)
+    max_h = max(1, bottom - top - 2 * padding)
+
+    size = max(min_size, base_size)
+    font = _mk_font(size)
+
+    while True:
+        w = draw.textlength(text, font=font)
+        bbox = font.getbbox(text)
+        h = (bbox[3] - bbox[1])
+
+        if w <= max_w and h <= max_h:
+            break
+        size -= 1
+        if size < min_size:
+            break
+        font = _mk_font(size)
+
+    cx = left + (right - left) / 2.0
+    cy = top  + (bottom - top) / 2.0
+
+    # final messen für exakte Zentrierung
+    w = draw.textlength(text, font=font)
+    bbox = font.getbbox(text)
+    h = (bbox[3] - bbox[1])
+
+    draw.text((cx - w/2.0, cy - h/2.0), text, font=font, fill=fill)
 
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
@@ -372,21 +419,11 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # -------- Level & XP (mittig + Auto-Fit) --------
-        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
-            size = base_size
-            font = _mk_font(size)
-            while draw.textlength(text, font=font) > max_w and size > min_size:
-                size -= 1
-                font = _mk_font(size)
-            _center_text(draw, cx, cy, text, font, "white")
-
-        lev_cfg = lay["level_center"]
-        xp_cfg = lay["xp_center"]
-        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
-                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
-        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
-                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
+        # -------- Level & XP (perfekt mittig in Boxen) --------
+        base_level_size = lay["level_center"]["font"]
+        base_xp_size    = lay["xp_center"]["font"]
+        _fit_center_text_in_box(draw, lay["level_box"], f"{lvl_start}", base_level_size, min_size=16, padding=0, fill="white")
+        _fit_center_text_in_box(draw, lay["xp_box"],    f"{xp_start}/{round(xp_end)}", base_xp_size, min_size=14, padding=0, fill="white")
 
         # -------- Progressbar (pixelgenau) --------
         _draw_progressbar(background, lay, xp_start, xp_end, style_name)
@@ -458,6 +495,9 @@ class Level(app_commands.Group):
 
         # Daten für echte Vorschau
         async with self.bot.pool.acquire() as conn:
+            async with self.bot.pool.acquire() as conn:
+                pass
+        async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT user_xp, user_level FROM levelsystem WHERE client_id=%s AND guild_id=%s",
@@ -517,21 +557,11 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
-        # Level & XP
-        def _fit_center_text(draw, cx, cy, text, base_size, min_size, max_w):
-            size = base_size
-            font = _mk_font(size)
-            while draw.textlength(text, font=font) > max_w and size > min_size:
-                size -= 1
-                font = _mk_font(size)
-            _center_text(draw, cx, cy, text, font, "white")
-
-        lev_cfg = lay["level_center"]
-        xp_cfg = lay["xp_center"]
-        _fit_center_text(draw, lev_cfg["x"], lev_cfg["y"], f"{lvl_start}",
-                         lev_cfg["font"], lev_cfg.get("min_font", 16), lev_cfg.get("max_w", 170))
-        _fit_center_text(draw, xp_cfg["x"], xp_cfg["y"], f"{xp_start}/{round(xp_end)}",
-                         xp_cfg["font"], xp_cfg.get("min_font", 16), xp_cfg.get("max_w", 230))
+        # Level & XP (perfekt mittig in Boxen)
+        base_level_size = lay["level_center"]["font"]
+        base_xp_size    = lay["xp_center"]["font"]
+        _fit_center_text_in_box(draw, lay["level_box"], f"{lvl_start}", base_level_size, min_size=16, padding=0, fill="white")
+        _fit_center_text_in_box(draw, lay["xp_box"],    f"{xp_start}/{round(xp_end)}", base_xp_size,   min_size=14, padding=0, fill="white")
 
         # Progressbar (exakt)
         _draw_progressbar(background, lay, xp_start, xp_end, internal_style)
@@ -544,8 +574,6 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{internal_style}.png"),
             ephemeral=True
         )
-
-
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
