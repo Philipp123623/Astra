@@ -1,26 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Discord Backup System — Neustart-Resistent
-==========================================
+Discord Backup System — Neustart-Resistent & Vollständiger Restore
 Speichert Rollen/Channels/Kategorien/Overwrites/Emojis (keine Nachrichten)
-und kann sie nicht-destruktiv in einen Server wiederherstellen.
-
-Features:
-- /backup create: erstellt Backup (als Job, Fortschritt wird in DB gespeichert)
-- /backup load <code>: stellt Backup wieder her (als Job)
-- /backup status: zeigt Fortschritt des aktuellen Jobs
-- /backup delete <code>: löscht Backup
-
-Neustart-Resistenz:
-- Jobs werden in MySQL getrackt (backup_jobs)
-- Bei Bot-Start werden alle "running"-Jobs auf "error" gesetzt
-- Pro-Guild-Queue: keine kollidierenden Jobs
+und kann sie vollständig wiederherstellen (nicht destruktiv).
 """
 
 from __future__ import annotations
 import asyncio
 import hashlib
-import os
 import time
 import typing as T
 
@@ -51,6 +38,7 @@ except ImportError:
 
 BACKUP_VERSION = 1
 
+# Hilfsfunktionen
 def b58(b: bytes) -> str:
     alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
     n = int.from_bytes(b, 'big')
@@ -67,7 +55,7 @@ def now_ts() -> int:
     return int(time.time())
 
 async def gentle_sleep():
-    await asyncio.sleep(0.25)
+    await asyncio.sleep(0.3)
 
 
 class BackupCog(commands.Cog):
@@ -95,8 +83,8 @@ class BackupCog(commands.Cog):
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               version INT NOT NULL,
               size_bytes INT NOT NULL,
-              hash BINARY(16) NOT NULL,
-              blob LONGBLOB NOT NULL
+              `hash` BINARY(16) NOT NULL,
+              `data_blob` LONGBLOB NOT NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
             await cur.execute("""
@@ -116,7 +104,9 @@ class BackupCog(commands.Cog):
 
     async def _mark_stale_jobs(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("UPDATE backup_jobs SET status='error', last_error='Bot restart' WHERE status='running'")
+            await cur.execute(
+                "UPDATE backup_jobs SET status='error', last_error='Bot restart' WHERE status='running'"
+            )
 
     async def _queue_job(self, guild_id: int, type_: str, code: str | None) -> int:
         async with self.pool.acquire() as conn, conn.cursor() as cur:
@@ -163,8 +153,8 @@ class BackupCog(commands.Cog):
                     await self._update_job(job["job_id"], status="done", code=code, total_steps=1, step=1)
                 elif job["type"] == "restore":
                     data, _meta = await self._fetch_backup(job["code"])
-                    await self._restore_to_guild(guild, data)
-                    await self._update_job(job["job_id"], status="done", step=1, total_steps=1)
+                    await self._restore_to_guild(guild, data, job["job_id"])
+                    await self._update_job(job["job_id"], status="done")
             except Exception as e:
                 await self._update_job(job["job_id"], status="error", last_error=str(e))
 
@@ -179,7 +169,7 @@ class BackupCog(commands.Cog):
             blob = gzip.compress(raw)  # type: ignore
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO backups (code, guild_id, version, size_bytes, hash, blob) VALUES (%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
                 (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
             )
         return code
@@ -190,7 +180,7 @@ class BackupCog(commands.Cog):
             row = await cur.fetchone()
             if not row:
                 raise commands.UserInputError("Backup nicht gefunden.")
-        blob = row["blob"]
+        blob = row["data_blob"]
         if _HAS_ZSTD:
             raw = zstd.ZstdDecompressor().decompress(blob)
         else:
@@ -199,7 +189,6 @@ class BackupCog(commands.Cog):
 
     async def _snapshot_guild(self, guild: discord.Guild) -> dict:
         roles = [{
-            "id": r.id,
             "name": r.name,
             "color": r.color.value,
             "permissions": r.permissions.value,
@@ -213,15 +202,14 @@ class BackupCog(commands.Cog):
             for target, po in ch.overwrites.items():
                 allow, deny = po.pair()
                 overwrites.append({
-                    "target_id": target.id,
+                    "target_name": target.name,
                     "target_type": "role" if isinstance(target, discord.Role) else "member",
                     "allow": allow.value,
                     "deny": deny.value
                 })
             channels.append({
-                "id": ch.id,
                 "type": int(ch.type.value),
-                "parent_id": ch.category.id if ch.category else None,
+                "parent_name": ch.category.name if ch.category else None,
                 "name": ch.name,
                 "topic": getattr(ch, "topic", None),
                 "position": ch.position,
@@ -231,41 +219,114 @@ class BackupCog(commands.Cog):
         emojis = []
         try:
             for e in await guild.fetch_emojis():
-                emojis.append({"id": e.id, "name": e.name, "animated": e.animated})
+                emojis.append({"name": e.name, "animated": e.animated, "url": str(e.url)})
         except discord.Forbidden:
             pass
-        return {"version": BACKUP_VERSION, "guild": {"id": guild.id, "name": guild.name}, "roles": roles, "channels": channels, "emojis": emojis}
+        return {"version": BACKUP_VERSION, "roles": roles, "channels": channels, "emojis": emojis}
 
-    async def _restore_to_guild(self, guild: discord.Guild, data: dict):
-        name_to_role = {r.name: r for r in guild.roles}
-        for r in data.get("roles", []):
-            if r["name"] not in name_to_role:
-                await guild.create_role(name=r["name"], permissions=discord.Permissions(r["permissions"]), colour=discord.Colour(r["color"]))
+    async def _restore_to_guild(self, guild: discord.Guild, data: dict, job_id: int):
+        total_steps = len(data["roles"]) + len(data["channels"]) + len(data["emojis"])
+        step = 0
+
+        # Rollen
+        existing_roles = {r.name for r in guild.roles}
+        for r in data["roles"]:
+            if r["name"] not in existing_roles:
+                await guild.create_role(
+                    name=r["name"],
+                    permissions=discord.Permissions(r["permissions"]),
+                    colour=discord.Colour(r["color"]),
+                    hoist=r["hoist"],
+                    mentionable=r["mentionable"]
+                )
                 await gentle_sleep()
+            step += 1
+            await self._update_job(job_id, step=step, total_steps=total_steps)
+
+        # Kategorien + Channels
+        existing_categories = {c.name for c in guild.categories}
+        name_to_category = {}
+        for ch in data["channels"]:
+            if ch["type"] == discord.ChannelType.category.value:
+                if ch["name"] not in existing_categories:
+                    cat = await guild.create_category(ch["name"], overwrites=self._build_overwrites(guild, ch["overwrites"]))
+                    name_to_category[cat.name] = cat
+                    await gentle_sleep()
+                step += 1
+                await self._update_job(job_id, step=step, total_steps=total_steps)
+
+        # Normale Channels
+        existing_channels = {c.name for c in guild.channels}
+        for ch in data["channels"]:
+            if ch["type"] != discord.ChannelType.category.value:
+                if ch["name"] not in existing_channels:
+                    parent = name_to_category.get(ch["parent_name"])
+                    overwrites = self._build_overwrites(guild, ch["overwrites"])
+                    await guild.create_text_channel(ch["name"], topic=ch["topic"], nsfw=ch["nsfw"], category=parent, overwrites=overwrites)
+                    await gentle_sleep()
+                step += 1
+                await self._update_job(job_id, step=step, total_steps=total_steps)
+
+        # Emojis
+        existing_emojis = {e.name for e in await guild.fetch_emojis()}
+        for e in data["emojis"]:
+            if e["name"] not in existing_emojis:
+                try:
+                    async with self.bot.session.get(e["url"]) as resp:
+                        img_bytes = await resp.read()
+                    await guild.create_custom_emoji(name=e["name"], image=img_bytes)
+                    await gentle_sleep()
+                except Exception:
+                    pass
+            step += 1
+            await self._update_job(job_id, step=step, total_steps=total_steps)
+
+    def _build_overwrites(self, guild: discord.Guild, ow_data: list[dict]):
+        overwrites = {}
+        for ow in ow_data:
+            if ow["target_type"] == "role":
+                role = discord.utils.get(guild.roles, name=ow["target_name"])
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite.from_pair(
+                        discord.Permissions(ow["allow"]), discord.Permissions(ow["deny"])
+                    )
+        return overwrites
 
     # -------- Commands --------
     @group.command(name="create")
     @app_commands.checks.has_permissions(administrator=True)
     async def create(self, interaction: discord.Interaction):
         job_id = await self._queue_job(interaction.guild_id, "create", None)
-        await interaction.response.send_message(f"📝 Backup-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.", ephemeral=True)
+        await interaction.response.send_message(
+            f"📝 Backup-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.",
+            ephemeral=True
+        )
 
     @group.command(name="load")
     @app_commands.checks.has_permissions(administrator=True)
     async def load(self, interaction: discord.Interaction, code: str):
         job_id = await self._queue_job(interaction.guild_id, "restore", code)
-        await interaction.response.send_message(f"♻️ Restore-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.", ephemeral=True)
+        await interaction.response.send_message(
+            f"♻️ Restore-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.",
+            ephemeral=True
+        )
 
     @group.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction):
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute("SELECT * FROM backup_jobs WHERE guild_id=%s ORDER BY created_at DESC LIMIT 1", (interaction.guild_id,))
+            await cur.execute(
+                "SELECT * FROM backup_jobs WHERE guild_id=%s ORDER BY created_at DESC LIMIT 1",
+                (interaction.guild_id,)
+            )
             job = await cur.fetchone()
         if not job:
             await interaction.response.send_message("📭 Keine Jobs gefunden.", ephemeral=True)
         else:
-            await interaction.response.send_message(f"📊 Letzter Job: Typ={job['type']}, Status={job['status']}, Schritt {job['step']}/{job['total_steps']}, Fehler={job['last_error']}", ephemeral=True)
+            await interaction.response.send_message(
+                f"📊 Letzter Job: Typ={job['type']}, Status={job['status']}, Schritt {job['step']}/{job['total_steps']}, Fehler={job['last_error']}",
+                ephemeral=True
+            )
 
     @group.command(name="delete")
     @app_commands.checks.has_permissions(administrator=True)
