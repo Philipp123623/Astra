@@ -67,9 +67,9 @@ def _scale_layout(layout: dict, dst_w: int, dst_h: int, base_w: int, base_h: int
         for k, v in d.items():
             if isinstance(v, dict):
                 out[k] = sc(v)
-            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset","left","right"):
+            elif k in ("x","w","size","border","pad_x","r","max_w","ring_width","inset","x0","x1"):
                 out[k] = int(round(v * sx))
-            elif k in ("y","h","pad_y","top","bottom"):
+            elif k in ("y","h","pad_y","y0","y1"):
                 out[k] = int(round(v * sy))
             elif k in ("font","min_font"):
                 out[k] = max(8, int(round(v * sfont)))
@@ -102,7 +102,7 @@ def bar_color_for(style: str) -> str:
     return BAR_COLORS.get(style, DEFAULT_HEX)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pixelgenaue Layouts (Avatar/Text + Boxen zum Zentrieren von Level/XP)
+# Pixelgenaue Layouts (Avatar/Text + exakte Boxen für Level/XP)
 # ──────────────────────────────────────────────────────────────────────────────
 LAYOUTS = {
     "new": {
@@ -110,25 +110,21 @@ LAYOUTS = {
         "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Boxen (Alle anderen: Breite 853–1021, Höhe 89–129 bzw. 204–244)
-        "level_box": {"left": 853, "top": 89,  "right": 1021, "bottom": 129},
-        "xp_box":    {"left": 853, "top": 204, "right": 1021, "bottom": 244},
-
-        # (optional beibehalten)
-        "level_center": {"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":    {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        # Level/XP-Boxen (aus deinen Koordinaten berechnet):
+        # Breite: 853..1021; Höhe: 89..129  => Mittelpunkt (937, 109)
+        "level_box": {"x0": 853, "y0": 89, "x1": 1021, "y1": 129, "base_font": 38, "min_font": 20, "pad": 10},
+        # Breite: 853..1021; Höhe: 204..244 => Mittelpunkt (937, 224)
+        "xp_box":    {"x0": 853, "y0": 204,"x1": 1021, "y1": 244, "base_font": 30, "min_font": 18, "pad": 10},
     },
     "standard": {
         "avatar": {"x": 64, "y": 98, "size": 142, "inset": 0, "draw_ring": True, "ring_width": 12},
         "username": {"x": 246, "y": 95, "max_w": 600, "font": 34},
         "rank": {"x": 393, "y": 157, "font": 53},
 
-        # Boxen (Standard: Breite 847–1015, Höhe 88–128 bzw. 205–243)
-        "level_box": {"left": 847, "top": 88,  "right": 1015, "bottom": 128},
-        "xp_box":    {"left": 847, "top": 205, "right": 1015, "bottom": 243},
-
-        "level_center": {"x": 931, "y": 95,  "font": 38, "min_font": 22, "max_w": 170},
-        "xp_center":    {"x": 931, "y": 223, "font": 30, "min_font": 18, "max_w": 230},
+        # Breite: 847..1015; Höhe: 88..128 => Mittelpunkt (931, 108)
+        "level_box": {"x0": 847, "y0": 88, "x1": 1015, "y1": 128, "base_font": 38, "min_font": 20, "pad": 10},
+        # Breite: 847..1015; Höhe: 205..243 => Mittelpunkt (931, 224)
+        "xp_box":    {"x0": 847, "y0": 205,"x1": 1015, "y1": 243, "base_font": 30, "min_font": 18, "pad": 10},
     }
 }
 
@@ -183,40 +179,33 @@ PB_GEOM = {
 _SLOT_MASK_CACHE: dict[tuple[str, tuple[int,int]], Image.Image] = {}
 
 def _geom_key(img_w: int, img_h: int, style: str) -> str:
-    # Entscheide robust: Stil oder Bildgröße
     if (img_w, img_h) == (1064, 339) or (style or "").lower() in ("standard", "levelcard_astra"):
         return "standard"
     return "new"
 
 def _slot_mask_from_coords(img_w: int, img_h: int, layout_key: str) -> Image.Image:
-    """
-    Baut eine binäre L-Maske (255 innen, 0 außen) für die innere Progressbar
-    EXAKT nach den Koordinatenlisten. Keine AA-Pixel.
-    """
     cache_key = (layout_key, (img_w, img_h))
     if cache_key in _SLOT_MASK_CACHE:
         return _SLOT_MASK_CACHE[cache_key]
 
     geom = PB_GEOM[layout_key]
     x0, x1 = geom["x_span"]
-    y0, y1 = geom["y_full"]           # inklusiv
+    y0, y1 = geom["y_full"]
     left_cap  = geom["left_cap"]
     right_cap = geom["right_cap"]
 
     mask = Image.new("L", (img_w, img_h), 0)
     d = ImageDraw.Draw(mask)
 
-    # Mittelteil: volle Höhe zwischen Kappen
+    # Mittelteil
     mid_x0 = max(x0, max(left_cap.keys()) + 1)
     mid_x1 = min(x1, min(right_cap.keys()) - 1)
     if mid_x1 >= mid_x0:
         d.rectangle((mid_x0, y0, mid_x1, y1), fill=255)
 
-    # Linke Kappe: spaltenweise
+    # Kappen
     for x, (yt, yb) in left_cap.items():
         d.line((x, yt, x, yb), fill=255)
-
-    # Rechte Kappe: spaltenweise
     for x, (yt, yb) in right_cap.items():
         d.line((x, yt, x, yb), fill=255)
 
@@ -244,50 +233,37 @@ def _truncate_to_width(draw, text: str, font, max_px: int) -> str:
         text = text[:-1]
     return text + ell
 
-def _fit_center_text_in_box(draw: ImageDraw.ImageDraw, box: dict, text: str,
-                            base_size: int, min_size: int, padding: int = 0,
-                            fill: str = "white"):
+def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
+                          base_font: int, min_font: int, fill: str = "white", pad: int = 8):
     """
-    Zentriert Text in der Box (left, top, right, bottom) und skaliert die Schrift,
-    bis sie in Breite UND Höhe (minus padding) passt.
+    Zentriert Text exakt in einer Box {x0,y0,x1,y1}.
+    Skaliert den Font herunter, bis er horizontal *und* vertikal mit Padding passt.
     """
-    left, top, right, bottom = box["left"], box["top"], box["right"], box["bottom"]
-    max_w = max(1, right - left - 2 * padding)
-    max_h = max(1, bottom - top - 2 * padding)
+    x0, y0, x1, y1 = box["x0"], box["y0"], box["x1"], box["y1"]
+    max_w = max(1, (x1 - x0) - 2*pad)
+    max_h = max(1, (y1 - y0) - 2*pad)
 
-    size = max(min_size, base_size)
+    size = base_font
     font = _mk_font(size)
-
+    # shrink-to-fit width & height
     while True:
         w = draw.textlength(text, font=font)
         bbox = font.getbbox(text)
-        h = (bbox[3] - bbox[1])
-
+        h = bbox[3] - bbox[1]
         if w <= max_w and h <= max_h:
             break
         size -= 1
-        if size < min_size:
+        if size < min_font:
             break
         font = _mk_font(size)
 
-    cx = left + (right - left) / 2.0
-    cy = top  + (bottom - top) / 2.0
-
-    # final messen für exakte Zentrierung
-    w = draw.textlength(text, font=font)
-    bbox = font.getbbox(text)
-    h = (bbox[3] - bbox[1])
-
-    draw.text((cx - w/2.0, cy - h/2.0), text, font=font, fill=fill)
+    cx = (x0 + x1) // 2
+    cy = (y0 + y1) // 2
+    _center_text(draw, cx, cy, text, font, fill)
 
 def _draw_progressbar(background: Image.Image, lay: dict,
                       xp_start: int | float, xp_end: int | float,
                       style_key: str):
-    """
-    Pixelgenau:
-    - Slot-Maske wird exakt aus deinen Koordinaten aufgebaut (keine Rundungen/AA).
-    - Füllmaske = Slot ∩ (x0..x_fill_end, y0..y1).
-    """
     perc = 0.0 if xp_end <= 0 else max(0.0, min(1.0, float(xp_start) / float(xp_end)))
     if perc <= 0.0:
         return
@@ -303,16 +279,13 @@ def _draw_progressbar(background: Image.Image, lay: dict,
     fill_w  = max(1, min(int(round(total_w * perc)), total_w))
     x_fill_end = x0 + fill_w - 1
 
-    # 1) Slot (komplette Schiene)
     slot_mask = _slot_mask_from_coords(img_w, img_h, geom_key)
 
-    # 2) Füllmaske = Slot ∩ Begrenzungsrect
     fill_mask = Image.new("L", (img_w, img_h), 0)
     d = ImageDraw.Draw(fill_mask)
     d.rectangle((x0, y0, x_fill_end, y1), fill=255)
     fill_mask = ImageChops.multiply(slot_mask, fill_mask)
 
-    # 3) Einfärben
     fill_img = Image.new("RGBA", (img_w, img_h), bar_color_for(style_key))
     background.paste(fill_img, (0, 0), fill_mask)
 
@@ -324,7 +297,6 @@ class Level(app_commands.Group):
         self.bot = bot
         super().__init__(name="levelsystem", description="Alles rund ums Levelsystem.")
 
-    # Autocomplete (optional nutzbar)
     async def _style_autocomplete(self, interaction: discord.Interaction, current: str):
         names = list_styles()
         return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
@@ -387,7 +359,7 @@ class Level(app_commands.Group):
         img_w, img_h = background.size
         lay = _resolved_layout(style_name, img_w, img_h)
 
-        # -------- Avatar --------
+        # Avatar
         av = lay["avatar"]
         av_size = av["size"]
         av_x, av_y = av["x"], av["y"]
@@ -399,7 +371,7 @@ class Level(app_commands.Group):
         inset = av.get("inset", 0)
         if av.get("draw_ring", False):
             ring_w = av.get("ring_width", 10)
-            draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
+            ImageDraw.Draw(background).ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
         inner_d = (av_size - 2 * inset, av_size - 2 * inset)
@@ -408,9 +380,9 @@ class Level(app_commands.Group):
         avatar_cropped = avatar_img.resize(inner_d)
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
-        # -------- Username & Rang --------
-        font_username = _mk_font(lay["username"]["font"])
-        font_rank = _mk_font(lay["rank"]["font"])
+        # Username & Rang
+        font_username = _mk_font(34)
+        font_rank = _mk_font(53)
 
         ux, uy = lay["username"]["x"], lay["username"]["y"]
         uname = _truncate_to_width(draw, str(user), font_username, lay["username"]["max_w"])
@@ -419,19 +391,22 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos}", font=font_rank, fill="white")
 
-        # -------- Level & XP (perfekt mittig in Boxen) --------
-        base_level_size = lay["level_center"]["font"]
-        base_xp_size    = lay["xp_center"]["font"]
-        _fit_center_text_in_box(draw, lay["level_box"], f"{lvl_start}", base_level_size, min_size=16, padding=0, fill="white")
-        _fit_center_text_in_box(draw, lay["xp_box"],    f"{xp_start}/{round(xp_end)}", base_xp_size, min_size=14, padding=0, fill="white")
+        # Level & XP — exakt in die Boxen zentriert
+        level_box = lay["level_box"]
+        xp_box    = lay["xp_box"]
+        _draw_centered_in_box(draw, f"{lvl_start}", level_box,
+                              level_box["base_font"], level_box["min_font"], fill="white", pad=level_box["pad"])
+        _draw_centered_in_box(draw, f"{xp_start}/{round(xp_end)}", xp_box,
+                              xp_box["base_font"], xp_box["min_font"], fill="white", pad=xp_box["pad"])
 
-        # -------- Progressbar (pixelgenau) --------
+        # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, style_name)
 
         buf = BytesIO()
         background.save(buf, "PNG")
         buf.seek(0)
         await interaction.followup.send(file=File(buf, filename=f"rank_{style_name}.png"))
+        return None
 
     # /setstyle
     @app_commands.command(name="setstyle", description="Wähle deine Rank-Card.")
@@ -440,10 +415,9 @@ class Level(app_commands.Group):
     async def setstyle(
             self,
             interaction: discord.Interaction,
-            style: Literal[PRETTY_CHOICES],  # zeigt hübsche Namen ohne Unterstriche
+            style: Literal[PRETTY_CHOICES],
     ):
-        internal_style = PRETTY_TO_FILENAME[style]  # map auf Dateiname
-
+        internal_style = PRETTY_TO_FILENAME[style]
         available = set(list_styles())
         if internal_style not in available:
             return await interaction.response.send_message(
@@ -454,17 +428,6 @@ class Level(app_commands.Group):
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS levelstyle
-                    (
-                        guild_id  BIGINT      NOT NULL,
-                        client_id BIGINT      NOT NULL,
-                        style     VARCHAR(64) NOT NULL,
-                        PRIMARY KEY (guild_id, client_id)
-                    )
-                    """
-                )
-                await cur.execute(
-                    """
                     INSERT INTO levelstyle (guild_id, client_id, style)
                     VALUES (%s, %s, %s)
                     ON DUPLICATE KEY UPDATE style = VALUES(style)
@@ -473,6 +436,7 @@ class Level(app_commands.Group):
                 )
 
         await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
+        return None
 
     # /previewstyle
     @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
@@ -484,7 +448,6 @@ class Level(app_commands.Group):
             style: Literal[PRETTY_CHOICES],
     ):
         internal_style = PRETTY_TO_FILENAME[style]
-
         if internal_style not in set(list_styles()):
             return await interaction.response.send_message(
                 f"❌ Der Style **{style}** ist (noch) nicht verfügbar.", ephemeral=True
@@ -493,10 +456,7 @@ class Level(app_commands.Group):
         await interaction.response.defer(thinking=True, ephemeral=True)
         bg_path = style_to_path(internal_style)
 
-        # Daten für echte Vorschau
-        async with self.bot.pool.acquire() as conn:
-            async with self.bot.pool.acquire() as conn:
-                pass
+        # Daten holen
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -537,7 +497,7 @@ class Level(app_commands.Group):
         inset = av.get("inset", 0)
         if av.get("draw_ring", False):
             ring_w = av.get("ring_width", 10)
-            draw.ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
+            ImageDraw.Draw(background).ellipse((av_x, av_y, av_x + av_size, av_y + av_size), outline="white", width=ring_w)
             inset = max(inset, ring_w)
 
         inner_d = (av_size - 2 * inset, av_size - 2 * inset)
@@ -547,8 +507,8 @@ class Level(app_commands.Group):
         background.paste(avatar_cropped, (av_x + inset, av_y + inset), mask)
 
         # Username & Rang
-        font_username = _mk_font(lay["username"]["font"])
-        font_rank = _mk_font(lay["rank"]["font"])
+        font_username = _mk_font(34)
+        font_rank = _mk_font(53)
 
         ux, uy = lay["username"]["x"], lay["username"]["y"]
         uname = _truncate_to_width(draw, str(interaction.user), font_username, lay["username"]["max_w"])
@@ -557,13 +517,15 @@ class Level(app_commands.Group):
         rx, ry = lay["rank"]["x"], lay["rank"]["y"]
         draw.text((rx, ry), f"#{rank_pos or '—'}", font=font_rank, fill="white")
 
-        # Level & XP (perfekt mittig in Boxen)
-        base_level_size = lay["level_center"]["font"]
-        base_xp_size    = lay["xp_center"]["font"]
-        _fit_center_text_in_box(draw, lay["level_box"], f"{lvl_start}", base_level_size, min_size=16, padding=0, fill="white")
-        _fit_center_text_in_box(draw, lay["xp_box"],    f"{xp_start}/{round(xp_end)}", base_xp_size,   min_size=14, padding=0, fill="white")
+        # Level & XP – exakt zentriert
+        level_box = lay["level_box"]
+        xp_box    = lay["xp_box"]
+        _draw_centered_in_box(draw, f"{lvl_start}", level_box,
+                              level_box["base_font"], level_box["min_font"], fill="white", pad=level_box["pad"])
+        _draw_centered_in_box(draw, f"{xp_start}/{round(xp_end)}", xp_box,
+                              xp_box["base_font"], xp_box["min_font"], fill="white", pad=xp_box["pad"])
 
-        # Progressbar (exakt)
+        # Progressbar
         _draw_progressbar(background, lay, xp_start, xp_end, internal_style)
 
         buf = BytesIO()
@@ -574,6 +536,7 @@ class Level(app_commands.Group):
             file=File(buf, filename=f"preview_{internal_style}.png"),
             ephemeral=True
         )
+        return None
 
     @app_commands.command(name="status")
     @app_commands.checks.has_permissions(administrator=True)
