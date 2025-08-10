@@ -744,6 +744,11 @@ class Level(app_commands.Group):
                                 "<:Astra_accept:1141303821176422460> **Die Level-UP-Nachricht wurde erfolgreich zurückgesetzt.**")
 
     @app_commands.command(name="role")
+    @app_commands.describe(
+        modus="Was soll passieren?",
+        level="Ab welchem Level (1–100)?",
+        role="Welche Rolle?"
+    )
     @app_commands.checks.has_permissions(manage_roles=True)
     async def levelsystem_role_add(self, interaction: discord.Interaction,
                                    modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int,
@@ -845,300 +850,282 @@ class levelsystem(commands.Cog):
             return
         if msg.author.bot:
             return
-        else:
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    bucket = self.cd_mapping.get_bucket(msg)
-                    retry_after = bucket.update_rate_limit()
-                    if retry_after:
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Cooldown pro Guild
+                bucket = self.cd_mapping.get_bucket(msg)
+                retry_after = bucket.update_rate_limit()
+                if retry_after:
+                    return
+
+                # Datensatz laden/erstellen
+                await cur.execute(
+                    "SELECT user_xp, user_level FROM levelsystem WHERE client_id = (%s) AND guild_id = (%s)",
+                    (msg.author.id, msg.guild.id)
+                )
+                rows = await cur.fetchall()
+
+                await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (msg.guild.id,))
+                enabled = await cur.fetchone()
+
+                if len(rows) == 0:
+                    # Ersteintrag (System-Flag bleibt 0 = deaktiviert bis /status einschaltet)
+                    await cur.execute(
+                        "INSERT INTO levelsystem (client_id, user_xp, user_level, guild_id, enabled) "
+                        "VALUES (%s, %s, %s, %s, %s)",
+                        (msg.author.id, 2, 0, msg.guild.id, 0)
+                    )
+                    return
+
+                if enabled[0] == 0:
+                    return
+
+                # --- Aktuelle Werte
+                xp_start = int(rows[0][0])
+                lvl_start = int(rows[0][1])
+
+                # XP bis Levelende (deine Formel)
+                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
+
+                # XP-Boost prüfen
+                await cur.execute("SELECT xp FROM levelxp WHERE guildID = (%s)", (msg.guild.id,))
+                xpres = await cur.fetchone()
+                gain = random.randint(1, 5) * (2 if xpres else 1)
+
+                # ------------------------------
+                # HARD CAP & EARLY RETURN (Lvl 100)
+                # ------------------------------
+                if lvl_start >= 100:
+                    # Wenn schon voll -> direkt raus
+                    if xp_start >= 58000:
                         return
+
+                    # Anheben, aber bei 58k deckeln
+                    new_total = min(58000, xp_start + gain)
+                    await cur.execute(
+                        "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
+                        (new_total, msg.author.id, msg.guild.id)
+                    )
+                    return
+
+                # ------------------------------
+                # Normale Logik für Level < 100
+                # ------------------------------
+                new_total = xp_start + gain
+
+                # Nur XP erhöhen, falls unter Schwelle
+                if new_total < xp_end:
+                    await cur.execute(
+                        "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
+                        (new_total, msg.author.id, msg.guild.id)
+                    )
+                    return
+
+                # --- Level-Up ---
+                await cur.execute(
+                    "UPDATE levelsystem SET user_level = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
+                    (lvl_start + 1, msg.author.id, msg.guild.id)
+                )
+                # Nach Level-Up startest du bei 1 XP (wie zuvor)
+                await cur.execute(
+                    "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
+                    (1, msg.author.id, msg.guild.id)
+                )
+
+                # --- CommunityGoal: Levelup-Progress inkrementieren ---
+                cog = self.bot.get_cog("CommunityGoalsCog")
+                if cog:
+                    await cog.count_levelup(msg.guild.id)
+
+                # ------------------------------
+                # Dein bestehender Benachrichtigungs-/Rollen-Code
+                # (unverändert übernommen)
+                # ------------------------------
+                await cur.execute("SELECT type FROM levelchannel WHERE guildID = (%s)", (msg.guild.id,))
+                result6 = await cur.fetchone()
+
+                if not result6:
+                    await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)", (msg.guild.id))
+                    messageres = await cur.fetchone()
+                    if messageres is None:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result8 = await cur.fetchone()
+                        if result8:
+                            roleid = result8[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                            embed = discord.Embed(
+                                title="Level-UP",
+                                description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
+                                color=discord.Color.green()
+                            )
+                            await msg.channel.send(msg.author.mention, embed=embed)
+                        if not result8:
+                            embed = discord.Embed(
+                                title="Level-UP",
+                                description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
+                                color=discord.Color.green()
+                            )
+                            await msg.channel.send(msg.author.mention, embed=embed)
                     else:
                         await cur.execute(
-                            f"SELECT user_xp, user_level FROM levelsystem WHERE client_id = (%s) AND guild_id = (%s)",
-                            (msg.author.id, msg.guild.id))
-                        result = await cur.fetchall()
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result5 = await cur.fetchone()
+                        lvl = int(lvl_start + 1)
+                        finalmsg = messageres[0].replace("%member", str(msg.author.mention)).replace("%level", str(lvl))
+                        if result5:
+                            roleid = result5[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                            embed = discord.Embed(title="Level-UP", description=finalmsg, color=discord.Color.green())
+                            await msg.channel.send(msg.author.mention, embed=embed)
+                        if not result5:
+                            embed = discord.Embed(title="Level-UP", description=finalmsg, color=discord.Color.green())
+                            await msg.channel.send(msg.author.mention, embed=embed)
+                    return
 
-                        await cur.execute(f"SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (msg.guild.id))
-                        enabled = await cur.fetchone()
-                        if len(result) == 0:
-                            await cur.execute(
-                                f"INSERT INTO levelsystem (client_id, user_xp, user_level, guild_id, enabled) VALUES (%s, %s, %s, %s, %s)",
-                                (msg.author.id, 2, 0, msg.guild.id, 0))
-                        else:
-                            if enabled[0] == 0:
-                                return
-                            if enabled[0] == 1:
-                                xp_start = int(result[0][0])
-                                lvl_start = int(result[0][1])
-                                xp_end = 5.5 * (lvl_start ** 2) + 30 * lvl_start
-                                await cur.execute("SELECT xp FROM levelxp WHERE guildID = (%s)", (msg.guild.id))
-                                xpres = await cur.fetchone()
-                                if not xpres:
-                                    newxp = random.randint(1, 5)
-                                if xpres:
-                                    newxp = random.randint(1, 5) * 2
+                if result6[0] == "Private Message":
+                    await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)", (msg.guild.id))
+                    messageres = await cur.fetchone()
+                    if messageres is None:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result11 = await cur.fetchone()
+                        if result11:
+                            roleid = result11[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(
+                            title="Level-UP",
+                            description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
+                            color=discord.Color.green()
+                        )
+                        await msg.author.send(msg.author.mention, embed=embed)
+                    else:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result10 = await cur.fetchone()
+                        lvl = int(lvl_start + 1)
+                        finalmsg = messageres[0].replace("%member", str(msg.author.mention)).replace("%level", str(lvl))
+                        if result10:
+                            roleid = result10[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(title="Level-UP", description=finalmsg, color=discord.Color.green())
+                        await msg.author.send(msg.author.mention, embed=embed)
+                    return
 
-                                await cur.execute(
-                                    "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
-                                    (result[0][0] + newxp, msg.author.id, msg.guild.id))
-                                if xp_end >= 58000.0 and lvl_start >= 100 and xp_start >= 58000.0:
-                                    return
-                                if xp_end <= 58000.0 and lvl_start <= 100 and xp_start <= 58000.0:
-                                    if xp_end < (xp_start + newxp):
-                                        await cur.execute(
-                                            "UPDATE levelsystem SET user_level = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
-                                            (int(lvl_start) + 1, msg.author.id, msg.guild.id))
-                                        await cur.execute(
-                                            "UPDATE levelsystem SET user_xp = (%s) WHERE client_id = (%s) AND guild_id = (%s)",
-                                            (0 + 1, msg.author.id, msg.guild.id))
+                if result6[0] == "Deactivated":
+                    await cur.execute(
+                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                        (msg.guild.id, int(lvl_start) + 1)
+                    )
+                    result12 = await cur.fetchone()
+                    if result12:
+                        roleid = result12[0]
+                        role = msg.guild.get_role(roleid)
+                        member = msg.author
+                        if role not in member.roles:
+                            await member.add_roles(role)
+                    return
 
-                                        # --- CommunityGoal: Levelup-Progress inkrementieren ---
-                                        cog = self.bot.get_cog("CommunityGoalsCog")
-                                        if cog:
-                                            await cog.count_levelup(msg.guild.id)
+                if result6[0] == "Last Channel":
+                    await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)", (msg.guild.id))
+                    messageres = await cur.fetchone()
+                    if messageres is None:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result15 = await cur.fetchone()
+                        if result15:
+                            roleid = result15[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(
+                            title="Level-UP",
+                            description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
+                            color=discord.Color.green()
+                        )
+                        await msg.channel.send(msg.author.mention, embed=embed)
+                    else:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result14 = await cur.fetchone()
+                        lvl = int(lvl_start + 1)
+                        finalmsg = messageres[0].replace("%member", str(msg.author.mention)).replace("%level", str(lvl))
+                        if result14 is not None:
+                            roleid = result14[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(title="Level-UP", description=finalmsg, color=discord.Color.green())
+                        await msg.channel.send(msg.author.mention, embed=embed)
+                    return
 
-                                        await cur.execute("SELECT type FROM levelchannel WHERE guildID = (%s)",
-                                                          (msg.guild.id,))
-                                        result6 = await cur.fetchone()
-                                        if not result6:
-                                            await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)",
-                                                              (msg.guild.id))
-                                            messageres = await cur.fetchone()
-                                            if messageres is None:
-                                                await cur.execute(
-                                                    "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                    (msg.guild.id, int(lvl_start) + 1))
-                                                result8 = await cur.fetchone()
-                                                if result8:
-                                                    roleid = result8[0]
-                                                    role = msg.guild.get_role(roleid)
-                                                    member = msg.author
-                                                    if role in member.roles:
-                                                        pass
-                                                    else:
-                                                        await member.add_roles(role)
-                                                    embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1}",
-                                                                          color=discord.Color.green())
-                                                    await msg.channel.send(msg.author.mention, embed=embed)
-                                                if not result8:
-                                                    embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                    await msg.channel.send(msg.author.mention, embed=embed)
-                                            if messageres is not None:
-                                                await cur.execute(
-                                                    "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                    (msg.guild.id, int(lvl_start) + 1))
-                                                result5 = await cur.fetchone()
-                                                lvl = int(lvl_start + 1)
-                                                finalmsg = messageres[0].replace("%member",
-                                                                                 str(msg.author.mention)).replace(
-                                                    "%level", (str(lvl)))
-                                                if result5:
-                                                    roleid = result5[0]
-                                                    role = msg.guild.get_role(roleid)
-                                                    member = msg.author
-                                                    if role in member.roles:
-                                                        pass
-                                                    else:
-                                                        await member.add_roles(role)
-                                                    embed = discord.Embed(title="Level-UP",
-                                                                          description=finalmsg,
-                                                                          color=discord.Color.green())
-                                                    await msg.channel.send(msg.author.mention, embed=embed)
-                                                if not result5:
-                                                    embed = discord.Embed(title="Level-UP",
-                                                                          description=finalmsg,
-                                                                          color=discord.Color.green())
-                                                    await msg.channel.send(msg.author.mention, embed=embed)
-                                        if result6:
-                                            if result6[0] == str("Private Message"):
-                                                await cur.execute(
-                                                    "SELECT message FROM levelmsg WHERE guildID = (%s)",
-                                                    (msg.guild.id))
-                                                messageres = await cur.fetchone()
-                                                if messageres is None:
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result11 = await cur.fetchone()
-                                                    if result11:
-                                                        roleid = result11[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await msg.author.send(msg.author.mention, embed=embed)
-                                                    if not result11:
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await msg.author.send(msg.author.mention, embed=embed)
-                                                if messageres is not None:
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result10 = await cur.fetchone()
-                                                    lvl = int(lvl_start + 1)
-                                                    finalmsg = messageres[0].replace("%member",
-                                                                                     str(msg.author.mention)).replace(
-                                                        "%level", (str(lvl)))
-                                                    if result10:
-                                                        roleid = result10[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                              description=finalmsg,
-                                                                              color=discord.Color.green())
-                                                        await msg.author.send(msg.author.mention, embed=embed)
-                                                    if not result10:
-                                                        lvl = int(lvl_start + 1)
-                                                        finalmsg = messageres[0].replace("%member",
-                                                                                         str(msg.author.mention)).replace(
-                                                            "%level", (str(lvl)))
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                              description=finalmsg,
-                                                                              color=discord.Color.green())
-                                                        await msg.author.send(msg.author.mention, embed=embed)
-                                            if result6[0] == str("Deactivated"):
-                                                await cur.execute(
-                                                    "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                    (msg.guild.id, int(lvl_start) + 1))
-                                                result12 = await cur.fetchone()
-                                                if result12:
-                                                    roleid = result12[0]
-                                                    role = msg.guild.get_role(roleid)
-                                                    member = msg.author
-                                                    if role in member.roles:
-                                                        pass
-                                                    else:
-                                                        await member.add_roles(role)
-                                                if not result12:
-                                                    pass
-                                            if result6[0] == str("Last Channel"):
-                                                await cur.execute(
-                                                    "SELECT message FROM levelmsg WHERE guildID = (%s)",
-                                                    (msg.guild.id))
-                                                messageres = await cur.fetchone()
-                                                if messageres is None:
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result15 = await cur.fetchone()
-                                                    if result15:
-                                                        roleid = result15[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await msg.channel.send(msg.author.mention, embed=embed)
-                                                    if not result15:
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await msg.channel.send(msg.author.mention, embed=embed)
-                                                if messageres is not None:
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result14 = await cur.fetchone()
-                                                    lvl = int(lvl_start + 1)
-                                                    finalmsg = messageres[0].replace("%member",
-                                                                                     str(msg.author.mention)).replace(
-                                                        "%level", (str(lvl)))
-                                                    if result14 is not None:
-                                                        roleid = result14[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        lvl = int(lvl_start + 1)
-                                                        finalmsg = messageres[0].replace("%member",
-                                                                                         str(msg.author.mention)).replace(
-                                                            "%level", (str(lvl)))
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                              description=finalmsg,
-                                                                              color=discord.Color.green())
-                                                        await msg.channel.send(msg.author.mention, embed=embed)
-                                                    if result14 is None:
-                                                        embed = discord.Embed(title="Level-UP", description=finalmsg,
-                                                                              color=discord.Color.green())
-                                                        await msg.channel.send(msg.author.mention, embed=embed)
-                                            if result6[0].isnumeric():
-                                                await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)",
-                                                                  (msg.guild.id))
-                                                messageres = await cur.fetchone()
+                if result6[0].isnumeric():
+                    await cur.execute("SELECT message FROM levelmsg WHERE guildID = (%s)", (msg.guild.id))
+                    messageres = await cur.fetchone()
 
-                                                if messageres is None:
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result9 = await cur.fetchone()
-                                                    if result9:
-                                                        roleid = result9[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        channel = self.bot.get_channel(int(result6[0]))
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await channel.send(msg.author.mention, embed=embed)
-                                                    if not result9:
-                                                        channel = self.bot.get_channel(int(result6[0]))
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                          description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
-                                                                          color=discord.Color.green())
-                                                        await channel.send(msg.author.mention, embed=embed)
-                                                if messageres is not None:
-                                                    lvl = int(lvl_start + 1)
-                                                    finalmsg = messageres[0].replace("%member",
-                                                                                     str(msg.author.mention)).replace(
-                                                        "%level", (str(lvl)))
-                                                    await cur.execute(
-                                                        "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
-                                                        (msg.guild.id, int(lvl_start) + 1))
-                                                    result5 = await cur.fetchone()
-                                                    if result5:
-                                                        channel = self.bot.get_channel(int(result6[0]))
-                                                        roleid = result5[0]
-                                                        role = msg.guild.get_role(roleid)
-                                                        member = msg.author
-                                                        if role in member.roles:
-                                                            pass
-                                                        else:
-                                                            await member.add_roles(role)
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                              description=finalmsg,
-                                                                              color=discord.Color.green())
-
-                                                        await channel.send(msg.author.mention, embed=embed)
-                                                    if not result5:
-                                                        channel = self.bot.get_channel(int(result6[0]))
-                                                        embed = discord.Embed(title="Level-UP",
-                                                                              description=finalmsg,
-                                                                              color=discord.Color.green())
-                                                        await channel.send(msg.author.mention, embed=embed)
+                    channel = self.bot.get_channel(int(result6[0]))
+                    if messageres is None:
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result9 = await cur.fetchone()
+                        if result9:
+                            roleid = result9[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(
+                            title="Level-UP",
+                            description=f"Weiter so {msg.author.mention}! Du hast Level {int(lvl_start) + 1} erreicht",
+                            color=discord.Color.green()
+                        )
+                        await channel.send(msg.author.mention, embed=embed)
+                    else:
+                        lvl = int(lvl_start + 1)
+                        finalmsg = messageres[0].replace("%member", str(msg.author.mention)).replace("%level", str(lvl))
+                        await cur.execute(
+                            "SELECT roleID FROM levelroles WHERE guildID = (%s) and levelreq = (%s)",
+                            (msg.guild.id, int(lvl_start) + 1)
+                        )
+                        result5 = await cur.fetchone()
+                        if result5:
+                            roleid = result5[0]
+                            role = msg.guild.get_role(roleid)
+                            member = msg.author
+                            if role not in member.roles:
+                                await member.add_roles(role)
+                        embed = discord.Embed(title="Level-UP", description=finalmsg, color=discord.Color.green())
+                        await channel.send(msg.author.mention, embed=embed)
+                    return
 
     @app_commands.command(name="xpboost")
     @app_commands.guild_only()

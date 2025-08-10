@@ -4,60 +4,14 @@ from discord.ext import commands
 from discord.ui import View
 from datetime import datetime, timezone
 
-# -------------------- HOME BUTTON --------------------
-class HomeButton(discord.ui.Button):
+# -------------------- WEBSITE BUTTON --------------------
+class WebsiteButton(discord.ui.Button):
     def __init__(self):
-        self.uptime = datetime.now(timezone.utc)
-        super().__init__(label="🏠 Home", style=discord.ButtonStyle.primary, custom_id="help_home_button")
-
-    async def callback(self, interaction: discord.Interaction):
-        cog = interaction.client.get_cog("help")
-        if cog is None:
-            return
-
-        delta_uptime = datetime.now(timezone.utc) - self.uptime
-        hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        days, hours = divmod(hours, 24)
-
-        # View nur mit Dropdown (ohne Home-Button)
-        view = View(timeout=None)
-        view.add_item(Dropdown())
-
-        embed = discord.Embed(
-            colour=discord.Colour.blue(),
-            title="Help Menü",
-            description=(
-                "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
-                "Hier findest du alle Commands.\n"
-                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/NH9DdSUJrE).\n\n"
-                f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
-                f"**Ping**: {self.bot.latency * 1000:.0f} ms"
-            )
+        super().__init__(
+            label="🌐 Website",
+            style=discord.ButtonStyle.link,
+            url="https://astra-bot.de"
         )
-        embed.add_field(
-            name="Letzte Updates",
-            value=(
-                "> <:Coin:1359178077011181811> Neues Economy: </job:1362756274130915433>, </economy:1362756274130915432>\n"
-                "> <:Astra_minigames:1141303876528648232> Neue Minigames: </hangman:1362756274130915431>, </snake:1362756275544522825>\n"
-                "> <:Astra_gw1:1141303852889550928> Giveaway: </gewinnspiel:1197746882164834335>\n"
-                "> <:Astra_level:1141825043278598154> Levelsystem: </levelsystem status:1362756275133222930>"
-            )
-        )
-        embed.add_field(
-            name="Links",
-            value=(
-                "**[Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)"
-                " | [Support](https://discord.gg/NH9DdSUJrE)"
-                " | [Voten](https://top.gg/bot/1113403511045107773/vote)**"
-            ),
-            inline=False
-        )
-        embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
-        embed.set_image(
-            url="https://cdn.discordapp.com/attachments/1141116983358804118/1403484979266195476/Neuer-Astra-Banner-animiert.gif")
-
-        await interaction.response.edit_message(embed=embed, view=view)
 
 # -------------------- DROPDOWN --------------------
 class Dropdown(discord.ui.Select):
@@ -98,10 +52,9 @@ class Dropdown(discord.ui.Select):
         embed.set_author(name=f"Command Menü | {self.values[0]}", icon_url=interaction.client.user.avatar)
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
 
-        # View mit Dropdown + HomeButton
         view = View(timeout=None)
         view.add_item(Dropdown())
-        view.add_item(HomeButton())
+        view.add_item(WebsiteButton())
 
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -117,6 +70,7 @@ class help(commands.Cog):
     async def help(self, interaction: discord.Interaction):
         view = View(timeout=None)
         view.add_item(Dropdown())
+        view.add_item(WebsiteButton())
 
         delta_uptime = datetime.utcnow() - self.uptime
         hours, remainder = divmod(int(delta_uptime.total_seconds()), 3600)
