@@ -248,15 +248,18 @@ def _center_text(draw: ImageDraw.ImageDraw, cx: int, cy: int,
 def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
                           base_font: int, min_font: int, fill: str = "white", pad: int = 8):
     """
-    Zentriert Text in Box {x0,y0,x1,y1}. Font wird bei Bedarf kleiner (nie größer).
+    Zentriert Text in Box {x0,y0,x1,y1}.
+    Skaliert so groß wie möglich innerhalb von min_font..∞.
     """
     x0, y0, x1, y1 = box["x0"], box["y0"], box["x1"], box["y1"]
     max_w = max(1, (x1 - x0) - 2 * pad)
     max_h = max(1, (y1 - y0) - 2 * pad)
 
+    # Startgröße
     size = int(base_font)
     font = _mk_font(size)
 
+    # Wenn zu groß → verkleinern
     while True:
         w = draw.textlength(text, font=font)
         bx0, by0, bx1, by1 = font.getbbox(text)
@@ -267,6 +270,23 @@ def _draw_centered_in_box(draw: ImageDraw.ImageDraw, text: str, box: dict,
         if size < int(min_font):
             break
         font = _mk_font(size)
+
+    # Wenn noch Platz → vergrößern
+    while True:
+        w = draw.textlength(text, font=font)
+        bx0, by0, bx1, by1 = font.getbbox(text)
+        h = by1 - by0
+        if w >= max_w or h >= max_h:
+            break
+        size += 1
+        font = _mk_font(size)
+        w2 = draw.textlength(text, font=font)
+        bx0, by0, bx1, by1 = font.getbbox(text)
+        h2 = by1 - by0
+        if w2 > max_w or h2 > max_h:
+            size -= 1
+            font = _mk_font(size)
+            break
 
     cx = (x0 + x1) // 2
     cy = (y0 + y1) // 2
