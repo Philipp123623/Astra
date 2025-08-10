@@ -93,7 +93,8 @@ class help(commands.Cog):
             name="Über Astra",
             value=(
                 "> <:Astra_support:1141303923752325210> **Astra** ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben.\n\n"
-            )
+            ),
+            inline=False,
         )
         embed.add_field(
             name="Letzte Updates",
@@ -102,7 +103,8 @@ class help(commands.Cog):
                 "> <:Astra_minigames:1141303876528648232> Neue Minigames: </hangman:1362756274130915431>, </snake:1362756275544522825>\n"
                 "> <:Astra_gw1:1141303852889550928> Giveaway: </gewinnspiel:1197746882164834335>\n"
                 "> <:Astra_level:1141825043278598154> Levelsystem: </levelsystem status:1362756275133222930>"
-            )
+            ),
+            inline=False,
         )
         embed.add_field(
             name="Links",
