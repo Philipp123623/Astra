@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Discord Backup System — Neustart-Resistent & Vollständiger Restore
-Speichert Rollen/Channels/Kategorien/Overwrites/Emojis (keine Nachrichten)
-und kann sie vollständig wiederherstellen (nicht destruktiv).
+- /backup create  → erstellt sofort ein Backup und gibt den CODE zurück
+- /backup latest  → zeigt den letzten Code der Guild
+- /backup load    → stellt über CODE wieder her (als Job, neustart-sicher)
+- /backup status  → Fortschritt des Restore-Jobs
+- /backup delete  → löscht ein Backup per Code
+
+Speichert Rollen/Channels/Kategorien/Overwrites/Emojis (keine Nachrichten).
+Restore ist nicht-destruktiv (fügt fehlende Objekte hinzu, löscht nichts).
 """
 
 from __future__ import annotations
@@ -11,11 +17,13 @@ import hashlib
 import time
 import typing as T
 
+import aiohttp
 import aiomysql
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+# -------- JSON & Kompression --------
 try:
     import orjson
     def dumps(obj: T.Any) -> bytes:
@@ -38,7 +46,7 @@ except ImportError:
 
 BACKUP_VERSION = 1
 
-# Hilfsfunktionen
+# -------- Helpers --------
 def b58(b: bytes) -> str:
     alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
     n = int.from_bytes(b, 'big')
@@ -68,14 +76,27 @@ class BackupCog(commands.Cog):
             raise RuntimeError("BackupCog benötigt bot.pool (aiomysql.Pool)")
         self.guild_locks: dict[int, asyncio.Lock] = {}
         self.job_worker_task: asyncio.Task | None = None
+        self.http: aiohttp.ClientSession | None = None
 
     async def cog_load(self):
         await self._ensure_schema()
         await self._mark_stale_jobs()
         self.job_worker_task = asyncio.create_task(self._job_worker_loop())
+        self.http = aiohttp.ClientSession()
 
+    async def cog_unload(self):
+        if self.job_worker_task:
+            self.job_worker_task.cancel()
+        if self.http:
+            await self.http.close()
+
+    # -------- Schema --------
     async def _ensure_schema(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
+
+            await cur.execute("DROP TABLE backups;")
+            await cur.execute("DROP TABLE backup_jobs;")
+
             await cur.execute("""
             CREATE TABLE IF NOT EXISTS backups (
               code VARCHAR(32) PRIMARY KEY,
@@ -108,6 +129,7 @@ class BackupCog(commands.Cog):
                 "UPDATE backup_jobs SET status='error', last_error='Bot restart' WHERE status='running'"
             )
 
+    # -------- Job-Queue (nur für Restore genutzt) --------
     async def _queue_job(self, guild_id: int, type_: str, code: str | None) -> int:
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
@@ -147,11 +169,7 @@ class BackupCog(commands.Cog):
                 if not guild:
                     raise RuntimeError("Guild nicht gefunden oder Bot nicht drauf.")
 
-                if job["type"] == "create":
-                    payload = await self._snapshot_guild(guild)
-                    code = await self._store_backup(guild_id, payload)
-                    await self._update_job(job["job_id"], status="done", code=code, total_steps=1, step=1)
-                elif job["type"] == "restore":
+                if job["type"] == "restore":
                     data, _meta = await self._fetch_backup(job["code"])
                     await self._restore_to_guild(guild, data, job["job_id"])
                     await self._update_job(job["job_id"], status="done")
@@ -168,6 +186,8 @@ class BackupCog(commands.Cog):
         else:
             blob = gzip.compress(raw)  # type: ignore
         async with self.pool.acquire() as conn, conn.cursor() as cur:
+            # optional: nur 1 Backup pro Guild behalten
+            await cur.execute("DELETE FROM backups WHERE guild_id=%s", (guild_id,))
             await cur.execute(
                 "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
                 (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
@@ -187,6 +207,16 @@ class BackupCog(commands.Cog):
             raw = gzip.decompress(blob)  # type: ignore
         return loads(raw), row
 
+    async def _fetch_latest_code(self, guild_id: int) -> str | None:
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT code FROM backups WHERE guild_id=%s ORDER BY created_at DESC LIMIT 1",
+                (guild_id,)
+            )
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+    # -------- Snapshot --------
     async def _snapshot_guild(self, guild: discord.Guild) -> dict:
         roles = [{
             "name": r.name,
@@ -196,6 +226,7 @@ class BackupCog(commands.Cog):
             "hoist": r.hoist,
             "mentionable": r.mentionable
         } for r in sorted(guild.roles, key=lambda x: x.position)]
+
         channels = []
         for ch in sorted(guild.channels, key=lambda x: (0 if isinstance(x, discord.CategoryChannel) else 1, x.position)):
             overwrites = []
@@ -216,21 +247,24 @@ class BackupCog(commands.Cog):
                 "nsfw": getattr(ch, "nsfw", False),
                 "overwrites": overwrites
             })
+
         emojis = []
         try:
             for e in await guild.fetch_emojis():
                 emojis.append({"name": e.name, "animated": e.animated, "url": str(e.url)})
         except discord.Forbidden:
             pass
+
         return {"version": BACKUP_VERSION, "roles": roles, "channels": channels, "emojis": emojis}
 
+    # -------- Restore --------
     async def _restore_to_guild(self, guild: discord.Guild, data: dict, job_id: int):
-        total_steps = len(data["roles"]) + len(data["channels"]) + len(data["emojis"])
+        total_steps = len(data.get("roles", [])) + len(data.get("channels", [])) + len(data.get("emojis", []))
         step = 0
 
-        # Rollen
+        # 1) Rollen
         existing_roles = {r.name for r in guild.roles}
-        for r in data["roles"]:
+        for r in data.get("roles", []):
             if r["name"] not in existing_roles:
                 await guild.create_role(
                     name=r["name"],
@@ -243,75 +277,138 @@ class BackupCog(commands.Cog):
             step += 1
             await self._update_job(job_id, step=step, total_steps=total_steps)
 
-        # Kategorien + Channels
-        existing_categories = {c.name for c in guild.categories}
-        name_to_category = {}
-        for ch in data["channels"]:
+        # 2) Kategorien
+        existing_categories = {c.name: c for c in guild.categories}
+        for ch in data.get("channels", []):
             if ch["type"] == discord.ChannelType.category.value:
                 if ch["name"] not in existing_categories:
-                    cat = await guild.create_category(ch["name"], overwrites=self._build_overwrites(guild, ch["overwrites"]))
-                    name_to_category[cat.name] = cat
+                    cat = await guild.create_category(
+                        ch["name"],
+                        overwrites=self._build_overwrites(guild, ch["overwrites"])
+                    )
+                    existing_categories[cat.name] = cat
                     await gentle_sleep()
                 step += 1
                 await self._update_job(job_id, step=step, total_steps=total_steps)
 
-        # Normale Channels
-        existing_channels = {c.name for c in guild.channels}
-        for ch in data["channels"]:
-            if ch["type"] != discord.ChannelType.category.value:
-                if ch["name"] not in existing_channels:
-                    parent = name_to_category.get(ch["parent_name"])
-                    overwrites = self._build_overwrites(guild, ch["overwrites"])
-                    await guild.create_text_channel(ch["name"], topic=ch["topic"], nsfw=ch["nsfw"], category=parent, overwrites=overwrites)
-                    await gentle_sleep()
+        # 3) Channels (Text/Voice/News/Stage/Forum)
+        existing_channel_names = {c.name for c in guild.channels}
+        for ch in data.get("channels", []):
+            if ch["type"] == discord.ChannelType.category.value:
+                continue
+
+            if ch["name"] in existing_channel_names:
                 step += 1
                 await self._update_job(job_id, step=step, total_steps=total_steps)
+                continue
 
-        # Emojis
-        existing_emojis = {e.name for e in await guild.fetch_emojis()}
-        for e in data["emojis"]:
-            if e["name"] not in existing_emojis:
-                try:
-                    async with self.bot.session.get(e["url"]) as resp:
-                        img_bytes = await resp.read()
-                    await guild.create_custom_emoji(name=e["name"], image=img_bytes)
-                    await gentle_sleep()
-                except Exception:
-                    pass
+            parent = existing_categories.get(ch["parent_name"]) if ch.get("parent_name") else None
+            overwrites = self._build_overwrites(guild, ch.get("overwrites", []))
+
+            ctype = discord.ChannelType(ch["type"])
+            try:
+                if ctype in (discord.ChannelType.text, discord.ChannelType.news):
+                    await guild.create_text_channel(
+                        name=ch["name"], topic=ch.get("topic"), nsfw=ch.get("nsfw", False),
+                        category=parent, overwrites=overwrites
+                    )
+                elif ctype is discord.ChannelType.voice:
+                    await guild.create_voice_channel(
+                        name=ch["name"], category=parent, overwrites=overwrites
+                    )
+                elif ctype is discord.ChannelType.stage_voice and hasattr(guild, "create_stage_channel"):
+                    await guild.create_stage_channel(
+                        name=ch["name"], category=parent, overwrites=overwrites
+                    )
+                elif ctype is discord.ChannelType.forum and hasattr(guild, "create_forum"):
+                    await guild.create_forum(
+                        name=ch["name"], category=parent, overwrites=overwrites
+                    )
+                else:
+                    # Fallback: Textchannel
+                    await guild.create_text_channel(
+                        name=ch["name"], topic=ch.get("topic"), nsfw=ch.get("nsfw", False),
+                        category=parent, overwrites=overwrites
+                    )
+            except discord.Forbidden:
+                pass
+            await gentle_sleep()
+            step += 1
+            await self._update_job(job_id, step=step, total_steps=total_steps)
+
+        # 4) Emojis
+        try:
+            existing_emojis = {e.name for e in await guild.fetch_emojis()}
+        except discord.Forbidden:
+            existing_emojis = set()
+
+        for e in data.get("emojis", []):
+            if e["name"] in existing_emojis:
+                step += 1
+                await self._update_job(job_id, step=step, total_steps=total_steps)
+                continue
+            try:
+                if self.http is None:
+                    break
+                async with self.http.get(e["url"]) as resp:
+                    img_bytes = await resp.read()
+                await guild.create_custom_emoji(name=e["name"], image=img_bytes)
+                await gentle_sleep()
+            except Exception:
+                pass
             step += 1
             await self._update_job(job_id, step=step, total_steps=total_steps)
 
     def _build_overwrites(self, guild: discord.Guild, ow_data: list[dict]):
-        overwrites = {}
-        for ow in ow_data:
-            if ow["target_type"] == "role":
-                role = discord.utils.get(guild.roles, name=ow["target_name"])
+        overwrites: dict[discord.Role, discord.PermissionOverwrite] = {}
+        for ow in (ow_data or []):
+            if ow.get("target_type") == "role":
+                role = discord.utils.get(guild.roles, name=ow.get("target_name"))
                 if role:
                     overwrites[role] = discord.PermissionOverwrite.from_pair(
-                        discord.Permissions(ow["allow"]), discord.Permissions(ow["deny"])
+                        discord.Permissions(ow.get("allow", 0)), discord.Permissions(ow.get("deny", 0))
                     )
         return overwrites
 
-    # -------- Commands --------
-    @group.command(name="create")
+    # -------- Slash Commands --------
+    @group.command(name="create", description="Erstellt JETZT ein Backup und gibt den Code zurück")
     @app_commands.checks.has_permissions(administrator=True)
     async def create(self, interaction: discord.Interaction):
-        job_id = await self._queue_job(interaction.guild_id, "create", None)
-        await interaction.response.send_message(
-            f"📝 Backup-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.",
+        await interaction.response.defer(ephemeral=True)
+        payload = await self._snapshot_guild(interaction.guild)
+        code = await self._store_backup(interaction.guild_id, payload)
+        approx_kb = len(dumps(payload)) // 1024
+        await interaction.followup.send(
+            f"✅ Backup erstellt.\n**Code:** `{code}`\nUnkomprimiert ca. {approx_kb} KB.",
             ephemeral=True
         )
 
-    @group.command(name="load")
+    @group.command(name="latest", description="Zeigt den letzten Backup-Code dieser Guild")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def latest(self, interaction: discord.Interaction):
+        code = await self._fetch_latest_code(interaction.guild_id)
+        if not code:
+            await interaction.response.send_message("ℹ️ Für diese Guild existiert noch kein Backup.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"🧾 Letzter Backup-Code: `{code}`", ephemeral=True)
+
+    @group.command(name="load", description="Stellt ein Backup über den Code wieder her (Job)")
     @app_commands.checks.has_permissions(administrator=True)
     async def load(self, interaction: discord.Interaction, code: str):
+        # validate code exists early
+        try:
+            await self._fetch_backup(code)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ungültiger Code: {e}", ephemeral=True)
+            return
+
         job_id = await self._queue_job(interaction.guild_id, "restore", code)
         await interaction.response.send_message(
             f"♻️ Restore-Job gestartet (ID {job_id}). Fortschritt mit `/backup status` abrufbar.",
             ephemeral=True
         )
 
-    @group.command(name="status")
+    @group.command(name="status", description="Zeigt den Status des letzten Backup/Restore-Jobs")
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction):
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
@@ -328,7 +425,7 @@ class BackupCog(commands.Cog):
                 ephemeral=True
             )
 
-    @group.command(name="delete")
+    @group.command(name="delete", description="Löscht ein Backup per Code")
     @app_commands.checks.has_permissions(administrator=True)
     async def delete(self, interaction: discord.Interaction, code: str):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
