@@ -158,7 +158,7 @@ class help(commands.Cog):
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def help(self, interaction: discord.Interaction):
         view = View(timeout=None)
-        view.add_item(Dropdown(self))
+        view.add_item(Dropdown())
         view.add_item(WebsiteButton())
 
         delta_uptime = datetime.utcnow() - self.uptime
@@ -170,14 +170,43 @@ class help(commands.Cog):
             colour=discord.Colour.blue(),
             title="Help Menü",
             description=(
-                "<:Astra_info:1141303860556738620> **__Wichtige Informationen:__**\n"
+                ":Astra_info: Wichtige Informationen:\n"
                 "Hier findest du alle Commands.\n"
-                "Falls du Hilfe brauchst, komm auf unseren [**Support Server ➚**](https://discord.gg/eatdJPfjWc).\n\n"
-                f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
-                f"**Ping**: {self.bot.latency * 1000:.0f} ms\n\n"
+                "Falls du Hilfe brauchst, komm auf unseren Support Server ➚.\n\n"
+                f"Uptime: {days}d {hours}h {minutes}m {seconds}s\n"
+                f"Ping: {self.bot.latency * 1000:.0f} ms\n\n"
             )
+
+        )
+        embed.add_field(
+            name="Über Astra",
+            value=(
+                "> :Astra_support: Astra ist ein vielseitiger Discord-Bot mit Moderation, Minigames, Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben.\n\n"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Letzte Updates",
+            value=(
+                "> :Coin: Neues Economy: /job, /economy\n"
+                "> :Astra_minigames: Neue Minigames: /hangman, /snake\n"
+                "> :Astra_gw1: Giveaway: /gewinnspiel\n"
+                "> :Astra_level: Levelsystem: /levelsystem status"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Links",
+            value=(
+                "Einladen"
+                " | Support"
+                " | Voten"
+            ),
+            inline=False
         )
         embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
+        embed.set_image(url="Neuer-Astra-Banner-animiert.gif")
+
         await interaction.response.send_message(embed=embed, view=view)
 
 
