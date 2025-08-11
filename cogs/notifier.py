@@ -36,12 +36,15 @@ def astra_embed(*, title: str, description: str = "", color: discord.Color = AST
     e = discord.Embed(title=title, description=description, color=color, url=url)
     e.timestamp = datetime.now(timezone.utc)
     if author:
-        e.set_author(name=str(author), icon_url=getattr(author.display_avatar, "url", discord.Embed.Empty))
+        e.set_author(name=str(author), icon_url=author.display_avatar.url)
     if guild and guild.icon:
         e.set_thumbnail(url=guild.icon.url)
-    e.set_footer(text="Astra Notifier • powered by Astra",
-                 icon_url=getattr(author.display_avatar, "url", "") if author else discord.Embed.Empty)
+    if author:
+        e.set_footer(text="Astra Notifier • powered by Astra", icon_url=author.display_avatar.url)
+    else:
+        e.set_footer(text="Astra Notifier • powered by Astra")
     return e
+
 
 class Notifier(commands.Cog):
     def __init__(self, bot: commands.Bot):
