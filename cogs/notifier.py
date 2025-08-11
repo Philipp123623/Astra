@@ -73,24 +73,22 @@ class Notifier(commands.Cog):
             await cur.execute(
                 """
                 INSERT INTO subscriptions (guild_id, discord_channel_name, platform, content_id)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE content_id = VALUES(content_id)
+                    VALUES (%s, %s, %s, %s) AS new
+                ON DUPLICATE KEY UPDATE content_id = new.content_id
                 """,
                 (str(guild_id), channel_name, platform, content_id),
             )
-            await conn.commit()
 
     async def set_enabled(self, guild_id: int, platform: str, enabled: bool):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
                 INSERT INTO notifier_settings (guild_id, platform, enabled)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
+                    VALUES (%s, %s, %s) AS new
+                ON DUPLICATE KEY UPDATE enabled = new.enabled
                 """,
                 (str(guild_id), platform, 1 if enabled else 0),
             )
-            await conn.commit()
 
     async def is_enabled(self, guild_id: int, platform: str) -> bool:
         async with self.pool.acquire() as conn, conn.cursor() as cur:
@@ -262,7 +260,6 @@ class Notifier(commands.Cog):
                     PRIMARY KEY (guild_id, platform)
                 )
             """)
-            await conn.commit()
 
 class Benachrichtigung(app_commands.Group):
     def __init__(self, bot: commands.Bot):
@@ -305,7 +302,6 @@ class Benachrichtigung(app_commands.Group):
                     "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='youtube' AND content_id=%s",
                     (str(interaction.guild_id), channel.name, channelname)
                 )
-                await conn.commit()
             em = astra_embed(
                 title="🗑️ YouTube-Abo entfernt",
                 description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}",
@@ -350,7 +346,6 @@ class Benachrichtigung(app_commands.Group):
                     "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='twitch' AND content_id=%s",
                     (str(interaction.guild_id), channel.name, channelname.lower())
                 )
-                await conn.commit()
             em = astra_embed(
                 title="🗑️ Twitch-Abo entfernt",
                 description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
