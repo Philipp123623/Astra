@@ -321,7 +321,7 @@ class Notifier(commands.Cog):
                 )
             """)
 
-
+@app_commands.guild_only()
 class Benachrichtigung(app_commands.Group):
     def __init__(self, bot: commands.Bot):
         super().__init__(name="benachrichtigung", description="Benachrichtigungen für YouTube & Twitch")

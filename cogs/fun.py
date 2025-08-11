@@ -95,6 +95,7 @@ class fun(commands.Cog):
             os.remove("pix.png")
 
     @app_commands.command(name="wasted")
+    @app_commands.guild_only()
     @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
     async def wasted(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         """Sendet ein Profilbild mit Wasted-Effekt über SomeRandomAPI."""
@@ -115,6 +116,7 @@ class fun(commands.Cog):
 
     # Gay
     @app_commands.command(name="gay")
+    @app_commands.guild_only()
     @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
     async def gay(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         """Sendet ein Profilbild mit Rainbow/Gay-Effekt über SomeRandomAPI."""
@@ -135,6 +137,7 @@ class fun(commands.Cog):
 
     # Triggered
     @app_commands.command(name="triggered")
+    @app_commands.guild_only()
     @app_commands.describe(user="Der User, dessen Profilbild genutzt werden soll (optional)")
     async def triggered(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         """Sendet ein Profilbild mit Triggered-Effekt (animiertes GIF) über SomeRandomAPI."""
@@ -154,6 +157,7 @@ class fun(commands.Cog):
                 await interaction.followup.send(embed=embed, file=file)
 
     @app_commands.command(name="color")
+    @app_commands.guild_only()
     @app_commands.describe(hex="Hex-Code der Farbe, z. B. ff0055 oder #ff0055")
     async def color(self, interaction: discord.Interaction, hex: str):
         """Zeigt eine Farbe als Bild über Some Random API."""

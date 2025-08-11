@@ -317,6 +317,7 @@ def _draw_progressbar(background: Image.Image, lay: dict,
 # ──────────────────────────────────────────────────────────────────────────────
 # Slash-Gruppe nur für Levelkarten
 # ──────────────────────────────────────────────────────────────────────────────
+@app_commands.guild_only()
 class Level(app_commands.Group):
     def __init__(self, bot):
         self.bot = bot
@@ -562,6 +563,7 @@ class Level(app_commands.Group):
         return None
 
     @app_commands.command(name="status")
+    @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
         """Lege einen Kanal fest, in den die Level Up Nachrichten gesendet werden."""
