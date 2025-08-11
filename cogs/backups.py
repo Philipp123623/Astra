@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Astra Backup System – Neustart-Resistent mit Fortschritts-Embeds & Undo
+
+Slash-Commands (guild-only):
 - /backup create   → erstellt sofort ein Backup und gibt den CODE zurück (Embed)
 - /backup latest   → zeigt den letzten Code dieser Guild (Embed)
 - /backup load     → stellt ein Backup wieder her (nicht-destruktiv), mit Fortschritts-Embed
@@ -8,8 +10,8 @@ Astra Backup System – Neustart-Resistent mit Fortschritts-Embeds & Undo
 - /backup status   → zeigt den Fortschritt des letzten Jobs (Embed)
 - /backup delete   → löscht ein Backup per Code (Embed)
 
-Speichert Rollen, Channels, Kategorien, Overwrites (keine Nachrichten, keine Emojis).
-Restore ist nicht-destruktiv. Undo macht nur die durch den letzten Restore-Job neu erstellten Objekte rückgängig.
+Speichert Rollen, Channels, Kategorien, Overwrites (keine Nachrichten/Emojis).
+Restore ist NICHT destruktiv. Undo löscht nur durch den letzten Restore neu angelegte Objekte.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-# ---------- JSON & Kompression ----------
+# ---------------- JSON & Kompression ----------------
 try:
     import orjson
     def dumps(obj: T.Any) -> bytes:
@@ -45,10 +47,12 @@ except ImportError:
     import gzip
     _HAS_ZSTD = False
 
+# ---------------- Einstellungen ----------------
 BACKUP_VERSION = 1
+RETENTION_DAYS = 7            # Jobs: done/error älter als X Tage löschen
+BACKUP_RETENTION_DAYS = 7     # Backups älter als X Tage löschen
 
-
-# ---------- Helfer ----------
+# ---------------- Helfer ----------------
 def b58(b: bytes) -> str:
     alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
     n = int.from_bytes(b, 'big')
@@ -89,7 +93,7 @@ def build_progress_embed(*, title: str, step: int, total: int, status: str,
 
 
 # =====================================================================
-# Cog: kümmert sich um DB, Worker, Restore/Undo-Logik, Fortschritt, etc.
+# Cog: DB, Worker, Restore/Undo-Logik, Fortschritt & Aufräumen
 # =====================================================================
 class BackupCog(commands.Cog):
     """Hintergrund-Logik & Jobs für das Astra Backup System."""
@@ -106,6 +110,8 @@ class BackupCog(commands.Cog):
     async def cog_load(self):
         await self._ensure_schema()
         await self._mark_stale_jobs()
+        await self._prune_jobs_time_based()
+        await self._prune_backups_time_based()
         self.job_worker_task = asyncio.create_task(self._job_worker_loop())
         self.http = aiohttp.ClientSession()
 
@@ -118,9 +124,6 @@ class BackupCog(commands.Cog):
     # ---------- Schema ----------
     async def _ensure_schema(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("DROP TABLE backups;")
-            await cur.execute("DROP TABLE backup_jobs;")
-
             await cur.execute("""
             CREATE TABLE IF NOT EXISTS backups (
               code VARCHAR(32) PRIMARY KEY,
@@ -150,10 +153,34 @@ class BackupCog(commands.Cog):
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
 
+    # ---------- Pruning ----------
     async def _mark_stale_jobs(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 "UPDATE backup_jobs SET status='error', last_error='Bot restart' WHERE status='running'"
+            )
+
+    async def _prune_jobs_time_based(self):
+        """Löscht done/error-Jobs älter als RETENTION_DAYS."""
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM backup_jobs
+                WHERE status IN ('done','error')
+                  AND created_at < NOW() - INTERVAL %s DAY
+                """,
+                (RETENTION_DAYS,),
+            )
+
+    async def _prune_backups_time_based(self):
+        """Löscht Backups älter als BACKUP_RETENTION_DAYS."""
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM backups
+                WHERE created_at < NOW() - INTERVAL %s DAY
+                """,
+                (BACKUP_RETENTION_DAYS,),
             )
 
     # ---------- Job-Queue ----------
@@ -172,6 +199,10 @@ class BackupCog(commands.Cog):
         parts = ", ".join(f"{k}=%s" for k in fields)
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(f"UPDATE backup_jobs SET {parts} WHERE job_id=%s", (*fields.values(), job_id))
+
+    async def _delete_job_row(self, job_id: int):
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute("DELETE FROM backup_jobs WHERE job_id=%s", (job_id,))
 
     async def _fetch_job(self, job_id: int) -> dict | None:
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
@@ -225,13 +256,29 @@ class BackupCog(commands.Cog):
                     created_objs = await self._restore_to_guild(guild, data, job["job_id"])
                     await self._update_job(job["job_id"], status="done", created_objects=dumps(created_objs).decode())
                     await self._edit_progress_embed(job["job_id"], final_status="Fertig", color=discord.Colour.blue())
+
                 elif job["type"] == "undo":
                     await self._undo_restore(guild, job)
                     await self._update_job(job["job_id"], status="done")
                     await self._edit_progress_embed(job["job_id"], final_status="Undo abgeschlossen", color=discord.Colour.blue())
+                    # Undo-Job wird nicht mehr benötigt -> löschen
+                    await self._delete_job_row(job["job_id"])
+
+                elif job["type"] == "create":
+                    # (Falls du irgendwann create als Job laufen lässt)
+                    await self._update_job(job["job_id"], status="done")
+                    await self._delete_job_row(job["job_id"])
+
             except Exception as e:
                 await self._update_job(job["job_id"], status="error", last_error=str(e))
                 await self._edit_progress_embed(job["job_id"], final_status=f"Fehler: {e}", color=discord.Colour.red())
+            finally:
+                # Zeitbasierte Aufräumroutinen
+                try:
+                    await self._prune_jobs_time_based()
+                    await self._prune_backups_time_based()
+                except Exception:
+                    pass
 
     # ---------- Backup I/O ----------
     async def _store_backup(self, guild_id: int, payload: dict) -> str:
@@ -240,8 +287,6 @@ class BackupCog(commands.Cog):
         code = b58(digest + now_ts().to_bytes(4, "big"))[:22]
         blob = zstd.ZstdCompressor(level=12).compress(raw) if _HAS_ZSTD else gzip.compress(raw)  # type: ignore
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            # optional: nur 1 Backup pro Guild behalten
-            await cur.execute("DELETE FROM backups WHERE guild_id=%s", (guild_id,))
             await cur.execute(
                 "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
                 (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
@@ -296,7 +341,6 @@ class BackupCog(commands.Cog):
                 "overwrites": overwrites
             })
 
-        # Emojis sind bewusst nicht enthalten (Rate-Limit-Vermeidung)
         return {"version": BACKUP_VERSION, "roles": roles, "channels": channels}
 
     # ---------- Restore / Undo ----------
@@ -401,7 +445,6 @@ class BackupCog(commands.Cog):
                             reason="Astra Backup Restore"
                         )
                     else:
-                        # Fallback: Textchannel
                         new_ch = await guild.create_text_channel(
                             name=ch["name"],
                             topic=ch.get("topic"),
@@ -424,24 +467,38 @@ class BackupCog(commands.Cog):
     async def _undo_restore(self, guild: discord.Guild, job: dict):
         """Entfernt nur die durch den angegebenen Restore-Job erstellten Objekte."""
         created_objs = loads(job["created_objects"].encode()) if job.get("created_objects") else {}
-        # Channels zuerst (Kinder vor Eltern): lösche in umgekehrter Reihenfolge
-        for cid in reversed(created_objs.get("channels", [])):
+        chan_ids = list(reversed(created_objs.get("channels", [])))  # Kinder vor Eltern löschen
+        role_ids = created_objs.get("roles", [])
+
+        total = len(chan_ids) + len(role_ids)
+        step = 0
+        await self._update_job(job["job_id"], step=step, total_steps=total)
+
+        # Channels
+        for cid in chan_ids:
             ch = guild.get_channel(cid)
             if ch:
                 try:
                     await ch.delete(reason="Astra Backup Undo")
                 except discord.Forbidden:
                     pass
-                await gentle_sleep()
-        # Rollen danach
-        for rid in created_objs.get("roles", []):
+            step += 1
+            await self._update_job(job["job_id"], step=step)
+            await self._edit_progress_embed(job["job_id"], running_status="Lösche Channels ...")
+            await gentle_sleep()
+
+        # Rollen
+        for rid in role_ids:
             role = guild.get_role(rid)
             if role:
                 try:
                     await role.delete(reason="Astra Backup Undo")
                 except discord.Forbidden:
                     pass
-                await gentle_sleep()
+            step += 1
+            await self._update_job(job["job_id"], step=step)
+            await self._edit_progress_embed(job["job_id"], running_status="Lösche Rollen ...")
+            await gentle_sleep()
 
     # ---------- Embed Updater ----------
     async def _edit_progress_embed(self, job_id: int, running_status: str | None = None,
@@ -464,7 +521,7 @@ class BackupCog(commands.Cog):
 
         status_text = final_status or running_status or job.get("status", "running")
         embed = build_progress_embed(
-            title=f"Astra • Backup-Restore • Job #{job_id}",
+            title=f"Astra • Backup-Job • #{job_id} ({job.get('type')})",
             step=job.get("step", 0),
             total=job.get("total_steps", 0),
             status=status_text,
@@ -478,7 +535,7 @@ class BackupCog(commands.Cog):
 
 
 # ==========================================================================================
-# Slash-Command Gruppe als app_commands.Group (guild-only), außerhalb der Cog wie gewünscht
+# Slash-Command Gruppe als app_commands.Group (guild-only), außerhalb der Cog – Astra Style
 # ==========================================================================================
 @app_commands.guild_only()
 class Backup(app_commands.Group):
@@ -486,59 +543,55 @@ class Backup(app_commands.Group):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        super().__init__(name="backup", description="Server-Backups (Astra)")
+        super().__init__(name="backup", description="Astra Backup & Restore")
 
-    # ---- Hilfen ----
     def _cog(self) -> BackupCog:
         cog = self.bot.get_cog("BackupCog")
         if cog is None:
             raise RuntimeError("BackupCog ist nicht geladen.")
         return cog
 
-    # ---- Commands ----
     @app_commands.command(name="create", description="Erstellt sofort ein Backup und gibt den Code zurück.")
     async def create(self, interaction: discord.Interaction):
-        """Erstellt ein neues Backup (Rollen/Channels/Kategorien/Overwrites)."""
         cog = self._cog()
         await interaction.response.defer(ephemeral=True)
         payload = await cog._snapshot_guild(interaction.guild)
         code = await cog._store_backup(interaction.guild_id, payload)
         emb = discord.Embed(
             title="✅ Backup erstellt",
-            description=f"**Code:** `{code}`\nDieses Backup enthält Rollen, Kategorien, Channels & Overwrites.",
-            color=discord.Colour.blue()
+            description=f"**Code:** `{code}`\nEnthält Rollen, Kategorien, Channels & Overwrites.",
+            color=discord.Colour.blue(),
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
 
     @app_commands.command(name="latest", description="Zeigt den letzten Backup-Code dieser Guild.")
     async def latest(self, interaction: discord.Interaction):
-        """Zeigt den jüngsten Backup-Code dieser Guild."""
         cog = self._cog()
         code = await cog._fetch_latest_code(interaction.guild_id)
         if not code:
-            emb = discord.Embed(title="ℹ️ Kein Backup vorhanden", color=discord.Colour.blue())
-            await interaction.response.send_message(embed=emb, ephemeral=True)
-        else:
-            emb = discord.Embed(
-                title="🧾 Letzter Backup-Code",
-                description=f"`{code}`",
-                color=discord.Colour.blue()
+            await interaction.response.send_message(
+                embed=discord.Embed(title="ℹ️ Kein Backup vorhanden", color=discord.Colour.blue()),
+                ephemeral=True
             )
-            await interaction.response.send_message(embed=emb, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                embed=discord.Embed(title="🧾 Letzter Backup-Code", description=f"`{code}`", color=discord.Colour.blue()),
+                ephemeral=True
+            )
 
     @app_commands.command(name="load", description="Stellt ein Backup (nicht-destruktiv) wieder her und zeigt Fortschritt.")
     async def load(self, interaction: discord.Interaction, code: str):
-        """Restore: erstellt nur fehlende Rollen/Channels/Kategorien; nichts wird gelöscht."""
         cog = self._cog()
-        # Validierung des Codes:
+        # Code validieren
         try:
             await cog._fetch_backup(code)
         except Exception as e:
-            emb = discord.Embed(title="❌ Ungültiger Code", description=str(e), color=discord.Colour.blue())
-            await interaction.response.send_message(embed=emb, ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(title="❌ Ungültiger Code", description=str(e), color=discord.Colour.blue()),
+                ephemeral=True
+            )
             return
 
-        # Öffentliche Fortschritts-Nachricht
         start_embed = build_progress_embed(
             title="Astra • Backup-Restore startet …",
             step=0, total=0, status="Wird in die Warteschlange gestellt …",
@@ -547,13 +600,11 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=start_embed, ephemeral=False)
         msg = await interaction.original_response()
 
-        # Job in Queue
         job_id = await cog._queue_job(
             interaction.guild_id, "restore", code,
             status_channel_id=msg.channel.id, status_message_id=msg.id
         )
         await cog._edit_progress_embed(job_id, running_status="In Warteschlange …")
-        # Info an Auslöser
         await interaction.followup.send(
             f"♻️ Restore-Job gestartet (ID **{job_id}**). Fortschritt siehst du oben oder mit `/backup status`.",
             ephemeral=True
@@ -561,15 +612,16 @@ class Backup(app_commands.Group):
 
     @app_commands.command(name="undo", description="Entfernt alles, was beim letzten Restore-Job hinzugefügt wurde.")
     async def undo(self, interaction: discord.Interaction):
-        """Undo: löscht nur die durch den jüngsten Restore-Job erstellten Objekte."""
         cog = self._cog()
         last_restore = await cog._fetch_last_restore_job(interaction.guild_id)
         if not last_restore:
-            emb = discord.Embed(title="📭 Kein Restore-Job gefunden", color=discord.Colour.blue())
-            await interaction.response.send_message(embed=emb, ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(title="📭 Kein Restore-Job gefunden", color=discord.Colour.blue()),
+                ephemeral=True
+            )
             return
 
-        # Fortschritts-Embed posten (öffentlich)
+        # Progress-Embed
         start_embed = build_progress_embed(
             title=f"Astra • Undo für Restore-Job #{last_restore['job_id']}",
             step=0, total=0, status="Lösche hinzugefügte Objekte …",
@@ -578,14 +630,20 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=start_embed, ephemeral=False)
         msg = await interaction.original_response()
 
-        # Einen separaten UNDO-Job einreihen (neustart-sicher, einheitliche Handhabung)
+        # WICHTIG: created_objects des Restore-Jobs in den Undo-Job übernehmen
+        created_objects = last_restore.get("created_objects")
+
         undo_job_id = await cog._queue_job(
             interaction.guild_id, "undo", last_restore.get("code"),
             status_channel_id=msg.channel.id, status_message_id=msg.id
         )
-        # Wir wollen in diesem Fall sofort ausführen (nicht warten, bis der Loop es aufgreift)
-        # → optional: gleich im Hintergrund starten (respektiert trotzdem guild_lock):
-        asyncio.create_task(cog._run_job(await cog._fetch_job(undo_job_id)))  # type: ignore[arg-type]
+        if created_objects:
+            # direkt in der DB setzen, damit der Undo-Job sie hat
+            await cog._update_job(undo_job_id, created_objects=created_objects)
+
+        # Direkt starten (respect guild lock)
+        job_row = await cog._fetch_job(undo_job_id)
+        asyncio.create_task(cog._run_job(job_row))  # type: ignore[arg-type]
 
         await interaction.followup.send(
             f"⏪ Undo-Job gestartet (ID **{undo_job_id}**). Fortschritt siehst du oben.",
@@ -594,12 +652,13 @@ class Backup(app_commands.Group):
 
     @app_commands.command(name="status", description="Zeigt den Status des letzten Backup/Restore/Undo-Jobs.")
     async def status(self, interaction: discord.Interaction):
-        """Statusübersicht als Embed (ephemeral)."""
         cog = self._cog()
         job = await cog._fetch_last_job_for_guild(interaction.guild_id)
         if not job:
-            emb = discord.Embed(title="📭 Kein Job gefunden", color=discord.Colour.blue())
-            await interaction.response.send_message(embed=emb, ephemeral=True)
+            await interaction.response.send_message(
+                embed=discord.Embed(title="📭 Kein Job gefunden", color=discord.Colour.blue()),
+                ephemeral=True
+            )
             return
         emb = build_progress_embed(
             title=f"Astra • Letzter Job • #{job['job_id']} ({job['type']})",
@@ -611,16 +670,16 @@ class Backup(app_commands.Group):
 
     @app_commands.command(name="delete", description="Löscht ein Backup per Code.")
     async def delete(self, interaction: discord.Interaction, code: str):
-        """Ein Backup-Datensatz löschen (berührt keine Serverobjekte)."""
         cog = self._cog()
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("DELETE FROM backups WHERE code=%s", (code,))
-        emb = discord.Embed(title="🗑 Backup gelöscht", description=f"`{code}` wurde entfernt.", color=discord.Colour.blue())
-        await interaction.response.send_message(embed=emb, ephemeral=True)
+        await interaction.response.send_message(
+            embed=discord.Embed(title="🗑 Backup gelöscht", description=f"`{code}` wurde entfernt.", color=discord.Colour.blue()),
+            ephemeral=True
+        )
 
 
 # -------------- setup: Cog + Group im Tree registrieren --------------
 async def setup(bot: commands.Bot):
     await bot.add_cog(BackupCog(bot))
-    # Group außerhalb der Cog registrieren – wie in deinem Beispiel
     bot.tree.add_command(Backup(bot))
