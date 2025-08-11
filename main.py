@@ -105,6 +105,11 @@ class Astra(commands.Bot):
 
     async def setup_hook(self):
         try:
+            self.tree.add_command(Giveaway())
+            self.tree.add_command(Reminder())
+
+            # 2) sync – global reicht hier, da guild_only nur DMs sperrt
+            await self.tree.sync()
             dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJib3QiOnRydWUsImlhdCI6MTcwNTU4ODgxNn0.aX0_b94xKLSPLaEweiWojdU2LCOOmbhXQfMH_-3gc_8'  # set this to your bot's Top.gg token
             self.topggpy = topgg.DBLClient(self, dbl_token)
             bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
@@ -585,11 +590,6 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
-    bot.tree.add_command(Giveaway())
-    bot.tree.add_command(Reminder())
-
-    # 2) dann SYNCEN (wichtig!)
-    await bot.tree.sync()
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
