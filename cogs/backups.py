@@ -19,6 +19,7 @@ import asyncio
 import hashlib
 import time
 import typing as T
+import uuid
 
 import aiohttp
 import aiomysql
@@ -67,6 +68,10 @@ def blake128(b: bytes) -> bytes:
 
 def now_ts() -> int:
     return int(time.time())
+
+def gen_backup_code() -> str:
+    """Erzeugt einen eindeutigen zufälligen Backup-Code."""
+    return b58(uuid.uuid4().bytes)
 
 async def gentle_sleep():
     await asyncio.sleep(0.3)
@@ -164,7 +169,6 @@ class BackupCog(commands.Cog):
             )
 
     async def _prune_jobs_time_based(self):
-        """Löscht done/error-Jobs älter als RETENTION_DAYS."""
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
@@ -176,7 +180,6 @@ class BackupCog(commands.Cog):
             )
 
     async def _prune_backups_time_based(self):
-        """Löscht Backups älter als BACKUP_RETENTION_DAYS."""
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
@@ -245,7 +248,6 @@ class BackupCog(commands.Cog):
 
     async def _run_job(self, job: dict):
         guild_id = job["guild_id"]
-        # vorher: lock = self.guild_locks[guild_id]
         lock = self.guild_locks.setdefault(guild_id, asyncio.Lock())
         async with lock:
             await self._update_job(job["job_id"], status="running")
@@ -264,11 +266,9 @@ class BackupCog(commands.Cog):
                     await self._undo_restore(guild, job)
                     await self._update_job(job["job_id"], status="done")
                     await self._edit_progress_embed(job["job_id"], final_status="Undo abgeschlossen", color=discord.Colour.blue())
-                    # Undo-Job wird nicht mehr benötigt -> löschen
                     await self._delete_job_row(job["job_id"])
 
                 elif job["type"] == "create":
-                    # (Falls du irgendwann create als Job laufen lässt)
                     await self._update_job(job["job_id"], status="done")
                     await self._delete_job_row(job["job_id"])
 
@@ -276,7 +276,6 @@ class BackupCog(commands.Cog):
                 await self._update_job(job["job_id"], status="error", last_error=str(e))
                 await self._edit_progress_embed(job["job_id"], final_status=f"Fehler: {e}", color=discord.Colour.red())
             finally:
-                # Zeitbasierte Aufräumroutinen
                 try:
                     await self._prune_jobs_time_based()
                     await self._prune_backups_time_based()
@@ -287,14 +286,22 @@ class BackupCog(commands.Cog):
     async def _store_backup(self, guild_id: int, payload: dict) -> str:
         raw = dumps(payload)
         digest = blake128(raw)
-        code = b58(digest + now_ts().to_bytes(4, "big"))[:22]
         blob = zstd.ZstdCompressor(level=12).compress(raw) if _HAS_ZSTD else gzip.compress(raw)  # type: ignore
-        async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute(
-                "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
-                (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
-            )
-        return code
+
+        for _ in range(5):
+            code = gen_backup_code()
+            try:
+                async with self.pool.acquire() as conn, conn.cursor() as cur:
+                    await cur.execute(
+                        "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
+                        (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
+                    )
+                return code
+            except aiomysql.IntegrityError as e:
+                if getattr(e, "args", [None])[0] == 1062:
+                    continue
+                raise
+        raise RuntimeError("Konnte keinen eindeutigen Backup-Code erzeugen.")
 
     async def _fetch_backup(self, code: str) -> tuple[dict, dict]:
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
@@ -322,7 +329,6 @@ class BackupCog(commands.Cog):
             "hoist": r.hoist,
             "mentionable": r.mentionable
         } for r in sorted(guild.roles, key=lambda x: x.position)]
-
         channels = []
         for ch in sorted(guild.channels, key=lambda x: (0 if isinstance(x, discord.CategoryChannel) else 1, x.position)):
             overwrites = []
@@ -343,7 +349,6 @@ class BackupCog(commands.Cog):
                 "nsfw": getattr(ch, "nsfw", False),
                 "overwrites": overwrites
             })
-
         return {"version": BACKUP_VERSION, "roles": roles, "channels": channels}
 
     # ---------- Restore / Undo ----------
@@ -360,12 +365,10 @@ class BackupCog(commands.Cog):
         return overwrites
 
     async def _restore_to_guild(self, guild: discord.Guild, data: dict, job_id: int):
-        """Nicht-destruktiv: erstellt nur fehlende Rollen/Kategorien/Channels und protokolliert ihre IDs."""
         created_ids = {"roles": [], "channels": []}
         total_steps = len(data.get("roles", [])) + len(data.get("channels", []))
         step = 0
         await self._update_job(job_id, step=step, total_steps=total_steps)
-
         # Rollen
         existing_roles = {r.name for r in guild.roles}
         for r in data.get("roles", []):
@@ -385,8 +388,6 @@ class BackupCog(commands.Cog):
                 await gentle_sleep()
             step += 1
             await self._update_job(job_id, step=step)
-            await self._edit_progress_embed(job_id, running_status="Erstelle Rollen ...")
-
         # Kategorien
         existing_categories = {c.name: c for c in guild.categories}
         for ch in data.get("channels", []):
@@ -405,8 +406,6 @@ class BackupCog(commands.Cog):
                     await gentle_sleep()
                 step += 1
                 await self._update_job(job_id, step=step)
-                await self._edit_progress_embed(job_id, running_status="Erstelle Kategorien ...")
-
         # Channels
         existing_channel_names = {c.name for c in guild.channels}
         for ch in data.get("channels", []):
@@ -419,65 +418,33 @@ class BackupCog(commands.Cog):
                 try:
                     if ctype in (discord.ChannelType.text, discord.ChannelType.news):
                         new_ch = await guild.create_text_channel(
-                            name=ch["name"],
-                            topic=ch.get("topic"),
-                            nsfw=ch.get("nsfw", False),
-                            category=parent,
-                            overwrites=overwrites,
-                            reason="Astra Backup Restore"
+                            name=ch["name"], topic=ch.get("topic"), nsfw=ch.get("nsfw", False),
+                            category=parent, overwrites=overwrites, reason="Astra Backup Restore"
                         )
                     elif ctype is discord.ChannelType.voice:
                         new_ch = await guild.create_voice_channel(
-                            name=ch["name"],
-                            category=parent,
-                            overwrites=overwrites,
-                            reason="Astra Backup Restore"
-                        )
-                    elif ctype is discord.ChannelType.stage_voice and hasattr(guild, "create_stage_channel"):
-                        new_ch = await guild.create_stage_channel(
-                            name=ch["name"],
-                            category=parent,
-                            overwrites=overwrites,
-                            reason="Astra Backup Restore"
-                        )
-                    elif ctype is discord.ChannelType.forum and hasattr(guild, "create_forum"):
-                        new_ch = await guild.create_forum(
-                            name=ch["name"],
-                            category=parent,
-                            overwrites=overwrites,
-                            reason="Astra Backup Restore"
+                            name=ch["name"], category=parent, overwrites=overwrites, reason="Astra Backup Restore"
                         )
                     else:
                         new_ch = await guild.create_text_channel(
-                            name=ch["name"],
-                            topic=ch.get("topic"),
-                            nsfw=ch.get("nsfw", False),
-                            category=parent,
-                            overwrites=overwrites,
-                            reason="Astra Backup Restore"
+                            name=ch["name"], topic=ch.get("topic"), nsfw=ch.get("nsfw", False),
+                            category=parent, overwrites=overwrites, reason="Astra Backup Restore"
                         )
                     created_ids["channels"].append(new_ch.id)
                 except discord.Forbidden:
                     pass
                 await gentle_sleep()
-
             step += 1
             await self._update_job(job_id, step=step)
-            await self._edit_progress_embed(job_id, running_status="Erstelle Channels ...")
-
         return created_ids
 
     async def _undo_restore(self, guild: discord.Guild, job: dict):
-        """Entfernt nur die durch den angegebenen Restore-Job erstellten Objekte."""
         created_objs = loads(job["created_objects"].encode()) if job.get("created_objects") else {}
-        chan_ids = list(reversed(created_objs.get("channels", [])))  # Kinder vor Eltern löschen
+        chan_ids = list(reversed(created_objs.get("channels", [])))
         role_ids = created_objs.get("roles", [])
-
         total = len(chan_ids) + len(role_ids)
         step = 0
         await self._update_job(job["job_id"], step=step, total_steps=total)
-
-        # Channels
         for cid in chan_ids:
             ch = guild.get_channel(cid)
             if ch:
@@ -487,10 +454,6 @@ class BackupCog(commands.Cog):
                     pass
             step += 1
             await self._update_job(job["job_id"], step=step)
-            await self._edit_progress_embed(job["job_id"], running_status="Lösche Channels ...")
-            await gentle_sleep()
-
-        # Rollen
         for rid in role_ids:
             role = guild.get_role(rid)
             if role:
@@ -500,8 +463,6 @@ class BackupCog(commands.Cog):
                     pass
             step += 1
             await self._update_job(job["job_id"], step=step)
-            await self._edit_progress_embed(job["job_id"], running_status="Lösche Rollen ...")
-            await gentle_sleep()
 
     # ---------- Embed Updater ----------
     async def _edit_progress_embed(self, job_id: int, running_status: str | None = None,
