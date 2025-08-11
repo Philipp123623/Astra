@@ -70,7 +70,7 @@ class guessthenumber(commands.Cog):
     @app_commands.command(name="guessthenumber")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def guessthenumber(self, interaction: discord.Interaction, modus: Literal['Einschalten', 'Ausschalten'],
                              kanal: discord.TextChannel):
         """Verwalte das Minispiel 'Guess the number' auf deinem Server."""

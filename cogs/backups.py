@@ -111,7 +111,6 @@ class BackupCog(commands.Cog):
         self._last_embed_edit: dict[int, float] = {}  # job_id -> last edit timestamp
 
     async def cog_load(self):
-        await self._ensure_schema()
         await self._mark_stale_jobs()
         await self._prune_jobs_time_based()
         await self._prune_backups_time_based()
@@ -123,42 +122,6 @@ class BackupCog(commands.Cog):
             self.job_worker_task.cancel()
         if self.http:
             await self.http.close()
-
-    # ---------- Schema ----------
-    async def _ensure_schema(self):
-        async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("DROP TABLE backups;")
-            await cur.execute("DROP TABLE backup_jobs;")
-
-            await cur.execute("""
-            CREATE TABLE IF NOT EXISTS backups (
-              code VARCHAR(32) PRIMARY KEY,
-              guild_id BIGINT NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              version INT NOT NULL,
-              size_bytes INT NOT NULL,
-              `hash` BINARY(16) NOT NULL,
-              `data_blob` LONGBLOB NOT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            """)
-            await cur.execute("""
-            CREATE TABLE IF NOT EXISTS backup_jobs (
-              job_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-              guild_id BIGINT NOT NULL,
-              code VARCHAR(64),
-              type ENUM('create','restore','undo') NOT NULL,
-              status ENUM('pending','running','done','error') NOT NULL DEFAULT 'pending',
-              step INT NOT NULL DEFAULT 0,
-              total_steps INT NOT NULL DEFAULT 0,
-              created_objects JSON NULL,
-              status_channel_id BIGINT NULL,
-              status_message_id BIGINT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-              last_error TEXT
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-            """)
-            await conn.commit()
 
     # ---------- Pruning ----------
     async def _mark_stale_jobs(self):
@@ -580,7 +543,7 @@ class Backup(app_commands.Group):
             raise RuntimeError("BackupCog ist nicht geladen.")
         return cog
 
-    @app_commands.command(name="create", description="Erstellt sofort ein Backup und gibt den Code zurück.")
+    @app_commands.command(name="create", description="Erstellt ein Server-Backup.")
     async def create(self, interaction: discord.Interaction):
         cog = self._cog()
         await interaction.response.defer(ephemeral=True)
@@ -593,25 +556,67 @@ class Backup(app_commands.Group):
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="latest", description="Zeigt den letzten Backup-Code dieses Servers.")
-    async def latest(self, interaction: discord.Interaction):
+    @app_commands.command(name="list", description="Listet alle Backups dieses Servers mit Details auf.")
+    async def backup_list(self, interaction: discord.Interaction):
         cog = self._cog()
-        code = await cog._fetch_latest_code(interaction.guild_id)
-        if not code:
-            await interaction.response.send_message(
-                embed=discord.Embed(title="ℹ️ Kein Backup vorhanden", color=discord.Colour.blue()),
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message(
-                embed=discord.Embed(title="🧾 Letzter Backup-Code", description=f"`{code}`", color=discord.Colour.blue()),
-                ephemeral=True
-            )
 
-    @app_commands.command(name="load", description="Stellt ein Backup wieder her und zeigt Fortschritt.")
+        # Alle Backups inkl. Datum & Meta holen (sortiert nach neuestem zuerst)
+        async with cog.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT code, created_at, includes
+                FROM backups
+                WHERE guild_id = %s
+                ORDER BY created_at DESC
+                """,
+                (interaction.guild_id,)
+            )
+            rows = await cur.fetchall()
+
+        if not rows:
+            await interaction.response.send_message(
+                embed=discord.Embed(title="ℹ️ Keine Backups vorhanden", color=discord.Colour.blue()),
+                ephemeral=True
+            )
+            return
+
+        total = len(rows)
+
+        def chunks(seq, size):
+            for i in range(0, len(seq), size):
+                yield seq[i:i + size]
+
+        # Erste Embed mit Info
+        first_embed = discord.Embed(
+            title="🗂️ Backups",
+            description=f"Anzahl: **{total}**\nSortiert nach Erstellungsdatum (neu → alt).",
+            color=discord.Colour.blue()
+        )
+        await interaction.response.send_message(embed=first_embed, ephemeral=True)
+
+        # Folge-Embeds mit den Listen
+        for idx, block in enumerate(chunks(rows, 10), start=1):
+            desc_lines = []
+            for code, created_at, includes in block:
+                date_str = created_at.strftime("%d.%m.%Y %H:%M")
+                # Beispiel: includes könnte eine Liste oder ein String wie "roles,channels,overwrites" sein
+                if isinstance(includes, (list, tuple)):
+                    includes_str = ", ".join(includes)
+                else:
+                    includes_str = str(includes)
+                desc_lines.append(f"**`{code}`**\n📅 {date_str} • Enthält: {includes_str}")
+
+            emb = discord.Embed(
+                title=f"Liste ({(idx - 1) * 10 + 1}–{(idx - 1) * 10 + len(block)})",
+                description="\n\n".join(desc_lines),
+                color=discord.Colour.blue()
+            )
+            await interaction.followup.send(embed=emb, ephemeral=True)
+
+    @app_commands.command(name="load", description="Stellt ein Backup mithilfe eines Codes wieder her.")
+    @app_commands.describe(code="Der Backup-Code, der wiederhergestellt werden soll.")
     async def load(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
-        # Code validieren
         try:
             await cog._fetch_backup(code)
         except Exception as e:
@@ -622,7 +627,7 @@ class Backup(app_commands.Group):
             return
 
         start_embed = build_progress_embed(
-            title="Astra • Backup-Restore startet …",
+            title="Astra • Backup-Wiederherstellung startet …",
             step=0, total=0, status="Wird in die Warteschlange gestellt …",
             color=discord.Colour.blue()
         )
@@ -635,11 +640,11 @@ class Backup(app_commands.Group):
         )
         await cog._edit_progress_embed(job_id, running_status="In Warteschlange …")
         await interaction.followup.send(
-            f"♻️ Restore-Job gestartet (ID **{job_id}**). Fortschritt siehst du oben oder mit `/backup status`.",
+            f"♻️ Restore-Job gestartet (ID **{job_id}**). Fortschritt siehe oben oder mit `/backup status`.",
             ephemeral=True
         )
 
-    @app_commands.command(name="undo", description="Entfernt alles, was beim letzten Restore-Job hinzugefügt wurde.")
+    @app_commands.command(name="undo", description="Setzt den Server auf den Stand vor der letzten Wiederherstellung zurück.")
     async def undo(self, interaction: discord.Interaction):
         cog = self._cog()
         last_restore = await cog._fetch_last_restore_job(interaction.guild_id)
@@ -651,7 +656,7 @@ class Backup(app_commands.Group):
             return
 
         start_embed = build_progress_embed(
-            title=f"Astra • Undo für Restore-Job #{last_restore['job_id']}",
+            title=f"Astra • Rückgängig für Restore-Job #{last_restore['job_id']}",
             step=0, total=0, status="Lösche hinzugefügte Objekte …",
             color=discord.Colour.blue()
         )
@@ -667,14 +672,14 @@ class Backup(app_commands.Group):
             await cog._update_job(undo_job_id, created_objects=created_objects)
 
         job_row = await cog._fetch_job(undo_job_id)
-        asyncio.create_task(cog._run_job(job_row))  # sofort starten (achtet auf guild-lock)
+        asyncio.create_task(cog._run_job(job_row))
 
         await interaction.followup.send(
-            f"⏪ Undo-Job gestartet (ID **{undo_job_id}**). Fortschritt siehst du oben.",
+            f"⏪ Undo-Job gestartet (ID **{undo_job_id}**). Fortschritt siehe oben.",
             ephemeral=True
         )
 
-    @app_commands.command(name="status", description="Zeigt den Status des letzten Backup/Restore/Undo-Jobs.")
+    @app_commands.command(name="status", description="Zeigt den Fortschritt oder das Ergebnis des letzten Backup- oder Wiederherstellungsvorgangs.")
     async def status(self, interaction: discord.Interaction):
         cog = self._cog()
         job = await cog._fetch_last_job_for_guild(interaction.guild_id)
@@ -692,11 +697,11 @@ class Backup(app_commands.Group):
         )
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="delete", description="Löscht ein Backup per Code und bereinigt verknüpfte Jobs.")
+    @app_commands.command(name="delete", description="Lösche ältere Backups.")
+    @app_commands.describe(code="Der Backup-Code, der gelöscht werden soll.")
     async def delete(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
 
-        # Prüfen, ob der Code existiert
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("SELECT 1 FROM backups WHERE code=%s LIMIT 1", (code,))
             exists = await cur.fetchone()
@@ -712,16 +717,13 @@ class Backup(app_commands.Group):
             )
             return
 
-        # Jobs zählen/aufräumen
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
-            # Laufende Jobs (die lassen wir in Ruhe)
             await cur.execute(
                 "SELECT COUNT(*) FROM backup_jobs WHERE code=%s AND status='running'",
                 (code,)
             )
             (running_count,) = await cur.fetchone()
 
-            # Pending/Done/Error löschen
             await cur.execute(
                 "SELECT COUNT(*) FROM backup_jobs WHERE code=%s AND status!='running'",
                 (code,)
@@ -733,9 +735,7 @@ class Backup(app_commands.Group):
                 (code,)
             )
 
-            # Backup selbst löschen
             await cur.execute("DELETE FROM backups WHERE code=%s", (code,))
-
             await conn.commit()
 
         desc = [

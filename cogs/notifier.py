@@ -61,7 +61,6 @@ class Notifier(commands.Cog):
 
     async def cog_load(self):
         self.http = aiohttp.ClientSession()
-        await self._ensure_tables()
 
     async def cog_unload(self):
         self.check_for_updates.cancel()
@@ -294,32 +293,6 @@ class Notifier(commands.Cog):
         self._twitch_token_expire = now + timedelta(seconds=int(token_data.get("expires_in", 3600)))
         return self._twitch_token
 
-    async def _ensure_tables(self):
-        async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("DROP TABLE subscriptions;")
-            await cur.execute("DROP TABLE notifier_settings;")
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS subscriptions (
-                    guild_id BIGINT NOT NULL,
-                    discord_channel_name VARCHAR(255) NOT NULL,
-                    platform ENUM('youtube','twitch') NOT NULL,
-                    content_id VARCHAR(255) NOT NULL,
-                    ping_role_id BIGINT NULL,
-                    PRIMARY KEY (guild_id, discord_channel_name, platform, content_id)
-                )
-            """)
-            try:
-                await cur.execute("ALTER TABLE subscriptions ADD COLUMN ping_role_id BIGINT NULL")
-            except Exception:
-                pass
-            await cur.execute("""
-                CREATE TABLE IF NOT EXISTS notifier_settings (
-                    guild_id BIGINT NOT NULL,
-                    platform ENUM('youtube','twitch') NOT NULL,
-                    enabled TINYINT(1) NOT NULL DEFAULT 1,
-                    PRIMARY KEY (guild_id, platform)
-                )
-            """)
 
 @app_commands.guild_only()
 class Benachrichtigung(app_commands.Group):
