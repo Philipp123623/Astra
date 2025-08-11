@@ -266,59 +266,96 @@ class Benachrichtigung(app_commands.Group):
         super().__init__(name="benachrichtigung", description="Benachrichtigungen für YouTube & Twitch")
         self.bot = bot
 
-    @app_commands.command(name="youtube", description="YouTube-Kanal abonnieren")
-    @app_commands.describe(channel="Discord-Kanal", channelname="YouTube-Channelname")
+    @app_commands.command(name="youtube", description="YouTube-Kanal hinzufügen oder entfernen")
+    @app_commands.describe(
+        aktion="Hinzufügen oder Entfernen",
+        channel="Discord-Kanal für Benachrichtigungen",
+        channelname="YouTube-Channelname (UC...)"
+    )
     @app_commands.guild_only()
-    async def youtube(self, interaction: discord.Interaction, channel: discord.TextChannel, channelname: str):
+    async def youtube(
+            self,
+            interaction: discord.Interaction,
+            aktion: Literal["Hinzufügen", "Entfernen"],
+            channel: discord.TextChannel,
+            channelname: str
+    ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
-            em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
-                             author=interaction.user, guild=interaction.guild)
+            em = astra_embed(
+                title="❌ Notifier nicht bereit",
+                description="Bitte versuche es gleich erneut.",
+                author=interaction.user, guild=interaction.guild
+            )
             return await interaction.response.send_message(embed=em, ephemeral=True)
-        await cog.subscribe(interaction.guild_id, "youtube", channel.name, channelname)
-        em = astra_embed(
-            title="✅ YouTube-Abo gesetzt",
-            description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}\n**Modus:** {'RSS' if YOUTUBE_USE_RSS else 'YouTube Data API'}",
-            color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
-        )
+
+        if aktion == "Hinzufügen":
+            await cog.subscribe(interaction.guild_id, "youtube", channel.name, channelname)
+            em = astra_embed(
+                title="✅ YouTube-Abo hinzugefügt",
+                description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}",
+                color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
+            )
+        if aktion == "Entfernen":
+            async with cog.pool.acquire() as conn, conn.cursor() as cur:
+                await cur.execute(
+                    "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='youtube' AND content_id=%s",
+                    (str(interaction.guild_id), channel.name, channelname)
+                )
+                await conn.commit()
+            em = astra_embed(
+                title="🗑️ YouTube-Abo entfernt",
+                description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}",
+                color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
+            )
+
         await interaction.response.send_message(embed=em, ephemeral=True)
 
-    @app_commands.command(name="twitch", description="Twitch-Channel abonnieren")
-    @app_commands.describe(channel="Discord-Kanal", channelname="Twitch-Loginname")
+    @app_commands.command(name="twitch", description="Twitch-Kanal hinzufügen oder entfernen")
+    @app_commands.describe(
+        aktion="Hinzufügen oder Entfernen",
+        channel="Discord-Kanal für Benachrichtigungen",
+        channelname="Twitch-Loginname"
+    )
     @app_commands.guild_only()
-    async def twitch(self, interaction: discord.Interaction, channel: discord.TextChannel, channelname: str):
+    async def twitch(
+            self,
+            interaction: discord.Interaction,
+            aktion: Literal["Hinzufügen", "Entfernen"],
+            channel: discord.TextChannel,
+            channelname: str
+    ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
-            em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
-                             author=interaction.user, guild=interaction.guild)
+            em = astra_embed(
+                title="❌ Notifier nicht bereit",
+                description="Bitte versuche es gleich erneut.",
+                author=interaction.user, guild=interaction.guild
+            )
             return await interaction.response.send_message(embed=em, ephemeral=True)
-        await cog.subscribe(interaction.guild_id, "twitch", channel.name, channelname.lower())
-        em = astra_embed(
-            title="✅ Twitch-Abo gesetzt",
-            description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
-            color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
-        )
+
+        if aktion == "Hinzufügen":
+            await cog.subscribe(interaction.guild_id, "twitch", channel.name, channelname.lower())
+            em = astra_embed(
+                title="✅ Twitch-Abo hinzugefügt",
+                description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
+                color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
+            )
+        if aktion == "Entfernen":
+            async with cog.pool.acquire() as conn, conn.cursor() as cur:
+                await cur.execute(
+                    "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='twitch' AND content_id=%s",
+                    (str(interaction.guild_id), channel.name, channelname.lower())
+                )
+                await conn.commit()
+            em = astra_embed(
+                title="🗑️ Twitch-Abo entfernt",
+                description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
+                color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
+            )
+
         await interaction.response.send_message(embed=em, ephemeral=True)
 
-    @app_commands.command(name="schalter", description="Notifier pro Plattform ein-/ausschalten")
-    @app_commands.describe(platform="Plattform auswählen", status="an oder aus")
-    @app_commands.guild_only()
-    async def schalter(self, interaction: discord.Interaction,
-                       platform: Literal["youtube", "twitch"], status: Literal["an", "aus"]):
-        cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
-        if not cog:
-            em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
-                             author=interaction.user, guild=interaction.guild)
-            return await interaction.response.send_message(embed=em, ephemeral=True)
-        enabled = (status == "an")
-        await cog.set_enabled(interaction.guild_id, platform, enabled)
-        color = YOUTUBE_COLOR if platform == "youtube" else TWITCH_COLOR
-        em = astra_embed(
-            title=f"🔧 {platform.capitalize()} Benachrichtigungen",
-            description=f"**Status:** {'🟢 Aktiv' if enabled else '🔴 Deaktiviert'}",
-            color=color, author=interaction.user, guild=interaction.guild
-        )
-        await interaction.response.send_message(embed=em, ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Notifier(bot))
