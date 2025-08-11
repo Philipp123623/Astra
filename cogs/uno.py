@@ -16,19 +16,14 @@ UNO_GOLD = discord.Color.gold()
 COLORS = ["R", "Y", "G", "B"]
 NUMS = [str(i) for i in range(10)]
 ACTIONS = ["skip", "reverse", "+2"]
-WILDS = ["wild", "+4"]
-
 EMO_COLOR = {"R": "🔴", "Y": "🟡", "G": "🟢", "B": "🔵", "ANY": "🎨"}
 EMO_VAL = {**{n: n for n in NUMS}, "skip": "⏭️", "reverse": "🔁", "+2": "+2", "wild": "🃏", "+4": "+4"}
 EMO_DIR = {1: "➡️", -1: "⬅️"}
-EMO_SEP = "│"
 
 TURN_TIMEOUT = 45
 UNO_PENALTY = 2
 MAX_PLAYERS = 6
 MIN_PLAYERS = 2
-
-ASTRA_COLOR = discord.Colour.blue()
 
 def mk_deck() -> List[Dict]:
     d = []
@@ -46,8 +41,7 @@ def mk_deck() -> List[Dict]:
     return d
 
 def lab(card: Dict) -> str:
-    t = f"{EMO_COLOR.get(card['color'],'🎨')} {EMO_VAL.get(card['value'], card['value'])}"
-    return t
+    return f"{EMO_COLOR.get(card['color'],'🎨')} {EMO_VAL.get(card['value'], card['value'])}"
 
 def is_playable(card: Dict, top: Dict, forced: Optional[str]) -> bool:
     if card["color"] == "ANY":
@@ -55,6 +49,33 @@ def is_playable(card: Dict, top: Dict, forced: Optional[str]) -> bool:
     if forced:
         return card["color"] == forced or card["value"] == top["value"]
     return card["color"] == top["color"] or card["value"] == top["value"] or top["color"] == "ANY"
+
+def progress_bar(start_ts: float) -> Tuple[str, int]:
+    now = datetime.now(timezone.utc).timestamp()
+    elapsed = max(0.0, now - float(start_ts))
+    left = max(0, int(TURN_TIMEOUT - elapsed))
+    pct = min(1.0, elapsed / TURN_TIMEOUT) if TURN_TIMEOUT > 0 else 1.0
+    width = 20
+    filled = int(round(pct * width))
+    bar = "█" * filled + "—" * (width - filled)
+    return f"[{bar}] {left}s", left
+
+def ascii_table(st: "UnoState") -> str:
+    turn = st.current_uid()
+    names = [f"{'▶' if u==turn else ' '} @{u}:{len(st.hands.get(u,[]))}" for u in st.players]
+    ring = " ⇄ ".join(names) if st.direction == 1 else " ⇆ ".join(reversed(names))
+    top = lab(st.top_card) + (f" → {EMO_COLOR[st.forced_color]}" if st.forced_color else "")
+    draw = len(st.draw_pile)
+    disc = len(st.discard_pile)
+    stack = f" | Stack:+{st.draw_stack}" if st.draw_stack else ""
+    return (
+        "┌────────── TABLE ──────────┐\n"
+        f"│ Top: {top:<18}│\n"
+        f"│ Draw:{draw:<4} Discard:{disc:<4}{stack:>8}│\n"
+        "├────────────────────────────┤\n"
+        f"│ {ring[:26]:<26} │\n"
+        "└────────────────────────────┘"
+    )
 
 @dataclass
 class UnoState:
@@ -75,9 +96,10 @@ class UnoState:
     draw_stack: int = 0
     last_turn_at: float = 0.0
     uno_called: Dict[int, bool] = field(default_factory=dict)
-    invited: List[int] = field(default_factory=list)  # <— NEU
+    invited: List[int] = field(default_factory=list)
     lobby_message_id: Optional[int] = None
     table_message_id: Optional[int] = None
+    hand_messages: Dict[int, int] = field(default_factory=dict)
 
     def to_json(self) -> Tuple[str, str]:
         g = {
@@ -96,13 +118,13 @@ class UnoState:
             "table_message_id": self.table_message_id,
             "host_id": self.host_id,
             "invited": self.invited,
+            "hand_messages": self.hand_messages,
         }
         p = {str(uid): {"hand": self.hands.get(uid, []), "uno": self.uno_called.get(uid, False)} for uid in self.players}
         return json.dumps(g, separators=(",", ":")), json.dumps(p, separators=(",", ":"))
 
     @classmethod
     def from_row(cls, row: dict) -> "UnoState":
-        game = json.loads(row["game_json"])
         g = json.loads(row["game_json"])
         p = json.loads(row["players_json"])
         s = cls(
@@ -111,7 +133,6 @@ class UnoState:
             channel_id=row["channel_id"],
             host_id=row["host_id"],
         )
-        s.invited = list(map(int, game.get("invited", [])))  # <— NEU
         s.status = g["status"]
         s.lobby_open = bool(g.get("lobby_open", True))
         s.players = list(map(int, g["players"]))
@@ -126,6 +147,8 @@ class UnoState:
         s.lobby_message_id = g.get("lobby_message_id")
         s.table_message_id = g.get("table_message_id")
         s.host_id = g.get("host_id", row["host_id"])
+        s.invited = list(map(int, g.get("invited", [])))
+        s.hand_messages = {int(k): int(v) for k, v in g.get("hand_messages", {}).items()}
         s.hands = {int(uid): data["hand"] for uid, data in p.items()}
         s.uno_called = {int(uid): bool(data.get("uno", False)) for uid, data in p.items()}
         return s
@@ -232,38 +255,52 @@ class TableView(discord.ui.View):
     async def uno(self, it: discord.Interaction, _): await self.cog.ui_uno(it, self.gid)
 
 class PlayButton(discord.ui.Button):
-    def __init__(self, gid: int, idx: int, label_txt: str, color_hint: str = "0"):
+    def __init__(self, gid: int, idx: int, label_txt: str, color_hint: str = "0", disabled: bool = False):
         cid = f"uno:play:{gid}:{idx}:{color_hint}"
-        super().__init__(style=discord.ButtonStyle.primary, label=label_txt, custom_id=cid)
+        super().__init__(style=discord.ButtonStyle.primary, label=label_txt, custom_id=cid, disabled=disabled)
         self.gid = gid
         self.idx = idx
         self.color_hint = color_hint
     async def callback(self, it: discord.Interaction):
         await self.view.cog.ui_play_card(it, self.gid, self.idx, None if self.color_hint == "0" else self.color_hint)  # type: ignore
 
+class HandDrawButton(discord.ui.Button):
+    def __init__(self, gid: int, disabled: bool):
+        super().__init__(style=discord.ButtonStyle.secondary, label="Ziehen", custom_id=f"uno:hand:draw:{gid}", disabled=disabled)
+        self.gid = gid
+    async def callback(self, it: discord.Interaction):
+        await self.view.cog.ui_draw(it, self.gid)  # type: ignore
+
+class HandUnoButton(discord.ui.Button):
+    def __init__(self, gid: int, disabled: bool):
+        super().__init__(style=discord.ButtonStyle.success, label="UNO!", custom_id=f"uno:hand:uno:{gid}", disabled=disabled)
+        self.gid = gid
+    async def callback(self, it: discord.Interaction):
+        await self.view.cog.ui_uno(it, self.gid)  # type: ignore
+
 class HandView(discord.ui.View):
-    def __init__(self, cog: "UnoCog", st: UnoState, uid: int):
-        super().__init__(timeout=60)
+    def __init__(self, cog: "UnoCog", st: UnoState, uid: int, enabled: bool):
+        super().__init__(timeout=None)
         self.cog = cog
-        self.st = st
-        self.uid = uid
         playable = st.valid_moves(uid)
         added = 0
         for idx, c in playable:
             if c["color"] == "ANY":
                 for col in COLORS:
-                    self.add_item(PlayButton(st.game_id, idx, f"{EMO_COLOR['ANY']} {EMO_VAL[c['value']]} → {EMO_COLOR[col]}", col))
+                    self.add_item(PlayButton(st.game_id, idx, f"{EMO_COLOR['ANY']} {EMO_VAL[c['value']]} → {EMO_COLOR[col]}", col, disabled=not enabled))
                     added += 1
             else:
-                self.add_item(PlayButton(st.game_id, idx, lab(c)))
+                self.add_item(PlayButton(st.game_id, idx, lab(c), disabled=not enabled))
                 added += 1
             if added >= 20:
                 break
+        self.add_item(HandDrawButton(st.game_id, disabled=not enabled))
+        self.add_item(HandUnoButton(st.game_id, disabled=not enabled))
 
 @app_commands.guild_only()
 class Uno(app_commands.Group):
     def __init__(self, cog: "UnoCog"):
-        super().__init__(name="uno", description="UNO Light mit Lobby, Tisch und PvP")
+        super().__init__(name="uno", description="UNO Light mit Lobby, Tisch, DM-Hand und Progressbar")
         self.cog = cog
 
     @app_commands.command(name="start", description="Erstellt eine UNO-Lobby in diesem Kanal.")
@@ -294,10 +331,6 @@ class UnoCog(commands.Cog):
         self.bot = bot
         self.pool: aiomysql.Pool = bot.pool
         self.locks: Dict[int, asyncio.Lock] = {}
-
-    async def _save_state(self, st: UnoState):
-        # Alias für ältere Aufrufe
-        return await self._save(st)
 
     def lock_for(self, gid: int) -> asyncio.Lock:
         if gid not in self.locks:
@@ -361,15 +394,6 @@ class UnoCog(commands.Cog):
             """, (guild_id, channel_id))
             return await cur.fetchone()
 
-    async def _fetch_active(self, guild_id: int, channel_id: int) -> Optional[dict]:
-        async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
-            await cur.execute("""
-                SELECT * FROM uno_games
-                 WHERE guild_id=%s AND channel_id=%s AND status='active'
-                 ORDER BY updated_at DESC LIMIT 1
-            """, (guild_id, channel_id))
-            return await cur.fetchone()
-
     async def _save(self, st: UnoState):
         gj, pj = st.to_json()
         async with self.pool.acquire() as conn, conn.cursor() as cur:
@@ -390,56 +414,52 @@ class UnoCog(commands.Cog):
         for r in rows or []:
             st = UnoState.from_row(r)
             ch = self.bot.get_channel(st.channel_id) or await self.bot.fetch_channel(st.channel_id)
-            if st.status == "lobby":
+            if st.status == "lobby" and st.lobby_message_id:
                 try:
-                    msg = await ch.history(limit=50).find(lambda m: m.id == (st.lobby_message_id or 0))  # type: ignore
+                    m = await ch.fetch_message(st.lobby_message_id)
+                    await m.edit(view=LobbyView(self, st.game_id), embed=self.emb_lobby(st))
                 except Exception:
-                    msg = None
-                if st.lobby_message_id:
-                    try:
-                        m = await ch.fetch_message(st.lobby_message_id)
-                        await m.edit(view=LobbyView(self, st.game_id), embed=self.emb_lobby(st))
-                    except Exception:
-                        pass
+                    pass
             if st.status == "active":
-                if st.table_message_id:
-                    try:
-                        m = await ch.fetch_message(st.table_message_id)
-                        await m.edit(view=TableView(self, st.game_id), embed=self.emb_table(st))
-                    except Exception:
-                        pass
+                await self._refresh_table(st)
+                await self._refresh_all_hands(st)
 
     def emb_lobby(self, st: UnoState) -> discord.Embed:
         e = discord.Embed(
             title=f"UNO Lobby #{st.game_id}",
             description=("🎨 Lobby ist **offen**" if st.lobby_open else "🎨 Lobby ist **geschlossen** (nur Einladung)"),
-            color=ASTRA_COLOR,
+            color=ASTRA,
         )
         e.add_field(name="Host", value=f"<@{st.host_id}>", inline=True)
         e.add_field(name="Spieler (2–6)", value="\n".join(f"<@{u}>" for u in st.players) or "—", inline=True)
         if st.invited:
-            e.add_field(name="Eingeladen", value=", ".join(f"<@{u}>" for u in st.invited), inline=False)  # <— NEU
+            e.add_field(name="Eingeladen", value=", ".join(f"<@{u}>" for u in st.invited), inline=False)
         e.set_footer(text="Host: Öffnen/Schließen • Start • Abbrechen")
         return e
 
     def emb_table(self, st: UnoState) -> discord.Embed:
-        turn = st.current_uid()
-        dir_txt = EMO_DIR[st.direction]
-        top = lab(st.top_card)
-        if st.forced_color:
-            top += f" → {EMO_COLOR[st.forced_color]}"
-        counts = []
-        for u in st.players:
-            mark = "🟢" if u == turn else "⚪"
-            uno = " (UNO)" if len(st.hands.get(u, [])) == 1 else ""
-            counts.append(f"{mark} <@{u}> ({len(st.hands.get(u, []))}){uno}")
-        desc = "\n".join(counts)
-        e = discord.Embed(title=f"UNO – Spiel #{st.game_id}", color=ASTRA, description=desc)
-        e.add_field(name="Zug", value=f"<@{turn}> {dir_txt}", inline=True)
-        e.add_field(name="Oberste Karte", value=top, inline=True)
+        pbar, left = progress_bar(st.last_turn_at)
+        e = discord.Embed(title=f"UNO – Spiel #{st.game_id}", color=ASTRA, description=ascii_table(st))
+        e.add_field(name="Zug", value=f"<@{st.current_uid()}> {EMO_DIR[st.direction]}", inline=True)
+        e.add_field(name="Zeit", value=pbar, inline=True)
         if st.draw_stack:
             e.add_field(name="Zieh-Stapel", value=f"+{st.draw_stack}", inline=True)
-        e.set_footer(text="Hand öffnen, wenn du dran bist • Ziehen, falls nötig • UNO! bei 1 Karte")
+        e.set_footer(text="Hand in DMs • Ziehen falls nötig • UNO! bei 1 Karte")
+        return e
+
+    def emb_hand(self, st: UnoState, uid: int) -> discord.Embed:
+        pbar, _ = progress_bar(st.last_turn_at)
+        hand = st.hands.get(uid, [])
+        lines = [f"{i+1}. {lab(c)}" for i, c in enumerate(hand)] or ["—"]
+        title = f"Deine Hand – Spiel #{st.game_id}"
+        desc = "\n".join(lines)
+        top = lab(st.top_card) + (f" → {EMO_COLOR[st.forced_color]}" if st.forced_color else "")
+        e = discord.Embed(title=title, color=ASTRA)
+        e.add_field(name="Oberste Karte", value=top, inline=False)
+        e.add_field(name="Karten", value=desc[:1000], inline=False)
+        e.add_field(name="Zeit", value=pbar, inline=False)
+        turn = st.current_uid()
+        e.set_footer(text="Du bist am Zug." if uid == turn else "Bitte warten – du bist nicht am Zug.")
         return e
 
     async def cmd_start_lobby(self, it: discord.Interaction, privat: bool):
@@ -460,25 +480,16 @@ class UnoCog(commands.Cog):
         st = UnoState.from_row(row)
         if it.user.id != st.host_id:
             return await it.response.send_message("❌ Nur der Host kann einladen.", ephemeral=True)
-
-        # DM schicken (wie gehabt) ...
         try:
-            e = discord.Embed(
-                title=f"UNO-Einladung #{st.game_id}",
-                description=f"<@{st.host_id}> lädt dich ein.\nKanal: <#{st.channel_id}>",
-                color=ASTRA_COLOR,
-            )
+            e = discord.Embed(title=f"UNO-Einladung #{st.game_id}", description=f"<@{st.host_id}> lädt dich ein.\nKanal: <#{st.channel_id}>", color=ASTRA)
             e.add_field(name="Beitreten", value="Nutze `/uno beitreten` im Kanal der Lobby.")
             await user.send(embed=e)
         except Exception:
-            pass  # DM kann fehlschlagen, Einladung gilt trotzdem
-
+            pass
         if user.id not in st.invited:
-            st.invited.append(user.id)  # <— Eintrag merken
+            st.invited.append(user.id)
             await self._save(st)
-
         await it.response.send_message("✅ Einladung hinterlegt.", ephemeral=True)
-        return None
 
     async def cmd_join(self, it: discord.Interaction):
         row = await self._fetch_open_lobby(it.guild_id, it.channel_id)
@@ -513,23 +524,17 @@ class UnoCog(commands.Cog):
         if not row or row["status"] != "lobby":
             return await it.response.send_message("❌ Lobby existiert nicht mehr.", ephemeral=True)
         st = UnoState.from_row(row)
-
-        # <— HIER: Join-Regel anpassen
         invited_ok = it.user.id in st.invited
         if not st.lobby_open and it.user.id != st.host_id and not invited_ok:
             return await it.response.send_message("❌ Lobby ist geschlossen. Nur auf Einladung.", ephemeral=True)
-
         if it.user.id in st.players:
             return await it.response.send_message("Du bist bereits in der Lobby.", ephemeral=True)
         if len(st.players) >= MAX_PLAYERS:
             return await it.response.send_message("❌ Lobby ist voll.", ephemeral=True)
-
         st.players.append(it.user.id)
         if invited_ok:
-            try:
-                st.invited.remove(it.user.id)  # Einladung verbrauchen
-            except ValueError:
-                pass
+            try: st.invited.remove(it.user.id)
+            except ValueError: pass
         await self._save(st)
         await self._edit_lobby(st)
         await it.response.send_message("✅ Beigetreten.", ephemeral=True)
@@ -583,7 +588,8 @@ class UnoCog(commands.Cog):
             msg = await ch.send(embed=self.emb_table(st), view=TableView(self, st.game_id))
             st.table_message_id = msg.id
             await self._save(st)
-            await it.response.send_message("🎮 Spiel gestartet!", ephemeral=True)
+            await self._refresh_all_hands(st)
+            await it.response.send_message("🎮 Spiel gestartet! Hand wurde per DM gesendet.", ephemeral=True)
 
     async def ui_lobby_cancel(self, it: discord.Interaction, game_id: int):
         async with self.lock_for(game_id):
@@ -610,19 +616,12 @@ class UnoCog(commands.Cog):
             pass
 
     async def ui_open_hand(self, it: discord.Interaction, game_id: int):
-        async with self.lock_for(game_id):
-            row = await self._fetch_row(game_id)
-            if not row or row["status"] != "active":
-                return await it.response.send_message("❌ Spiel existiert nicht mehr.", ephemeral=True)
-            st = UnoState.from_row(row)
-            if it.user.id != st.current_uid():
-                return await it.response.send_message("⏳ Du bist nicht am Zug.", ephemeral=True)
-            hv = HandView(self, st, it.user.id)
-            hand = st.hands.get(it.user.id, [])
-            if not hand:
-                return await it.response.send_message("Du hast keine Karten.", ephemeral=True)
-            lines = [f"{i+1}. {lab(c)}" for i, c in enumerate(hand)]
-            await it.response.send_message("Deine Hand:\n" + "\n".join(lines), view=hv, ephemeral=True)
+        row = await self._fetch_row(game_id)
+        if not row or row["status"] != "active":
+            return await it.response.send_message("❌ Spiel existiert nicht mehr.", ephemeral=True)
+        st = UnoState.from_row(row)
+        await self._refresh_all_hands(st, force_send_to=it.user.id)
+        await it.response.send_message("📬 Ich habe dir die Hand in die DMs geschickt/aktualisiert.", ephemeral=True)
 
     async def ui_draw(self, it: discord.Interaction, game_id: int):
         async with self.lock_for(game_id):
@@ -638,6 +637,7 @@ class UnoCog(commands.Cog):
             st.next_turn(1)
             await self._save(st)
             await self._refresh_table(st)
+            await self._refresh_all_hands(st)
             await it.response.send_message(f"🃏 Du hast {n} Karte(n) gezogen.", ephemeral=True)
 
     async def ui_uno(self, it: discord.Interaction, game_id: int):
@@ -649,7 +649,8 @@ class UnoCog(commands.Cog):
             if len(st.hands.get(it.user.id, [])) == 1:
                 st.uno_called[it.user.id] = True
                 await self._save(st)
-                return await it.response.send_message("✅ UNO gerufen!", ephemeral=True)
+                await it.response.send_message("✅ UNO gerufen!", ephemeral=True)
+                return
             return await it.response.send_message("ℹ️ Du hast nicht genau 1 Karte.", ephemeral=True)
 
     async def ui_play_card(self, it: discord.Interaction, game_id: int, hand_index: int, chosen_color: Optional[str]):
@@ -677,17 +678,18 @@ class UnoCog(commands.Cog):
                 st.status = "ended"
                 await self._save(st)
                 await self._announce_end(st, uid)
+                await self._refresh_all_hands(st)
                 return await it.response.send_message("🎉 Karte gelegt – du hast gewonnen!", ephemeral=True)
             step = 1
-            if effect == "reverse":
-                if len(st.players) == 2:
-                    step = 2
+            if effect == "reverse" and len(st.players) == 2:
+                step = 2
             if effect == "skip":
                 step = 2
             st.next_turn(step)
             st.uno_called[uid] = False
             await self._save(st)
             await self._refresh_table(st)
+            await self._refresh_all_hands(st)
             txt = f"✅ {lab(card)} gelegt."
             if st.forced_color and card["color"] == "ANY":
                 txt += f" Farbe gesetzt auf {EMO_COLOR[st.forced_color]}"
@@ -705,6 +707,39 @@ class UnoCog(commands.Cog):
         except Exception:
             pass
 
+    async def _refresh_all_hands(self, st: UnoState, force_send_to: Optional[int] = None):
+        for uid in st.players:
+            try:
+                user = self.bot.get_user(uid) or await self.bot.fetch_user(uid)
+                dm = user.dm_channel or await user.create_dm()
+                enabled = uid == st.current_uid()
+                view = HandView(self, st, uid, enabled)
+                emb = self.emb_hand(st, uid)
+                msg_id = st.hand_messages.get(uid)
+                if not msg_id or force_send_to == uid:
+                    try:
+                        msg = await dm.fetch_message(msg_id) if msg_id else None
+                        if msg:
+                            await msg.edit(embed=emb, view=view)
+                        else:
+                            new_msg = await dm.send(embed=emb, view=view)
+                            st.hand_messages[uid] = new_msg.id
+                            await self._save(st)
+                    except Exception:
+                        new_msg = await dm.send(embed=emb, view=view)
+                        st.hand_messages[uid] = new_msg.id
+                        await self._save(st)
+                else:
+                    try:
+                        msg = await dm.fetch_message(msg_id)
+                        await msg.edit(embed=emb, view=view)
+                    except Exception:
+                        new_msg = await dm.send(embed=emb, view=view)
+                        st.hand_messages[uid] = new_msg.id
+                        await self._save(st)
+            except Exception:
+                continue
+
     async def _announce_end(self, st: UnoState, winner_id: int):
         if not st.table_message_id:
             return
@@ -715,8 +750,18 @@ class UnoCog(commands.Cog):
             await m.edit(embed=e, view=None)
         except Exception:
             pass
+        await self._temp_note(st.channel_id, f"🏁 Spiel #{st.game_id} vorbei – Gewinner: <@{winner_id}>", 8)
 
-    @tasks.loop(seconds=10)
+    async def _temp_note(self, channel_id: int, text: str, delete_after: int = 6):
+        try:
+            ch = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            m = await ch.send(text)
+            await asyncio.sleep(delete_after)
+            await m.delete()
+        except Exception:
+            pass
+
+    @tasks.loop(seconds=5)
     async def maintain_games(self):
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute("SELECT * FROM uno_games WHERE status='active'")
@@ -737,6 +782,13 @@ class UnoCog(commands.Cog):
                     st.next_turn(1)
                     await self._save(st)
                     await self._refresh_table(st)
+                    await self._refresh_all_hands(st)
+                    await self._temp_note(st.channel_id, f"⏰ <@{uid}> war zu langsam und zieht {n} Karte(n).", 6)
+            else:
+                try:
+                    await self._refresh_table(st)
+                except Exception:
+                    pass
 
     @maintain_games.before_loop
     async def _wait_ready(self):
