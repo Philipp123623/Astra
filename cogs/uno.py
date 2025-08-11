@@ -295,6 +295,10 @@ class UnoCog(commands.Cog):
         self.pool: aiomysql.Pool = bot.pool
         self.locks: Dict[int, asyncio.Lock] = {}
 
+    async def _save_state(self, st: UnoState):
+        # Alias für ältere Aufrufe
+        return await self._save(st)
+
     def lock_for(self, gid: int) -> asyncio.Lock:
         if gid not in self.locks:
             self.locks[gid] = asyncio.Lock()
