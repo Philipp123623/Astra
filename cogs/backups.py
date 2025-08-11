@@ -130,6 +130,9 @@ class BackupCog(commands.Cog):
     # ---------- Schema ----------
     async def _ensure_schema(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute("DROP TABLE backups;")
+            await cur.execute("DROP TABLE backup_jobs;")
+
             await cur.execute("""
             CREATE TABLE IF NOT EXISTS backups (
               code VARCHAR(32) PRIMARY KEY,
