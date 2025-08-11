@@ -68,23 +68,31 @@ class Notifier(commands.Cog):
         if self.http:
             await self.http.close()
 
-    async def subscribe(self, guild_id: int, platform: str, channel_name: str, content_id: str):
+    async def subscribe(self, guild_id: int, platform: str, channel_name: str, content_id: str, ping_role_id: Optional[int] = None):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO subscriptions (guild_id, discord_channel_name, platform, content_id)
-                    VALUES (%s, %s, %s, %s) AS new
-                ON DUPLICATE KEY UPDATE content_id = new.content_id
+                INSERT INTO subscriptions (guild_id, discord_channel_name, platform, content_id, ping_role_id)
+                VALUES (%s, %s, %s, %s, %s) AS new
+                ON DUPLICATE KEY UPDATE content_id = new.content_id, ping_role_id = new.ping_role_id
                 """,
-                (str(guild_id), channel_name, platform, content_id),
+                (str(guild_id), channel_name, platform, content_id, ping_role_id),
             )
+
+    async def delete_subscription(self, guild_id: int, platform: str, channel_name: str, content_id: str) -> int:
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM subscriptions WHERE guild_id=%s AND platform=%s AND discord_channel_name=%s AND content_id=%s",
+                (str(guild_id), platform, channel_name, content_id),
+            )
+            return cur.rowcount
 
     async def set_enabled(self, guild_id: int, platform: str, enabled: bool):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
                 INSERT INTO notifier_settings (guild_id, platform, enabled)
-                    VALUES (%s, %s, %s) AS new
+                VALUES (%s, %s, %s) AS new
                 ON DUPLICATE KEY UPDATE enabled = new.enabled
                 """,
                 (str(guild_id), platform, 1 if enabled else 0),
@@ -102,16 +110,16 @@ class Notifier(commands.Cog):
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
     async def check_for_updates(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("SELECT guild_id, discord_channel_name, platform, content_id FROM subscriptions")
+            await cur.execute("SELECT guild_id, discord_channel_name, platform, content_id, ping_role_id FROM subscriptions")
             subs = await cur.fetchall()
-        for guild_id, channel_name, platform, content_id in subs:
+        for guild_id, channel_name, platform, content_id, ping_role_id in subs:
             try:
                 if not await self.is_enabled(int(guild_id), platform):
                     continue
                 if platform == "youtube":
-                    await self._check_youtube(content_id, int(guild_id), str(channel_name))
+                    await self._check_youtube(content_id, int(guild_id), str(channel_name), ping_role_id)
                 elif platform == "twitch":
-                    await self._check_twitch(content_id, int(guild_id), str(channel_name))
+                    await self._check_twitch(content_id, int(guild_id), str(channel_name), ping_role_id)
             except Exception as e:
                 g = self.bot.get_guild(int(guild_id))
                 guild_name = f"{g.name} ({g.id})" if g else str(guild_id)
@@ -132,7 +140,7 @@ class Notifier(commands.Cog):
             return sorted(ci, key=lambda c: (c.category.position if c.category else -1, c.position))[0]
         return None
 
-    async def _check_youtube(self, yt_channel_id: str, guild_id: int, target_channel_name: str):
+    async def _check_youtube(self, yt_channel_id: str, guild_id: int, target_channel_name: str, ping_role_id: Optional[int]):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         target = await self._resolve_text_channel(guild, target_channel_name)
         if not target:
@@ -151,10 +159,13 @@ class Notifier(commands.Cog):
                 pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
                 if pub_dt > published_after:
                     await self._send_webhook(
-                        target, title=f"🎥 Neues Video: {title}",
+                        target,
+                        title=f"🎥 Neues Video: {title}",
                         description="Ein neues Video ist online!",
-                        thumbnail="", url=YOUTUBE_VIDEO_URL.format(video_id=vid),
-                        color=YOUTUBE_COLOR
+                        thumbnail="",
+                        url=YOUTUBE_VIDEO_URL.format(video_id=vid),
+                        color=YOUTUBE_COLOR,
+                        ping_role_id=ping_role_id
                     )
         else:
             if not YOUTUBE_API_KEY:
@@ -175,13 +186,16 @@ class Notifier(commands.Cog):
                 desc = item["snippet"].get("description", "")
                 thumb = item["snippet"]["thumbnails"].get("high", item["snippet"]["thumbnails"].get("default", {})).get("url", "")
                 await self._send_webhook(
-                    target, title=f"🎥 Neues Video: {title}",
+                    target,
+                    title=f"🎥 Neues Video: {title}",
                     description=desc or "Ein neues Video ist online!",
-                    thumbnail=thumb, url=YOUTUBE_VIDEO_URL.format(video_id=vid),
-                    color=YOUTUBE_COLOR
+                    thumbnail=thumb,
+                    url=YOUTUBE_VIDEO_URL.format(video_id=vid),
+                    color=YOUTUBE_COLOR,
+                    ping_role_id=ping_role_id
                 )
 
-    async def _check_twitch(self, login: str, guild_id: int, target_channel_name: str):
+    async def _check_twitch(self, login: str, guild_id: int, target_channel_name: str, ping_role_id: Optional[int]):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         target = await self._resolve_text_channel(guild, target_channel_name)
         if not target:
@@ -197,20 +211,29 @@ class Notifier(commands.Cog):
         title = s.get("title", f"{login} ist live!")
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
         await self._send_webhook(
-            target, title=f"🟣 {login} ist jetzt LIVE",
-            description=title, thumbnail=thumb,
+            target,
+            title=f"🟣 {login} ist jetzt LIVE",
+            description=title,
+            thumbnail=thumb,
             url=TWITCH_CHANNEL_URL.format(login=login),
-            color=TWITCH_COLOR
+            color=TWITCH_COLOR,
+            ping_role_id=ping_role_id
         )
 
-    async def _send_webhook(self, channel: discord.TextChannel, *, title: str, description: str, thumbnail: str, url: str, color: discord.Color):
+    async def _send_webhook(self, channel: discord.TextChannel, *, title: str, description: str, thumbnail: str, url: str, color: discord.Color, ping_role_id: Optional[int] = None):
         webhook = await self._get_or_create_webhook(channel.guild.id, channel.id)
         e = discord.Embed(title=title, description=(description or "")[:2000], url=url, color=color)
         e.timestamp = datetime.now(timezone.utc)
         if thumbnail:
             e.set_image(url=thumbnail)
         e.set_footer(text="Astra Notifier • Jetzt reinschauen!")
-        await webhook.send(embed=e)
+        content = None
+        allowed = discord.AllowedMentions(roles=True)
+        if ping_role_id:
+            role = channel.guild.get_role(int(ping_role_id))
+            if role:
+                content = role.mention
+        await webhook.send(embed=e, content=content, allowed_mentions=allowed)
 
     async def _get_or_create_webhook(self, guild_id: int, channel_id: int):
         key = (guild_id, channel_id)
@@ -249,9 +272,14 @@ class Notifier(commands.Cog):
                     discord_channel_name VARCHAR(255) NOT NULL,
                     platform ENUM('youtube','twitch') NOT NULL,
                     content_id VARCHAR(255) NOT NULL,
+                    ping_role_id BIGINT NULL,
                     PRIMARY KEY (guild_id, discord_channel_name, platform, content_id)
                 )
             """)
+            try:
+                await cur.execute("ALTER TABLE subscriptions ADD COLUMN ping_role_id BIGINT NULL")
+            except Exception:
+                pass
             await cur.execute("""
                 CREATE TABLE IF NOT EXISTS notifier_settings (
                     guild_id BIGINT NOT NULL,
@@ -260,6 +288,7 @@ class Notifier(commands.Cog):
                     PRIMARY KEY (guild_id, platform)
                 )
             """)
+
 
 class Benachrichtigung(app_commands.Group):
     def __init__(self, bot: commands.Bot):
@@ -270,41 +299,36 @@ class Benachrichtigung(app_commands.Group):
     @app_commands.describe(
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",
-        channelname="YouTube-Channelname (UC...)"
+        channelname="YouTube-Channel (ID/Name/Handle/URL)",
+        rolle="(Optional) Rolle, die gepingt wird"
     )
     @app_commands.guild_only()
     async def youtube(
-            self,
-            interaction: discord.Interaction,
-            aktion: Literal["Hinzufügen", "Entfernen"],
-            channel: discord.TextChannel,
-            channelname: str
+        self,
+        interaction: discord.Interaction,
+        aktion: Literal["Hinzufügen", "Entfernen"],
+        channel: discord.TextChannel,
+        channelname: str,
+        rolle: Optional[discord.Role] = None
     ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
-            em = astra_embed(
-                title="❌ Notifier nicht bereit",
-                description="Bitte versuche es gleich erneut.",
-                author=interaction.user, guild=interaction.guild
-            )
+            em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.", author=interaction.user, guild=interaction.guild)
             return await interaction.response.send_message(embed=em, ephemeral=True)
 
         if aktion == "Hinzufügen":
-            await cog.subscribe(interaction.guild_id, "youtube", channel.name, channelname)
+            await cog.subscribe(interaction.guild_id, "youtube", channel.name, channelname, rolle.id if rolle else None)
+            await cog.set_enabled(interaction.guild_id, "youtube", True)
             em = astra_embed(
                 title="✅ YouTube-Abo hinzugefügt",
-                description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}",
+                description=f"**Channel:** `{channelname}`\n**Ziel:** {channel.mention}\n**Ping:** {rolle.mention if rolle else '—'}\n**Modus:** {'RSS' if YOUTUBE_USE_RSS else 'YouTube Data API'}",
                 color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
             )
-        if aktion == "Entfernen":
-            async with cog.pool.acquire() as conn, conn.cursor() as cur:
-                await cur.execute(
-                    "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='youtube' AND content_id=%s",
-                    (str(interaction.guild_id), channel.name, channelname)
-                )
+        else:
+            await cog.delete_subscription(interaction.guild_id, "youtube", channel.name, channelname)
             em = astra_embed(
                 title="🗑️ YouTube-Abo entfernt",
-                description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}",
+                description=f"**Channel:** `{channelname}`\n**Ziel:** {channel.mention}",
                 color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
             )
 
@@ -314,41 +338,38 @@ class Benachrichtigung(app_commands.Group):
     @app_commands.describe(
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",
-        channelname="Twitch-Loginname"
+        channelname="Twitch-Loginname",
+        rolle="(Optional) Rolle, die gepingt wird"
     )
     @app_commands.guild_only()
     async def twitch(
-            self,
-            interaction: discord.Interaction,
-            aktion: Literal["Hinzufügen", "Entfernen"],
-            channel: discord.TextChannel,
-            channelname: str
+        self,
+        interaction: discord.Interaction,
+        aktion: Literal["Hinzufügen", "Entfernen"],
+        channel: discord.TextChannel,
+        channelname: str,
+        rolle: Optional[discord.Role] = None
     ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
-            em = astra_embed(
-                title="❌ Notifier nicht bereit",
-                description="Bitte versuche es gleich erneut.",
-                author=interaction.user, guild=interaction.guild
-            )
+            em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.", author=interaction.user, guild=interaction.guild)
             return await interaction.response.send_message(embed=em, ephemeral=True)
 
+        login = channelname.lower()
+
         if aktion == "Hinzufügen":
-            await cog.subscribe(interaction.guild_id, "twitch", channel.name, channelname.lower())
+            await cog.subscribe(interaction.guild_id, "twitch", channel.name, login, rolle.id if rolle else None)
+            await cog.set_enabled(interaction.guild_id, "twitch", True)
             em = astra_embed(
                 title="✅ Twitch-Abo hinzugefügt",
-                description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
+                description=f"**Login:** `{login}`\n**Ziel:** {channel.mention}\n**Ping:** {rolle.mention if rolle else '—'}",
                 color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
             )
-        if aktion == "Entfernen":
-            async with cog.pool.acquire() as conn, conn.cursor() as cur:
-                await cur.execute(
-                    "DELETE FROM subscriptions WHERE guild_id=%s AND discord_channel_name=%s AND platform='twitch' AND content_id=%s",
-                    (str(interaction.guild_id), channel.name, channelname.lower())
-                )
+        else:
+            await cog.delete_subscription(interaction.guild_id, "twitch", channel.name, login)
             em = astra_embed(
                 title="🗑️ Twitch-Abo entfernt",
-                description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
+                description=f"**Login:** `{login}`\n**Ziel:** {channel.mention}",
                 color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
             )
 
