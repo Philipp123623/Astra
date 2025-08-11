@@ -28,6 +28,8 @@ UNO_PENALTY = 2
 MAX_PLAYERS = 6
 MIN_PLAYERS = 2
 
+ASTRA_COLOR = discord.Colour.blue()
+
 def mk_deck() -> List[Dict]:
     d = []
     for c in COLORS:
@@ -73,6 +75,7 @@ class UnoState:
     draw_stack: int = 0
     last_turn_at: float = 0.0
     uno_called: Dict[int, bool] = field(default_factory=dict)
+    invited: List[int] = field(default_factory=list)  # <— NEU
     lobby_message_id: Optional[int] = None
     table_message_id: Optional[int] = None
 
@@ -92,12 +95,14 @@ class UnoState:
             "lobby_message_id": self.lobby_message_id,
             "table_message_id": self.table_message_id,
             "host_id": self.host_id,
+            "invited": self.invited,
         }
         p = {str(uid): {"hand": self.hands.get(uid, []), "uno": self.uno_called.get(uid, False)} for uid in self.players}
         return json.dumps(g, separators=(",", ":")), json.dumps(p, separators=(",", ":"))
 
     @classmethod
     def from_row(cls, row: dict) -> "UnoState":
+        game = json.loads(row["game_json"])
         g = json.loads(row["game_json"])
         p = json.loads(row["players_json"])
         s = cls(
@@ -106,6 +111,7 @@ class UnoState:
             channel_id=row["channel_id"],
             host_id=row["host_id"],
         )
+        s.invited = list(map(int, game.get("invited", [])))  # <— NEU
         s.status = g["status"]
         s.lobby_open = bool(g.get("lobby_open", True))
         s.players = list(map(int, g["players"]))
@@ -400,12 +406,15 @@ class UnoCog(commands.Cog):
                         pass
 
     def emb_lobby(self, st: UnoState) -> discord.Embed:
-        title = f"UNO Lobby #{st.game_id}"
-        mode = "offen für alle" if st.lobby_open else "geschlossen (nur Einladung)"
-        plist = "\n".join(f"{EMO_SEP} <@{u}>" for u in st.players) or "—"
-        e = discord.Embed(title=title, color=ASTRA, description=f"{EMO_COLOR['ANY']} Lobby ist **{mode}**")
+        e = discord.Embed(
+            title=f"UNO Lobby #{st.game_id}",
+            description=("🎨 Lobby ist **offen**" if st.lobby_open else "🎨 Lobby ist **geschlossen** (nur Einladung)"),
+            color=ASTRA_COLOR,
+        )
         e.add_field(name="Host", value=f"<@{st.host_id}>", inline=True)
-        e.add_field(name=f"Spieler ({MIN_PLAYERS}–{MAX_PLAYERS})", value=plist, inline=False)
+        e.add_field(name="Spieler (2–6)", value="\n".join(f"<@{u}>" for u in st.players) or "—", inline=True)
+        if st.invited:
+            e.add_field(name="Eingeladen", value=", ".join(f"<@{u}>" for u in st.invited), inline=False)  # <— NEU
         e.set_footer(text="Host: Öffnen/Schließen • Start • Abbrechen")
         return e
 
@@ -447,13 +456,25 @@ class UnoCog(commands.Cog):
         st = UnoState.from_row(row)
         if it.user.id != st.host_id:
             return await it.response.send_message("❌ Nur der Host kann einladen.", ephemeral=True)
+
+        # DM schicken (wie gehabt) ...
         try:
-            e = discord.Embed(title=f"UNO-Einladung #{st.game_id}", description=f"<@{st.host_id}> lädt dich ein.\nKanal: <#{st.channel_id}>", color=ASTRA)
+            e = discord.Embed(
+                title=f"UNO-Einladung #{st.game_id}",
+                description=f"<@{st.host_id}> lädt dich ein.\nKanal: <#{st.channel_id}>",
+                color=ASTRA_COLOR,
+            )
             e.add_field(name="Beitreten", value="Nutze `/uno beitreten` im Kanal der Lobby.")
             await user.send(embed=e)
-            await it.response.send_message("✅ Einladung verschickt.", ephemeral=True)
         except Exception:
-            await it.response.send_message("⚠️ Einladung konnte nicht per DM gesendet werden.", ephemeral=True)
+            pass  # DM kann fehlschlagen, Einladung gilt trotzdem
+
+        if user.id not in st.invited:
+            st.invited.append(user.id)  # <— Eintrag merken
+            await self._save_state(st)
+
+        await it.response.send_message("✅ Einladung hinterlegt.", ephemeral=True)
+        return None
 
     async def cmd_join(self, it: discord.Interaction):
         row = await self._fetch_open_lobby(it.guild_id, it.channel_id)
@@ -484,21 +505,30 @@ class UnoCog(commands.Cog):
         await it.response.send_message(embed=emb, view=view, ephemeral=True)
 
     async def ui_lobby_join(self, it: discord.Interaction, game_id: int):
-        async with self.lock_for(game_id):
-            row = await self._fetch_row(game_id)
-            if not row or row["status"] != "lobby":
-                return await it.response.send_message("❌ Lobby existiert nicht mehr.", ephemeral=True)
-            st = UnoState.from_row(row)
-            if not st.lobby_open and it.user.id != st.host_id:
-                return await it.response.send_message("❌ Lobby ist geschlossen.", ephemeral=True)
-            if it.user.id in st.players:
-                return await it.response.send_message("Du bist bereits in der Lobby.", ephemeral=True)
-            if len(st.players) >= MAX_PLAYERS:
-                return await it.response.send_message("❌ Lobby ist voll.", ephemeral=True)
-            st.players.append(it.user.id)
-            await self._save(st)
-            await self._edit_lobby(st)
-            await it.response.send_message("✅ Beigetreten.", ephemeral=True)
+        row = await self._fetch_row(game_id)
+        if not row or row["status"] != "lobby":
+            return await it.response.send_message("❌ Lobby existiert nicht mehr.", ephemeral=True)
+        st = UnoState.from_row(row)
+
+        # <— HIER: Join-Regel anpassen
+        invited_ok = it.user.id in st.invited
+        if not st.lobby_open and it.user.id != st.host_id and not invited_ok:
+            return await it.response.send_message("❌ Lobby ist geschlossen. Nur auf Einladung.", ephemeral=True)
+
+        if it.user.id in st.players:
+            return await it.response.send_message("Du bist bereits in der Lobby.", ephemeral=True)
+        if len(st.players) >= MAX_PLAYERS:
+            return await it.response.send_message("❌ Lobby ist voll.", ephemeral=True)
+
+        st.players.append(it.user.id)
+        if invited_ok:
+            try:
+                st.invited.remove(it.user.id)  # Einladung verbrauchen
+            except ValueError:
+                pass
+        await self._save_state(st)
+        await self._edit_lobby_message(st)
+        await it.response.send_message("✅ Beigetreten.", ephemeral=True)
 
     async def ui_lobby_leave(self, it: discord.Interaction, game_id: int):
         async with self.lock_for(game_id):
