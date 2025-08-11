@@ -240,6 +240,8 @@ class Notifier(commands.Cog):
 
     async def _ensure_tables(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute("DROP TABLE subscriptions;")
+            await cur.execute("DROP TABLE notifier_settings;")
             await cur.execute("""
                 CREATE TABLE IF NOT EXISTS subscriptions (
                     guild_id BIGINT NOT NULL,
