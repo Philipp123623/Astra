@@ -475,7 +475,7 @@ class UnoCog(commands.Cog):
 
         if user.id not in st.invited:
             st.invited.append(user.id)  # <— Eintrag merken
-            await self._save_state(st)
+            await self._save(st)
 
         await it.response.send_message("✅ Einladung hinterlegt.", ephemeral=True)
         return None
@@ -530,7 +530,7 @@ class UnoCog(commands.Cog):
                 st.invited.remove(it.user.id)  # Einladung verbrauchen
             except ValueError:
                 pass
-        await self._save_state(st)
+        await self._save(st)
         await self._edit_lobby_message(st)
         await it.response.send_message("✅ Beigetreten.", ephemeral=True)
 
