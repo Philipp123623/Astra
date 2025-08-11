@@ -68,6 +68,7 @@ class HelpCog(commands.Cog):
         "notifications": "benachrichtigung",
         "info": "info",
         "infos": "info",
+        "erinnerung": "erinnerung",
     }
 
     def __init__(self, bot: commands.Bot):
