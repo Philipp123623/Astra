@@ -593,7 +593,7 @@ class Backup(app_commands.Group):
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="latest", description="Zeigt den letzten Backup-Code dieser Guild.")
+    @app_commands.command(name="latest", description="Zeigt den letzten Backup-Code dieses Servers.")
     async def latest(self, interaction: discord.Interaction):
         cog = self._cog()
         code = await cog._fetch_latest_code(interaction.guild_id)
@@ -608,7 +608,7 @@ class Backup(app_commands.Group):
                 ephemeral=True
             )
 
-    @app_commands.command(name="load", description="Stellt ein Backup (nicht-destruktiv) wieder her und zeigt Fortschritt.")
+    @app_commands.command(name="load", description="Stellt ein Backup wieder her und zeigt Fortschritt.")
     async def load(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
         # Code validieren
