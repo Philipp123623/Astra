@@ -35,8 +35,14 @@ class Dropdown(discord.ui.Select):
             description=self.cog.pages.get(self.values[0], "Seite nicht gefunden!"),
             colour=discord.Colour.blue()
         )
-        embed.set_author(name=f"Command Menü | {self.values[0]}", icon_url=interaction.client.user.avatar)
-        embed.set_footer(text="Astra Development ©2025", icon_url=interaction.guild.icon)
+        # safer: .display_avatar.url
+        embed.set_author(
+            name=f"Command Menü | {self.values[0]}",
+            icon_url=getattr(interaction.client.user.display_avatar, "url", None)
+        )
+        # safer: guild icon may be None
+        guild_icon_url = getattr(getattr(interaction.guild, "icon", None), "url", None)
+        embed.set_footer(text="Astra Development ©2025", icon_url=guild_icon_url)
 
         view = View(timeout=None)
         view.add_item(Dropdown(self.cog))
@@ -45,24 +51,85 @@ class Dropdown(discord.ui.Select):
 
 
 class help(commands.Cog):
+    # Aliasse für abweichende Gruppen-Namen
+    ALIASES = {
+        # englisch -> tatsächlich genutzter Name
+        "economy": "eco",
+        "eco": "eco",
+        "job": "job",
+        # hier ggf. weitere Synonyme hinterlegen
+        "levels": "levelsystem",
+        "level": "levelsystem",
+        "levelsystem": "levelsystem",
+        "backup": "backup",
+        "gewinnspiele": "gewinnspiel",
+        "gewinnspiel": "gewinnspiel",
+        "benachrichtigungen": "benachrichtigung",
+        "notifications": "benachrichtigung",
+        "info": "info",
+        "infos": "info",
+    }
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.uptime = datetime.utcnow()
-        self.command_ids = {}
+        self.command_ids = {}  # keys werden lowercase gehalten
         self.pages = {}
 
     async def on_ready_cache_ids(self):
         cmds = await self.bot.tree.fetch_commands()
         for cmd in cmds:
             if isinstance(cmd, app_commands.Group):
-                self.command_ids[cmd.name] = cmd.id
+                # root group
+                self.command_ids[cmd.name.lower()] = cmd.id
+                # subcommands -> wir mappen "group sub" auf die group-id (für Mentions ausreichend)
                 for sub in cmd.commands:
-                    self.command_ids[f"{cmd.name} {sub.name}"] = cmd.id
+                    key = f"{cmd.name} {sub.name}".lower()
+                    self.command_ids[key] = cmd.id
             else:
-                self.command_ids[cmd.name] = cmd.id
+                self.command_ids[cmd.name.lower()] = cmd.id
+
+    def _normalize_key(self, path: str) -> str:
+        return path.strip().lower()
 
     def _cid(self, path: str) -> int:
-        return self.command_ids[path]
+        """
+        Holt robust die Command-ID:
+        - exakter key (lowercase)
+        - Alias (z. B. economy -> eco)
+        - bei "group sub": Alias auf group anwenden
+        """
+        key = self._normalize_key(path)
+
+        # exakter Treffer
+        if key in self.command_ids:
+            return self.command_ids[key]
+
+        # Alias auf gesamten key
+        if key in self.ALIASES and self.ALIASES[key] in self.command_ids:
+            return self.command_ids[self.ALIASES[key]]
+
+        # group + sub?
+        if " " in key:
+            group, sub = key.split(" ", 1)
+            group_alias = self.ALIASES.get(group, group)
+            combo = f"{group_alias} {sub}".lower()
+            if combo in self.command_ids:
+                return self.command_ids[combo]
+            # Falls Subcommand als anderer Name existiert (fallback: startswith-match)
+            for k in self.command_ids.keys():
+                if k.startswith(f"{group_alias} "):
+                    # irgendein sub unter dieser group gefunden -> nutze group-id
+                    return self.command_ids[k]
+
+        # letzter Versuch: fuzzy startswith auf root-namen
+        for k in self.command_ids.keys():
+            if k == key or k.startswith(key + " ") or key.startswith(k + " "):
+                return self.command_ids[k]
+
+        # nichts gefunden -> klare Fehlermeldung
+        available = ", ".join(sorted(self.command_ids.keys()))
+        raise KeyError(f"Command '{path}' nicht gefunden. Verfügbar: {available}")
 
     @commands.Cog.listener()
     async def on_ready(self):
