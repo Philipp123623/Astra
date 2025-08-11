@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Tuple, Optional, Literal
+from typing import Dict, Tuple, Optional, Literal, List
 
 import aiohttp
 import aiomysql
@@ -17,6 +17,8 @@ WEBHOOK_NAME = "Astra-Notifier"
 YOUTUBE_USE_RSS = False
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
 YOUTUBE_RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 YOUTUBE_VIDEO_URL = "https://www.youtube.com/watch?v={video_id}"
 
@@ -26,11 +28,13 @@ TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 TWITCH_STREAMS_URL = "https://api.twitch.tv/helix/streams?user_login={login}"
 TWITCH_CHANNEL_URL = "https://twitch.tv/{login}"
 
-ASTRA_COLOR = discord.Color.from_rgb(70, 130, 180)
-TWITCH_COLOR = discord.Color.from_rgb(145, 70, 255)
-YOUTUBE_COLOR = discord.Color.from_rgb(230, 33, 23)
+# 1) Standardfarbe auf discord.Colour.blue() umgestellt
+ASTRA_COLOR = discord.Colour.blue()
+TWITCH_COLOR = discord.Colour.from_rgb(145, 70, 255)
+YOUTUBE_COLOR = discord.Colour.from_rgb(230, 33, 23)
 
-def astra_embed(*, title: str, description: str = "", color: discord.Color = ASTRA_COLOR,
+
+def astra_embed(*, title: str, description: str = "", color: discord.Colour = ASTRA_COLOR,
                 author: Optional[discord.abc.User] = None, guild: Optional[discord.Guild] = None,
                 url: Optional[str] = None) -> discord.Embed:
     e = discord.Embed(title=title, description=description, color=color, url=url)
@@ -44,6 +48,30 @@ def astra_embed(*, title: str, description: str = "", color: discord.Color = AST
     else:
         e.set_footer(text="Astra Notifier • powered by Astra")
     return e
+
+
+# Hilfsfunktionen für YouTube
+def _format_iso8601_duration(iso: str) -> str:
+    # Erwartet z.B. "PT1H2M3S", "PT9M5S", "PT42S"
+    hours = minutes = seconds = 0
+    cur = ""
+    num = ""
+    for ch in iso:
+        if ch.isdigit():
+            num += ch
+            continue
+        if ch in "HMS":
+            val = int(num) if num else 0
+            if ch == "H":
+                hours = val
+            elif ch == "M":
+                minutes = val
+            elif ch == "S":
+                seconds = val
+            num = ""
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:d}:{seconds:02d}"
 
 
 class Notifier(commands.Cog):
@@ -146,9 +174,8 @@ class Notifier(commands.Cog):
         if s.startswith("@"):
             if not YOUTUBE_API_KEY:
                 return None
-            url = "https://www.googleapis.com/youtube/v3/channels"
             params = {"part": "id", "forHandle": s, "key": YOUTUBE_API_KEY}
-            async with self.http.get(url, params=params) as resp:
+            async with self.http.get(YOUTUBE_CHANNELS_URL, params=params) as resp:
                 data = await resp.json()
             items = data.get("items", [])
             return items[0]["id"] if items else None
@@ -156,27 +183,48 @@ class Notifier(commands.Cog):
             from urllib.parse import urlparse
             p = urlparse(s)
             parts = [x for x in p.path.split("/") if x]
-            # /channel/UC..., /@handle, /c/CustomName → versuch handle/Custom über search
             if len(parts) >= 2 and parts[0].lower() == "channel" and parts[1].startswith("UC"):
                 return parts[1]
             if parts and parts[0].startswith("@"):
                 return await self._resolve_youtube_channel_id(parts[0])
-            # sonst später via search (fall-through)
         if not YOUTUBE_API_KEY:
             return None
-        url = "https://www.googleapis.com/youtube/v3/search"
         params = {"part": "snippet", "q": s, "type": "channel", "maxResults": 1, "key": YOUTUBE_API_KEY}
-        async with self.http.get(url, params=params) as resp:
+        async with self.http.get(YOUTUBE_SEARCH_URL, params=params) as resp:
             data = await resp.json()
         items = data.get("items", [])
         return items[0]["id"]["channelId"] if items else None
+
+    # Zusätzliche Details für YouTube (Dauer/Views + Kanal-Icon)
+    async def _get_youtube_video_details(self, video_id: str) -> Dict[str, str]:
+        if not YOUTUBE_API_KEY:
+            return {}
+        params = {
+            "part": "contentDetails,statistics,snippet",
+            "id": video_id,
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 1,
+        }
+        async with self.http.get(YOUTUBE_VIDEOS_URL, params=params) as resp:
+            data = await resp.json()
+        items = data.get("items", [])
+        if not items:
+            return {}
+        it = items[0]
+        details = it.get("contentDetails", {})
+        stats = it.get("statistics", {})
+        snip = it.get("snippet", {})
+        duration = _format_iso8601_duration(details.get("duration", "")) if details.get("duration") else "—"
+        views = stats.get("viewCount")
+        ch_thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url")
+        return {"duration": duration, "views": views, "channel_thumb": ch_thumb}
 
     async def _check_youtube(self, yt_channel_id: str, guild_id: int, target_channel_name: str, ping_role_id: Optional[int]):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         target = await self._resolve_text_channel(guild, target_channel_name)
         if not target:
             return
-        published_after = (datetime.now(timezone.utc) - timedelta(minutes=5))
+        published_after = (datetime.now(timezone.utc) - timedelta(minutes=POLL_INTERVAL_MINUTES))
         if YOUTUBE_USE_RSS:
             url = YOUTUBE_RSS_URL.format(channel_id=yt_channel_id)
             async with self.http.get(url) as resp:
@@ -196,7 +244,7 @@ class Notifier(commands.Cog):
                         thumbnail="",
                         url=YOUTUBE_VIDEO_URL.format(video_id=vid),
                         color=YOUTUBE_COLOR,
-                        ping_role_id=ping_role_id
+                        ping_role_id=ping_role_id,
                     )
         else:
             if not YOUTUBE_API_KEY:
@@ -213,17 +261,30 @@ class Notifier(commands.Cog):
                 data = await resp.json()
             for item in data.get("items", []):
                 vid = item["id"]["videoId"]
-                title = item["snippet"]["title"]
-                desc = item["snippet"].get("description", "")
-                thumb = item["snippet"]["thumbnails"].get("high", item["snippet"]["thumbnails"].get("default", {})).get("url", "")
+                snip = item["snippet"]
+                title = snip["title"]
+                desc = snip.get("description", "")
+                thumb = snip["thumbnails"].get("high", snip["thumbnails"].get("default", {})).get("url", "")
+                channel_title = snip.get("channelTitle", "YouTube")
+                published_at = snip.get("publishedAt")
+
+                details = await self._get_youtube_video_details(vid)
+                fields = {
+                    "Kanal": channel_title,
+                    "Veröffentlicht": published_at.replace("T", " ").replace("Z", " UTC") if published_at else "—",
+                    "Dauer": details.get("duration", "—"),
+                    "Aufrufe": details.get("views", "—"),
+                }
                 await self._send_webhook(
                     target,
                     title=f"🎥 Neues Video: {title}",
-                    description=desc or "Ein neues Video ist online!",
+                    description=(desc or "Ein neues Video ist online!")[:500],
                     thumbnail=thumb,
                     url=YOUTUBE_VIDEO_URL.format(video_id=vid),
                     color=YOUTUBE_COLOR,
-                    ping_role_id=ping_role_id
+                    ping_role_id=ping_role_id,
+                    author=(channel_title, details.get("channel_thumb")),
+                    fields=fields,
                 )
 
     async def _check_twitch(self, login: str, guild_id: int, target_channel_name: str, ping_role_id: Optional[int]):
@@ -241,6 +302,12 @@ class Notifier(commands.Cog):
         s = streams[0]
         title = s.get("title", f"{login} ist live!")
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
+        fields = {
+            "Spiel": s.get("game_name") or "—",
+            "Zuschauer": str(s.get("viewer_count", "—")),
+            "Gestartet": s.get("started_at", "—").replace("T", " ").replace("Z", " UTC"),
+            "Sprache": s.get("language", "—"),
+        }
         await self._send_webhook(
             target,
             title=f"🟣 {login} ist jetzt LIVE",
@@ -248,15 +315,28 @@ class Notifier(commands.Cog):
             thumbnail=thumb,
             url=TWITCH_CHANNEL_URL.format(login=login),
             color=TWITCH_COLOR,
-            ping_role_id=ping_role_id
+            ping_role_id=ping_role_id,
+            author=(login, None),
+            fields=fields,
         )
 
-    async def _send_webhook(self, channel: discord.TextChannel, *, title: str, description: str, thumbnail: str, url: str, color: discord.Color, ping_role_id: Optional[int] = None):
+    async def _send_webhook(self, channel: discord.TextChannel, *, title: str, description: str, thumbnail: str, url: str, color: discord.Colour, ping_role_id: Optional[int] = None, author: Optional[Tuple[str, Optional[str]]] = None, fields: Optional[Dict[str, str]] = None):
         webhook = await self._get_or_create_webhook(channel.guild.id, channel.id)
         e = discord.Embed(title=title, description=(description or "")[:2000], url=url, color=color)
         e.timestamp = datetime.now(timezone.utc)
         if thumbnail:
             e.set_image(url=thumbnail)
+        if author:
+            name, icon = author
+            if name:
+                if icon:
+                    e.set_author(name=name, icon_url=icon)
+                else:
+                    e.set_author(name=name)
+        if fields:
+            # schön kompakt als Inline-Felder
+            for k, v in fields.items():
+                e.add_field(name=str(k), value=str(v) if v is not None else "—", inline=True)
         e.set_footer(text="Astra Notifier • Jetzt reinschauen!")
         content = None
         allowed = discord.AllowedMentions(roles=True)

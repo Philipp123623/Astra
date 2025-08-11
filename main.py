@@ -179,7 +179,6 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS counter (guildID BIGINT, channelID BIGINT, number BIGINT, lastuserID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS leavemsg (guildID BIGINT, channelID BIGINT, msg TEXT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS guessthenumber (guildID BIGINT, channelID BIGINT, number BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS automod (guildID BIGINT, warns BIGINT, action TEXT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS modlog (serverID BIGINT, channelID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS tags (guildID BIGINT, tagname BIGINT, tagoutput BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS tempchannels (guild_id BIGINT, channel_id BIGINT)")
