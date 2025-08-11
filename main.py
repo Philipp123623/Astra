@@ -114,9 +114,6 @@ class Astra(commands.Bot):
             await self.load_cogs()
             self.tree.add_command(Giveaway())
             self.tree.add_command(Reminder())
-
-            # 2) sync – global reicht hier, da guild_only nur DMs sperrt
-            await self.tree.sync()
             logging.info("Astra ist online!")
             await asyncio.sleep(3)
             logging.info("[PANEL-INFO] Script started!")
