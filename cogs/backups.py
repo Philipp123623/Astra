@@ -66,11 +66,8 @@ def b58(b: bytes) -> str:
 def blake128(b: bytes) -> bytes:
     return hashlib.blake2b(b, digest_size=16).digest()
 
-def now_ts() -> int:
-    return int(time.time())
-
 def gen_backup_code() -> str:
-    """Erzeugt einen eindeutigen zufälligen Backup-Code."""
+    """Erzeugt einen eindeutigen zufälligen Backup-Code (Base58)."""
     return b58(uuid.uuid4().bytes)
 
 async def gentle_sleep():
@@ -79,12 +76,12 @@ async def gentle_sleep():
 def progress_bar(step: int, total: int, width: int = 20) -> str:
     if total <= 0:
         return "—" * width
-    filled = int(round(width * step / total))
+    filled = int(round(width * step / max(1, total)))
     return "█" * filled + "░" * (width - filled)
 
 def build_progress_embed(*, title: str, step: int, total: int, status: str,
                          color: discord.Color, error: str | None = None) -> discord.Embed:
-    pct = 0 if total == 0 else min(100, int(step * 100 / total))
+    pct = 0 if total == 0 else min(100, int(step * 100 / max(1, total)))
     emb = discord.Embed(
         title=title,
         description=f"{progress_bar(step, total)}  **{pct}%**",
@@ -161,6 +158,7 @@ class BackupCog(commands.Cog):
               last_error TEXT
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
+            await conn.commit()
 
     # ---------- Pruning ----------
     async def _mark_stale_jobs(self):
@@ -168,6 +166,7 @@ class BackupCog(commands.Cog):
             await cur.execute(
                 "UPDATE backup_jobs SET status='error', last_error='Bot restart' WHERE status='running'"
             )
+            await conn.commit()
 
     async def _prune_jobs_time_based(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
@@ -179,6 +178,7 @@ class BackupCog(commands.Cog):
                 """,
                 (RETENTION_DAYS,),
             )
+            await conn.commit()
 
     async def _prune_backups_time_based(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
@@ -189,6 +189,7 @@ class BackupCog(commands.Cog):
                 """,
                 (BACKUP_RETENTION_DAYS,),
             )
+            await conn.commit()
 
     # ---------- Job-Queue ----------
     async def _queue_job(self, guild_id: int, type_: str, code: str | None,
@@ -198,7 +199,9 @@ class BackupCog(commands.Cog):
                 "INSERT INTO backup_jobs (guild_id, code, type, status_channel_id, status_message_id) VALUES (%s,%s,%s,%s,%s)",
                 (guild_id, code, type_, status_channel_id, status_message_id)
             )
-            return cur.lastrowid
+            job_id = cur.lastrowid
+            await conn.commit()
+            return job_id
 
     async def _update_job(self, job_id: int, **fields):
         if not fields:
@@ -206,10 +209,12 @@ class BackupCog(commands.Cog):
         parts = ", ".join(f"{k}=%s" for k in fields)
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(f"UPDATE backup_jobs SET {parts} WHERE job_id=%s", (*fields.values(), job_id))
+            await conn.commit()
 
     async def _delete_job_row(self, job_id: int):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("DELETE FROM backup_jobs WHERE job_id=%s", (job_id,))
+            await conn.commit()
 
     async def _fetch_job(self, job_id: int) -> dict | None:
         async with self.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
@@ -298,6 +303,7 @@ class BackupCog(commands.Cog):
                         "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
                         (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
                     )
+                    await conn.commit()
                 return code
             except aiomysql.IntegrityError as e:
                 if getattr(e, "args", [None])[0] == 1062:
@@ -376,15 +382,31 @@ class BackupCog(commands.Cog):
             self._last_embed_edit[job_id] = now
 
     async def _restore_to_guild(self, guild: discord.Guild, data: dict, job_id: int):
+        """Erstellt nur fehlende Objekte. total_steps = Anzahl der tatsächlich neu zu erstellenden Objekte."""
         created_ids = {"roles": [], "channels": []}
-        total_steps = len(data.get("roles", [])) + len(data.get("channels", []))
+
+        # --- Step 1: Vorzählen, was wirklich fehlt (für korrekte total_steps) ---
+        roles_data = data.get("roles", []) or []
+        channels_data = data.get("channels", []) or []
+
+        existing_roles = {r.name for r in guild.roles}
+        roles_to_create = sum(1 for r in roles_data if r["name"] not in existing_roles)
+
+        existing_categories = {c.name: c for c in guild.categories}
+        cats_to_create = sum(1 for ch in channels_data
+                             if ch["type"] == discord.ChannelType.category.value and ch["name"] not in existing_categories)
+
+        existing_channel_names = {c.name for c in guild.channels}
+        chans_to_create = sum(1 for ch in channels_data
+                              if ch["type"] != discord.ChannelType.category.value and ch["name"] not in existing_channel_names)
+
+        total = roles_to_create + cats_to_create + chans_to_create
         step = 0
-        await self._update_job(job_id, step=step, total_steps=total_steps)
+        await self._update_job(job_id, step=step, total_steps=total)
         await self._maybe_edit_progress_embed(job_id, running_status="Starte Restore …", force=True)
 
-        # Rollen
-        existing_roles = {r.name for r in guild.roles}
-        for r in data.get("roles", []):
+        # --- Step 2: Rollen erzeugen ---
+        for r in roles_data:
             if r["name"] not in existing_roles:
                 try:
                     new_role = await guild.create_role(
@@ -398,34 +420,36 @@ class BackupCog(commands.Cog):
                     created_ids["roles"].append(new_role.id)
                 except discord.Forbidden:
                     pass
-                await gentle_sleep()
-            step += 1
-            await self._update_job(job_id, step=step)
-            await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Rollen …")
-
-        # Kategorien
-        existing_categories = {c.name: c for c in guild.categories}
-        for ch in data.get("channels", []):
-            if ch["type"] == discord.ChannelType.category.value:
-                if ch["name"] not in existing_categories:
-                    try:
-                        cat = await guild.create_category(
-                            ch["name"],
-                            overwrites=self._build_overwrites(guild, ch.get("overwrites", [])),
-                            reason="Astra Backup Restore"
-                        )
-                        created_ids["channels"].append(cat.id)
-                        existing_categories[cat.name] = cat
-                    except discord.Forbidden:
-                        pass
+                finally:
+                    step += 1  # Schritt zählt auch, wenn Erstellung nicht erlaubt war
+                    await self._update_job(job_id, step=step)
+                    await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Rollen …")
                     await gentle_sleep()
-                step += 1
-                await self._update_job(job_id, step=step)
-                await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Kategorien …")
 
-        # Channels
+        # --- Step 3: Kategorien erzeugen ---
+        # update existing_categories map in case roles step changed nothing
+        existing_categories = {c.name: c for c in guild.categories}
+        for ch in channels_data:
+            if ch["type"] == discord.ChannelType.category.value and ch["name"] not in existing_categories:
+                try:
+                    cat = await guild.create_category(
+                        ch["name"],
+                        overwrites=self._build_overwrites(guild, ch.get("overwrites", [])),
+                        reason="Astra Backup Restore"
+                    )
+                    created_ids["channels"].append(cat.id)
+                    existing_categories[cat.name] = cat
+                except discord.Forbidden:
+                    pass
+                finally:
+                    step += 1
+                    await self._update_job(job_id, step=step)
+                    await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Kategorien …")
+                    await gentle_sleep()
+
+        # --- Step 4: Channels erzeugen ---
         existing_channel_names = {c.name for c in guild.channels}
-        for ch in data.get("channels", []):
+        for ch in channels_data:
             if ch["type"] == discord.ChannelType.category.value:
                 continue
             if ch["name"] not in existing_channel_names:
@@ -442,6 +466,14 @@ class BackupCog(commands.Cog):
                         new_ch = await guild.create_voice_channel(
                             name=ch["name"], category=parent, overwrites=overwrites, reason="Astra Backup Restore"
                         )
+                    elif ctype is discord.ChannelType.stage_voice and hasattr(guild, "create_stage_channel"):
+                        new_ch = await guild.create_stage_channel(
+                            name=ch["name"], category=parent, overwrites=overwrites, reason="Astra Backup Restore"
+                        )
+                    elif ctype is discord.ChannelType.forum and hasattr(guild, "create_forum"):
+                        new_ch = await guild.create_forum(
+                            name=ch["name"], category=parent, overwrites=overwrites, reason="Astra Backup Restore"
+                        )
                     else:
                         new_ch = await guild.create_text_channel(
                             name=ch["name"], topic=ch.get("topic"), nsfw=ch.get("nsfw", False),
@@ -450,10 +482,11 @@ class BackupCog(commands.Cog):
                     created_ids["channels"].append(new_ch.id)
                 except discord.Forbidden:
                     pass
-                await gentle_sleep()
-            step += 1
-            await self._update_job(job_id, step=step)
-            await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Channels …")
+                finally:
+                    step += 1
+                    await self._update_job(job_id, step=step)
+                    await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Channels …")
+                    await gentle_sleep()
 
         await self._maybe_edit_progress_embed(job_id, running_status="Abschließen …", force=True)
         return created_ids
@@ -462,11 +495,13 @@ class BackupCog(commands.Cog):
         created_objs = loads(job["created_objects"].encode()) if job.get("created_objects") else {}
         chan_ids = list(reversed(created_objs.get("channels", [])))
         role_ids = created_objs.get("roles", [])
+
         total = len(chan_ids) + len(role_ids)
         step = 0
         await self._update_job(job["job_id"], step=step, total_steps=total)
         await self._maybe_edit_progress_embed(job["job_id"], running_status="Starte Undo …", force=True)
 
+        # Channels
         for cid in chan_ids:
             ch = guild.get_channel(cid)
             if ch:
@@ -479,6 +514,7 @@ class BackupCog(commands.Cog):
             await self._maybe_edit_progress_embed(job["job_id"], running_status="Lösche Channels …")
             await gentle_sleep()
 
+        # Rollen
         for rid in role_ids:
             role = guild.get_role(rid)
             if role:
@@ -614,7 +650,6 @@ class Backup(app_commands.Group):
             )
             return
 
-        # Progress-Embed
         start_embed = build_progress_embed(
             title=f"Astra • Undo für Restore-Job #{last_restore['job_id']}",
             step=0, total=0, status="Lösche hinzugefügte Objekte …",
@@ -662,6 +697,7 @@ class Backup(app_commands.Group):
         cog = self._cog()
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("DELETE FROM backups WHERE code=%s", (code,))
+            await conn.commit()
         await interaction.response.send_message(
             embed=discord.Embed(title="🗑 Backup gelöscht", description=f"`{code}` wurde entfernt.", color=discord.Colour.blue()),
             ephemeral=True
