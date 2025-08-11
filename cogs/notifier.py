@@ -305,8 +305,7 @@ class Benachrichtigung(app_commands.Group):
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",
         channelname="YouTube-Channel (ID/Handle/URL/Name)",
-        rolle="(Optional) Rolle, die gepingt wird",
-        sofort="Sofort prüfen (ja/nein)"
+        rolle="(Optional) Rolle, die gepingt wird"
     )
     @app_commands.guild_only()
     async def youtube(
@@ -315,8 +314,7 @@ class Benachrichtigung(app_commands.Group):
             aktion: Literal["Hinzufügen", "Entfernen"],
             channel: discord.TextChannel,
             channelname: str,
-            rolle: Optional[discord.Role] = None,
-            sofort: Literal["ja", "nein"] = "nein"
+            rolle: Optional[discord.Role] = None
     ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
@@ -334,10 +332,6 @@ class Benachrichtigung(app_commands.Group):
                 description=f"**Channel:** `{channelname}` → `{yt_id}`\n**Ziel:** {channel.mention}\n**Ping:** {rolle.mention if rolle else '—'}\n**Modus:** {'RSS' if YOUTUBE_USE_RSS else 'YouTube Data API'}",
                 color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
             ), ephemeral=True)
-            if sofort == "ja":
-                # einmalig mit größerem Lookback (24h), damit sofort was gefunden wird
-                await cog._check_youtube(yt_id, interaction.guild_id, channel.name, rolle.id if rolle else None)
-            return None
         else:
             await cog.delete_subscription(interaction.guild_id, "youtube", channel.name, channelname)
             await interaction.response.send_message(embed=astra_embed(
@@ -352,8 +346,7 @@ class Benachrichtigung(app_commands.Group):
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",
         channelname="Twitch-Loginname",
-        rolle="(Optional) Rolle, die gepingt wird",
-        sofort="Sofort prüfen (ja/nein)"
+        rolle="(Optional) Rolle, die gepingt wird"
     )
     @app_commands.guild_only()
     async def twitch(
@@ -362,8 +355,7 @@ class Benachrichtigung(app_commands.Group):
             aktion: Literal["Hinzufügen", "Entfernen"],
             channel: discord.TextChannel,
             channelname: str,
-            rolle: Optional[discord.Role] = None,
-            sofort: Literal["ja", "nein"] = "nein"
+            rolle: Optional[discord.Role] = None
     ):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
@@ -382,9 +374,6 @@ class Benachrichtigung(app_commands.Group):
                 description=f"**Login:** `{login}`\n**Ziel:** {channel.mention}\n**Ping:** {rolle.mention if rolle else '—'}",
                 color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
             ), ephemeral=True)
-            if sofort == "ja":
-                await cog._check_twitch(login, interaction.guild_id, channel.name, rolle.id if rolle else None)
-            return None
         else:
             await cog.delete_subscription(interaction.guild_id, "twitch", channel.name, login)
             await interaction.response.send_message(embed=astra_embed(
