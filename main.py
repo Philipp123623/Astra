@@ -587,6 +587,9 @@ def all_app_commands(bot):
 async def on_ready():
     bot.tree.add_command(Giveaway())
     bot.tree.add_command(Reminder())
+
+    # 2) dann SYNCEN (wichtig!)
+    await bot.tree.sync()
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
