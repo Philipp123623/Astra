@@ -585,14 +585,8 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
-    # Diese Funktion gehört z.B. in die on_ready-Event-Funktion, damit die Commands beim Start geladen werden
-    cmds = await bot.tree.fetch_commands()  # Alle global registrierten Slash-Commands abrufen
-
-    for cmd in cmds:
-        # Subcommands haben dieselbe ID wie ihr Parent-Command
-        # Command-ID kann genutzt werden, um den Command in Discord-Nachrichten mit </name:id> zu verlinken
-        logging.info(f"{cmd.name} - ID: {cmd.id}")  # Ausgabe im Log, z.B. "help - ID: 123456789012345678"
-
+    bot.tree.add_command(Giveaway())
+    bot.tree.add_command(Reminder())
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
@@ -636,8 +630,6 @@ async def on_ready():
                 status=discord.Status.online
             )
             bot.add_view(gw_button())
-            bot.tree.add_command(Giveaway())
-            bot.tree.add_command(Reminder())
 
 
 # Funktion, die nach 12h die Rolle entfernt und Erinnerungen schickt
