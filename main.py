@@ -622,6 +622,14 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
+    # Diese Funktion gehört z.B. in die on_ready-Event-Funktion, damit die Commands beim Start geladen werden
+    cmds = await bot.tree.fetch_commands()  # Alle global registrierten Slash-Commands abrufen
+
+    for cmd in cmds:
+        # Subcommands haben dieselbe ID wie ihr Parent-Command
+        # Command-ID kann genutzt werden, um den Command in Discord-Nachrichten mit </name:id> zu verlinken
+        logging.info(f"{cmd.name} - ID: {cmd.id}")  # Ausgabe im Log, z.B. "help - ID: 123456789012345678"
+
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
@@ -631,6 +639,7 @@ async def on_ready():
         async with conn.cursor() as cur:
             await cur.execute("DROP TABLE website_stats;")
             # Tabelle erstellen, falls sie noch nicht existiert
+
             await cur.execute("""
                 CREATE TABLE IF NOT EXISTS website_stats (
                     id INT PRIMARY KEY,
