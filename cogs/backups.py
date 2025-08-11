@@ -236,14 +236,14 @@ class BackupCog(commands.Cog):
             jobs = await self._fetch_pending_jobs()
             for job in jobs:
                 guild_id = job["guild_id"]
-                if guild_id not in self.guild_locks:
-                    self.guild_locks[guild_id] = asyncio.Lock()
+                self.guild_locks.setdefault(guild_id, asyncio.Lock())
                 asyncio.create_task(self._run_job(job))
             await asyncio.sleep(5)
 
     async def _run_job(self, job: dict):
         guild_id = job["guild_id"]
-        lock = self.guild_locks[guild_id]
+        # vorher: lock = self.guild_locks[guild_id]
+        lock = self.guild_locks.setdefault(guild_id, asyncio.Lock())
         async with lock:
             await self._update_job(job["job_id"], status="running")
             try:
