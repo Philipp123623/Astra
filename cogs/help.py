@@ -50,7 +50,7 @@ class Dropdown(discord.ui.Select):
         await interaction.response.edit_message(embed=embed, view=view)
 
 
-class help(commands.Cog):
+class HelpCog(commands.Cog):
     # Aliasse für abweichende Gruppen-Namen
     ALIASES = {
         # englisch -> tatsächlich genutzter Name
@@ -211,4 +211,4 @@ class help(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(help(bot))
+    await bot.add_cog(HelpCog(bot))
