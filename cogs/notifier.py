@@ -1,5 +1,4 @@
 import os
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, Optional, Literal
 
@@ -31,10 +30,9 @@ ASTRA_COLOR = discord.Color.from_rgb(70, 130, 180)
 TWITCH_COLOR = discord.Color.from_rgb(145, 70, 255)
 YOUTUBE_COLOR = discord.Color.from_rgb(230, 33, 23)
 
-def astra_embed(
-    *, title: str, description: str = "", color: discord.Color = ASTRA_COLOR,
-    author: Optional[discord.abc.User] = None, guild: Optional[discord.Guild] = None, url: Optional[str] = None
-) -> discord.Embed:
+def astra_embed(*, title: str, description: str = "", color: discord.Color = ASTRA_COLOR,
+                author: Optional[discord.abc.User] = None, guild: Optional[discord.Guild] = None,
+                url: Optional[str] = None) -> discord.Embed:
     e = discord.Embed(title=title, description=description, color=color, url=url)
     e.timestamp = datetime.now(timezone.utc)
     if author:
@@ -45,23 +43,16 @@ def astra_embed(
                  icon_url=getattr(author.display_avatar, "url", "") if author else discord.Embed.Empty)
     return e
 
-
 class Notifier(commands.Cog):
-
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         if not hasattr(bot, "pool") or not isinstance(bot.pool, aiomysql.Pool):
             raise RuntimeError("Dieses Cog erwartet einen globalen aiomysql-Pool in bot.pool")
         self.pool: aiomysql.Pool = bot.pool
-
         self.http: Optional[aiohttp.ClientSession] = None
         self._webhook_cache: Dict[Tuple[int, int], discord.Webhook] = {}
-
-        # Twitch Token Cache
         self._twitch_token: Optional[str] = None
         self._twitch_token_expire: Optional[datetime] = None
-
-        # Background Task
         self.check_for_updates.change_interval(minutes=POLL_INTERVAL_MINUTES)
         self.check_for_updates.start()
 
@@ -75,7 +66,6 @@ class Notifier(commands.Cog):
             await self.http.close()
 
     async def subscribe(self, guild_id: int, platform: str, channel_name: str, content_id: str):
-        """Speichert Abo (per Channel-Name)."""
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
@@ -110,11 +100,9 @@ class Notifier(commands.Cog):
 
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
     async def check_for_updates(self):
-        # alle Abos laden
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("SELECT guild_id, discord_channel_name, platform, content_id FROM subscriptions")
             subs = await cur.fetchall()
-
         for guild_id, channel_name, platform, content_id in subs:
             try:
                 if not await self.is_enabled(int(guild_id), platform):
@@ -133,14 +121,11 @@ class Notifier(commands.Cog):
         await self.bot.wait_until_ready()
 
     async def _resolve_text_channel(self, guild: discord.Guild, channel_name: str) -> Optional[discord.TextChannel]:
-        # exakte Übereinstimmung zuerst
         matches = [c for c in guild.text_channels if c.name == channel_name]
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            # nimm die mit geringster Position (oben in der Liste)
             return sorted(matches, key=lambda c: (c.category.position if c.category else -1, c.position))[0]
-        # case-insensitive fallback
         ci = [c for c in guild.text_channels if c.name.lower() == channel_name.lower()]
         if ci:
             return sorted(ci, key=lambda c: (c.category.position if c.category else -1, c.position))[0]
@@ -150,10 +135,8 @@ class Notifier(commands.Cog):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         target = await self._resolve_text_channel(guild, target_channel_name)
         if not target:
-            return  # Kanal existiert nicht (mehr)
-
+            return
         published_after = (datetime.now(timezone.utc) - timedelta(minutes=5))
-
         if YOUTUBE_USE_RSS:
             url = YOUTUBE_RSS_URL.format(channel_id=yt_channel_id)
             async with self.http.get(url) as resp:
@@ -169,13 +152,11 @@ class Notifier(commands.Cog):
                     await self._send_webhook(
                         target, title=f"🎥 Neues Video: {title}",
                         description="Ein neues Video ist online!",
-                        thumbnail="",
-                        url=YOUTUBE_VIDEO_URL.format(video_id=vid),
+                        thumbnail="", url=YOUTUBE_VIDEO_URL.format(video_id=vid),
                         color=YOUTUBE_COLOR
                     )
         else:
             if not YOUTUBE_API_KEY:
-                # Keine API-Creds -> nichts tun
                 return
             params = {
                 "part": "snippet",
@@ -204,7 +185,6 @@ class Notifier(commands.Cog):
         target = await self._resolve_text_channel(guild, target_channel_name)
         if not target:
             return
-
         token = await self._get_twitch_token()
         headers = {"Client-Id": TWITCH_CLIENT_ID, "Authorization": f"Bearer {token}"}
         async with self.http.get(TWITCH_STREAMS_URL.format(login=login), headers=headers) as resp:
@@ -215,12 +195,9 @@ class Notifier(commands.Cog):
         s = streams[0]
         title = s.get("title", f"{login} ist live!")
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
-
         await self._send_webhook(
-            target,
-            title=f"🟣 {login} ist jetzt LIVE",
-            description=title,
-            thumbnail=thumb,
+            target, title=f"🟣 {login} ist jetzt LIVE",
+            description=title, thumbnail=thumb,
             url=TWITCH_CHANNEL_URL.format(login=login),
             color=TWITCH_COLOR
         )
@@ -253,7 +230,7 @@ class Notifier(commands.Cog):
         if self._twitch_token and self._twitch_token_expire and self._twitch_token_expire > now + timedelta(minutes=2):
             return self._twitch_token
         if not (TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET):
-            return ""  # kein Twitch
+            return ""
         data = {"client_id": TWITCH_CLIENT_ID, "client_secret": TWITCH_CLIENT_SECRET, "grant_type": "client_credentials"}
         async with self.http.post(TWITCH_TOKEN_URL, data=data) as resp:
             token_data = await resp.json()
@@ -263,7 +240,6 @@ class Notifier(commands.Cog):
 
     async def _ensure_tables(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            # Channel-Name statt ID speichern
             await cur.execute("""
                 CREATE TABLE IF NOT EXISTS subscriptions (
                     guild_id BIGINT NOT NULL,
@@ -288,85 +264,52 @@ class Benachrichtigung(app_commands.Group):
         super().__init__(name="benachrichtigung", description="Benachrichtigungen für YouTube & Twitch")
         self.bot = bot
 
-    @app_commands.command(name="youtube", description="YouTube-Kanal abonnieren (Channel-ID: UC...)")
+    @app_commands.command(name="youtube", description="YouTube-Kanal abonnieren")
+    @app_commands.describe(channel="Discord-Kanal", channelname="YouTube-Channelname")
     @app_commands.guild_only()
-    async def youtube(
-        self,
-        interaction: discord.Interaction,
-        channel_name: str,
-        youtube_channel_id: str
-    ):
+    async def youtube(self, interaction: discord.Interaction, channel: discord.TextChannel, channelname: str):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
             em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
                              author=interaction.user, guild=interaction.guild)
             return await interaction.response.send_message(embed=em, ephemeral=True)
-
-        # Validierung: gibt's den Kanal?
-        target = await cog._resolve_text_channel(interaction.guild, channel_name)
-        if not target:
-            em = astra_embed(title="❌ Kanal nicht gefunden",
-                             description=f"Ich konnte keinen Textkanal namens **#{channel_name}** finden.",
-                             author=interaction.user, guild=interaction.guild)
-            return await interaction.response.send_message(embed=em, ephemeral=True)
-
-        await cog.subscribe(interaction.guild_id, "youtube", channel_name, youtube_channel_id)
+        await cog.subscribe(interaction.guild_id, "youtube", channel.name, channelname)
         em = astra_embed(
             title="✅ YouTube-Abo gesetzt",
-            description=(f"**Kanal-ID:** `{youtube_channel_id}`\n**Ziel:** {target.mention}\n"
-                         f"**Modus:** {'RSS' if YOUTUBE_USE_RSS else 'YouTube Data API'}"),
+            description=f"**Channelname:** `{channelname}`\n**Ziel:** {channel.mention}\n**Modus:** {'RSS' if YOUTUBE_USE_RSS else 'YouTube Data API'}",
             color=YOUTUBE_COLOR, author=interaction.user, guild=interaction.guild
         )
         await interaction.response.send_message(embed=em, ephemeral=True)
-        return None
 
-    @app_commands.command(name="twitch", description="Twitch-Channel abonnieren (Login-Name)")
+    @app_commands.command(name="twitch", description="Twitch-Channel abonnieren")
+    @app_commands.describe(channel="Discord-Kanal", channelname="Twitch-Loginname")
     @app_commands.guild_only()
-    async def twitch(
-        self,
-        interaction: discord.Interaction,
-        channel_name: str,
-        twitch_login: str
-    ):
+    async def twitch(self, interaction: discord.Interaction, channel: discord.TextChannel, channelname: str):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
             em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
                              author=interaction.user, guild=interaction.guild)
             return await interaction.response.send_message(embed=em, ephemeral=True)
-
-        target = await cog._resolve_text_channel(interaction.guild, channel_name)
-        if not target:
-            em = astra_embed(title="❌ Kanal nicht gefunden",
-                             description=f"Ich konnte keinen Textkanal namens **#{channel_name}** finden.",
-                             author=interaction.user, guild=interaction.guild)
-            return await interaction.response.send_message(embed=em, ephemeral=True)
-
-        await cog.subscribe(interaction.guild_id, "twitch", channel_name, twitch_login.lower())
+        await cog.subscribe(interaction.guild_id, "twitch", channel.name, channelname.lower())
         em = astra_embed(
             title="✅ Twitch-Abo gesetzt",
-            description=(f"**Login:** `{twitch_login.lower()}`\n**Ziel:** {target.mention}"),
+            description=f"**Login:** `{channelname.lower()}`\n**Ziel:** {channel.mention}",
             color=TWITCH_COLOR, author=interaction.user, guild=interaction.guild
         )
         await interaction.response.send_message(embed=em, ephemeral=True)
-        return None
 
     @app_commands.command(name="schalter", description="Notifier pro Plattform ein-/ausschalten")
+    @app_commands.describe(platform="Plattform auswählen", status="an oder aus")
     @app_commands.guild_only()
-    async def schalter(
-        self,
-        interaction: discord.Interaction,
-        platform: Literal["youtube", "twitch"],
-        status: Literal["an", "aus"]
-    ):
+    async def schalter(self, interaction: discord.Interaction,
+                       platform: Literal["youtube", "twitch"], status: Literal["an", "aus"]):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
             em = astra_embed(title="❌ Notifier nicht bereit", description="Bitte versuche es gleich erneut.",
                              author=interaction.user, guild=interaction.guild)
             return await interaction.response.send_message(embed=em, ephemeral=True)
-
         enabled = (status == "an")
         await cog.set_enabled(interaction.guild_id, platform, enabled)
-
         color = YOUTUBE_COLOR if platform == "youtube" else TWITCH_COLOR
         em = astra_embed(
             title=f"🔧 {platform.capitalize()} Benachrichtigungen",
@@ -374,8 +317,6 @@ class Benachrichtigung(app_commands.Group):
             color=color, author=interaction.user, guild=interaction.guild
         )
         await interaction.response.send_message(embed=em, ephemeral=True)
-        return None
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Notifier(bot))
