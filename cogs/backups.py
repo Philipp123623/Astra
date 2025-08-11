@@ -692,14 +692,65 @@ class Backup(app_commands.Group):
         )
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="delete", description="Löscht ein Backup per Code.")
+    @app_commands.command(name="delete", description="Löscht ein Backup per Code und bereinigt verknüpfte Jobs.")
     async def delete(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
+
+        # Prüfen, ob der Code existiert
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM backups WHERE code=%s LIMIT 1", (code,))
+            exists = await cur.fetchone()
+
+        if not exists:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    title="❌ Backup nicht gefunden",
+                    description=f"Kein Datensatz für Code `{code}`.",
+                    color=discord.Colour.blue()
+                ),
+                ephemeral=True
+            )
+            return
+
+        # Jobs zählen/aufräumen
+        async with cog.pool.acquire() as conn, conn.cursor() as cur:
+            # Laufende Jobs (die lassen wir in Ruhe)
+            await cur.execute(
+                "SELECT COUNT(*) FROM backup_jobs WHERE code=%s AND status='running'",
+                (code,)
+            )
+            (running_count,) = await cur.fetchone()
+
+            # Pending/Done/Error löschen
+            await cur.execute(
+                "SELECT COUNT(*) FROM backup_jobs WHERE code=%s AND status!='running'",
+                (code,)
+            )
+            (deletable_jobs,) = await cur.fetchone()
+
+            await cur.execute(
+                "DELETE FROM backup_jobs WHERE code=%s AND status!='running'",
+                (code,)
+            )
+
+            # Backup selbst löschen
             await cur.execute("DELETE FROM backups WHERE code=%s", (code,))
+
             await conn.commit()
+
+        desc = [
+            f"🗑️ Backup `{code}` gelöscht.",
+            f"🧹 Entfernte Jobs (pending/done/error): **{deletable_jobs}**"
+        ]
+        if running_count:
+            desc.append(f"⚠️ Laufende Jobs zum Code: **{running_count}** (nicht gelöscht)")
+
         await interaction.response.send_message(
-            embed=discord.Embed(title="🗑 Backup gelöscht", description=f"`{code}` wurde entfernt.", color=discord.Colour.blue()),
+            embed=discord.Embed(
+                title="Bereinigung abgeschlossen",
+                description="\n".join(desc),
+                color=discord.Colour.blue()
+            ),
             ephemeral=True
         )
 
