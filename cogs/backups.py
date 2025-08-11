@@ -111,6 +111,7 @@ class BackupCog(commands.Cog):
         self.guild_locks: dict[int, asyncio.Lock] = {}
         self.job_worker_task: asyncio.Task | None = None
         self.http: aiohttp.ClientSession | None = None
+        self._last_embed_edit: dict[int, float] = {}  # job_id -> last edit timestamp
 
     async def cog_load(self):
         await self._ensure_schema()
@@ -129,9 +130,6 @@ class BackupCog(commands.Cog):
     # ---------- Schema ----------
     async def _ensure_schema(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            await cur.execute("DROP TABLE backups;")
-            await cur.execute("DROP TABLE backup_jobs;")
-
             await cur.execute("""
             CREATE TABLE IF NOT EXISTS backups (
               code VARCHAR(32) PRIMARY KEY,
@@ -288,6 +286,7 @@ class BackupCog(commands.Cog):
         digest = blake128(raw)
         blob = zstd.ZstdCompressor(level=12).compress(raw) if _HAS_ZSTD else gzip.compress(raw)  # type: ignore
 
+        # Garantiert eindeutiger Code (mehrere Versuche)
         for _ in range(5):
             code = gen_backup_code()
             try:
@@ -329,6 +328,7 @@ class BackupCog(commands.Cog):
             "hoist": r.hoist,
             "mentionable": r.mentionable
         } for r in sorted(guild.roles, key=lambda x: x.position)]
+
         channels = []
         for ch in sorted(guild.channels, key=lambda x: (0 if isinstance(x, discord.CategoryChannel) else 1, x.position)):
             overwrites = []
@@ -364,11 +364,21 @@ class BackupCog(commands.Cog):
                     )
         return overwrites
 
+    async def _maybe_edit_progress_embed(self, job_id: int, *, running_status: str | None = None, force: bool = False):
+        """Editiere das Fortschritts-Embed höchstens alle ~1.5s (oder sofort mit force=True)."""
+        now = time.time()
+        last = self._last_embed_edit.get(job_id, 0.0)
+        if force or (now - last) >= 1.5:
+            await self._edit_progress_embed(job_id, running_status=running_status)
+            self._last_embed_edit[job_id] = now
+
     async def _restore_to_guild(self, guild: discord.Guild, data: dict, job_id: int):
         created_ids = {"roles": [], "channels": []}
         total_steps = len(data.get("roles", [])) + len(data.get("channels", []))
         step = 0
         await self._update_job(job_id, step=step, total_steps=total_steps)
+        await self._maybe_edit_progress_embed(job_id, running_status="Starte Restore …", force=True)
+
         # Rollen
         existing_roles = {r.name for r in guild.roles}
         for r in data.get("roles", []):
@@ -388,6 +398,8 @@ class BackupCog(commands.Cog):
                 await gentle_sleep()
             step += 1
             await self._update_job(job_id, step=step)
+            await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Rollen …")
+
         # Kategorien
         existing_categories = {c.name: c for c in guild.categories}
         for ch in data.get("channels", []):
@@ -406,6 +418,8 @@ class BackupCog(commands.Cog):
                     await gentle_sleep()
                 step += 1
                 await self._update_job(job_id, step=step)
+                await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Kategorien …")
+
         # Channels
         existing_channel_names = {c.name for c in guild.channels}
         for ch in data.get("channels", []):
@@ -436,6 +450,9 @@ class BackupCog(commands.Cog):
                 await gentle_sleep()
             step += 1
             await self._update_job(job_id, step=step)
+            await self._maybe_edit_progress_embed(job_id, running_status="Erstelle Channels …")
+
+        await self._maybe_edit_progress_embed(job_id, running_status="Abschließen …", force=True)
         return created_ids
 
     async def _undo_restore(self, guild: discord.Guild, job: dict):
@@ -445,6 +462,8 @@ class BackupCog(commands.Cog):
         total = len(chan_ids) + len(role_ids)
         step = 0
         await self._update_job(job["job_id"], step=step, total_steps=total)
+        await self._maybe_edit_progress_embed(job["job_id"], running_status="Starte Undo …", force=True)
+
         for cid in chan_ids:
             ch = guild.get_channel(cid)
             if ch:
@@ -454,6 +473,9 @@ class BackupCog(commands.Cog):
                     pass
             step += 1
             await self._update_job(job["job_id"], step=step)
+            await self._maybe_edit_progress_embed(job["job_id"], running_status="Lösche Channels …")
+            await gentle_sleep()
+
         for rid in role_ids:
             role = guild.get_role(rid)
             if role:
@@ -463,6 +485,10 @@ class BackupCog(commands.Cog):
                     pass
             step += 1
             await self._update_job(job["job_id"], step=step)
+            await self._maybe_edit_progress_embed(job["job_id"], running_status="Lösche Rollen …")
+            await gentle_sleep()
+
+        await self._maybe_edit_progress_embed(job["job_id"], running_status="Abschließen …", force=True)
 
     # ---------- Embed Updater ----------
     async def _edit_progress_embed(self, job_id: int, running_status: str | None = None,
@@ -594,20 +620,16 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=start_embed, ephemeral=False)
         msg = await interaction.original_response()
 
-        # WICHTIG: created_objects des Restore-Jobs in den Undo-Job übernehmen
         created_objects = last_restore.get("created_objects")
-
         undo_job_id = await cog._queue_job(
             interaction.guild_id, "undo", last_restore.get("code"),
             status_channel_id=msg.channel.id, status_message_id=msg.id
         )
         if created_objects:
-            # direkt in der DB setzen, damit der Undo-Job sie hat
             await cog._update_job(undo_job_id, created_objects=created_objects)
 
-        # Direkt starten (respect guild lock)
         job_row = await cog._fetch_job(undo_job_id)
-        asyncio.create_task(cog._run_job(job_row))  # type: ignore[arg-type]
+        asyncio.create_task(cog._run_job(job_row))  # sofort starten (achtet auf guild-lock)
 
         await interaction.followup.send(
             f"⏪ Undo-Job gestartet (ID **{undo_job_id}**). Fortschritt siehst du oben.",
