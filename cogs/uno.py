@@ -531,7 +531,7 @@ class UnoCog(commands.Cog):
             except ValueError:
                 pass
         await self._save(st)
-        await self._edit_lobby_message(st)
+        await self._edit_lobby(st)
         await it.response.send_message("✅ Beigetreten.", ephemeral=True)
 
     async def ui_lobby_leave(self, it: discord.Interaction, game_id: int):
