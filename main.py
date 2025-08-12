@@ -498,14 +498,12 @@ async def on_dbl_vote(data):
 
             await cur.execute(
                 """
-                INSERT INTO voterole AS v (userID, time)
-                VALUES (%s, %s)
-                ON DUPLICATE KEY
-                UPDATE time = v.time
+                INSERT INTO voterole (userID, `time`)
+                    VALUES (%s, %s) AS v
+                ON DUPLICATE KEY UPDATE `time` = v.`time`
                 """,
-                (user_id, next_vote_time)
+                (user_id, next_vote_time),
             )
-            await conn.commit()
 
             asyncio.create_task(funktion2(next_vote_dt))
 
