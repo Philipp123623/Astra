@@ -159,14 +159,22 @@ class mod(commands.Cog):
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
-                    # Kanal nicht erreichbar → Job als done markieren, um Deadlocks zu vermeiden
                     await self._mark_job_done(job.id)
                     continue
 
             try:
-                await self._process_old_deletes(channel, job.amount, job_id=job.id)
+                deleted_count = await self._process_old_deletes(channel, job.amount, job_id=job.id)
+                # Nachricht an den Kanal, dass Job fertig ist
+                try:
+                    embed = discord.Embed(
+                        colour=discord.Colour.green(),
+                        description=f"✅ **Job abgeschlossen:** {deleted_count} alte Nachrichten wurden erfolgreich gelöscht."
+                    )
+                    embed.set_author(name=job.requested_by)
+                    await channel.send(embed=embed)
+                except Exception:
+                    pass
             except Exception:
-                # Worker nicht sterben lassen
                 pass
             finally:
                 await self._mark_job_done(job.id)
@@ -192,9 +200,10 @@ class mod(commands.Cog):
                 )
 
     async def _mark_job_done(self, job_id: int):
+        """Job aus DB löschen, wenn erledigt."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("UPDATE clear_jobs SET status='done' WHERE id=%s", (job_id,))
+                await cur.execute("DELETE FROM clear_jobs WHERE id=%s", (job_id,))
                 await conn.commit()
 
     async def _decrement_job_amount(self, job_id: int, n: int):
