@@ -1,11 +1,11 @@
 import discord
 from discord.ext import commands
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from discord import app_commands
 import traceback
 from discord.ui.view import View
 from typing import Literal
-
+from discord.utils import utcnow
 
 class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     def __init__(self, *, color2: Literal['Rot', 'Orange', 'Gelb', 'Grün', 'Blau', 'Blurple'] = None):
@@ -202,26 +202,81 @@ class mod(commands.Cog):
                         await interaction.response.send_message(embed=embed)
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
 
-    @app_commands.command(name="clear")
+    @app_commands.command(name="clear", description="Löscht eine bestimmte Anzahl an Nachrichten.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
     async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
-        """Löscht eine Bestimmte Anzahl an Nachrichten."""
-        if amount < 300:
-            await interaction.response.send_message("Nachrichten werden gelöscht...", ephemeral=True)
-            deleted = await channel.purge(limit=amount + 1)
-            embed = discord.Embed(colour=discord.Colour.green(),
-                                  description=f"{len(deleted) - 1} Nachricht{'' if (len(deleted) - 1) == 1 else 'en'} gelöscht.")
+        if amount <= 0:
+            return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
+        if amount > 300:
+            embed = discord.Embed(
+                colour=discord.Colour.red(),
+                description="❌ Deine Zahl darf nicht größer als 300 sein."
+            )
             embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-            # Editiere die ursprüngliche Ephemeral-Antwort:
-            await interaction.edit_original_response(embed=embed, content=None)
-        else:
-            embed = discord.Embed(colour=discord.Colour.red(),
-                                  description="❌ Deine Zahl darf nicht größer als 300 sein.",
-                                  timestamp=datetime.utcnow())
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+
+        two_weeks_ago = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
+        total_deleted = 0
+
+        try:
+            # 1) Jüngere Nachrichten via BULK löschen (robust gegen Race Conditions)
+            deleted_bulk = await channel.purge(
+                limit=amount,
+                after=two_weeks_ago,
+                bulk=True,
+                reason=f"/clear von {interaction.user} ({amount})"
+            )
+            total_deleted += len(deleted_bulk)
+
+            remaining = amount - total_deleted
+
+            # 2) Ältere Nachrichten einzeln löschen – NotFound & 429 abfedern
+            backoff = 0.0
+            last_message = None
+            while remaining > 0:
+                # Hol einen kleinen Batch; falls manche nicht löschbar sind, haben wir Puffer
+                async for msg in channel.history(limit=min(remaining * 2, 200),
+                                                 before=last_message,
+                                                 oldest_first=False):
+                    last_message = msg
+                    try:
+                        # Skips: System-/Pinned-/Thread-Start-Nachrichten ggf. auslassen, wenn du willst
+                        await msg.delete(reason=f"/clear von {interaction.user} (alt)")
+                        total_deleted += 1
+                        remaining -= 1
+                        backoff = 0.0  # Reset nach Erfolg
+                        await asyncio.sleep(SLEEP_PER_DELETE)
+                        if remaining == 0:
+                            break
+                    except discord.NotFound:
+                        # Bereits weg -> einfach überspringen
+                        continue
+                    except discord.Forbidden:
+                        # Keine Rechte -> überspringen, aber nicht abbrechen
+                        continue
+                    except discord.HTTPException as e:
+                        # Sanftes Backoff (z. B. bei 429)
+                        backoff = min(2.0, backoff + 0.25)
+                        await asyncio.sleep(0.8 + backoff)
+                        continue
+                else:
+                    # Keine weiteren Nachrichten gefunden
+                    break
+
+            embed = discord.Embed(
+                colour=discord.Colour.green(),
+                description=f"{total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} gelöscht."
+            )
             embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            # Catch-all, damit der Command nicht komplett mit Traceback stirbt
+            await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
     @app_commands.command(name="embedfy")
     @app_commands.guild_only()
