@@ -214,30 +214,26 @@ class mod(commands.Cog):
             self,
             interaction: discord.Interaction,
             channel: discord.TextChannel,
-            amount: int
+            amount: int,
+            recent_only: bool = False  # True = löscht NUR ≤14 Tage (sehr schnell, kaum 429)
     ):
-        # Eingaben prüfen
         if amount <= 0:
-            await interaction.response.send_message("Die Anzahl muss über 0 sein.", ephemeral=True)
-            return
+            return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
         if amount > 300:
             embed = discord.Embed(
                 colour=discord.Colour.red(),
                 description="❌ Deine Zahl darf nicht größer als 300 sein."
             )
             embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # Antwort deferren (damit der Command nicht wegen Timeout fehlschlägt)
         await interaction.response.defer(ephemeral=True)
 
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         total_deleted = 0
 
         try:
-            # 1) So viel wie möglich via BULK löschen (nur Nachrichten neuer als 14 Tage)
-            # Hinweis: Slash-Commands erzeugen keine mitzupurgende Nachricht -> KEIN +1
+            # 1) Bulk für ≤14 Tage
             deleted_bulk = await channel.purge(
                 limit=amount,
                 after=cutoff,
@@ -247,44 +243,54 @@ class mod(commands.Cog):
             total_deleted += len(deleted_bulk)
             remaining = amount - total_deleted
 
-            # 2) Ältere Nachrichten (>14 Tage) einzeln löschen
-            if remaining > 0:
-                backoff = 0.0
-                last_message = None
+            # Wenn nur schnell/jung gewünscht, hier enden
+            if recent_only or remaining <= 0:
+                embed = discord.Embed(
+                    colour=discord.Colour.green(),
+                    description=f"{total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} gelöscht."
+                )
+                embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+                return await interaction.followup.send(embed=embed, ephemeral=True)
 
-                while remaining > 0:
-                    # Kleiner History-Batch; *2* gibt Puffer, falls einige nicht löschbar sind
-                    async for msg in channel.history(
-                            limit=min(remaining * 2, 200),
-                            before=last_message,
-                            oldest_first=False
-                    ):
-                        last_message = msg
-                        try:
-                            # Einzel-Delete: KEIN 'reason' verwenden (PartialMessage)!
-                            await msg.delete()
-                            total_deleted += 1
-                            remaining -= 1
-                            backoff = 0.0
-                            await asyncio.sleep(SLEEP_PER_DELETE)
-                            if remaining == 0:
-                                break
-                        except discord.NotFound:
-                            # schon weg -> überspringen
-                            continue
-                        except discord.Forbidden:
-                            # keine Rechte für diese Nachricht -> überspringen
-                            continue
-                        except discord.HTTPException:
-                            # sanftes Backoff (z. B. bei 429)
-                            backoff = min(2.0, backoff + 0.25)
-                            await asyncio.sleep(0.8 + backoff)
-                            continue
-                    else:
-                        # Keine weiteren Nachrichten gefunden
-                        break
+            # 2) Ältere Nachrichten (>14 Tage) einzeln mit starker Drosselung + Backoff
+            backoff = 0.0
+            last_message = None
 
-            # Ergebnis melden
+            while remaining > 0:
+                # kleiner Batch; *2* als Puffer, falls manche nicht löschbar sind
+                async for msg in channel.history(
+                        limit=min(remaining * 2, 200),
+                        before=last_message,
+                        oldest_first=False
+                ):
+                    last_message = msg
+                    try:
+                        # WICHTIG: Kein 'reason' hier, PartialMessage unterstützt das nicht
+                        await msg.delete()
+                        total_deleted += 1
+                        remaining -= 1
+                        backoff = 0.0
+                        await asyncio.sleep(SLEEP_PER_DELETE)
+                        if remaining == 0:
+                            break
+                    except discord.NotFound:
+                        continue
+                    except discord.Forbidden:
+                        continue
+                    except discord.HTTPException as e:
+                        # Bei 429 kräftiger warten; e.status ist meist 429
+                        if getattr(e, "status", None) == 429:
+                            # Library retried schon; wir warten zusätzlich großzügig
+                            backoff = min(3.0, backoff + 0.5)
+                            await asyncio.sleep(1.2 + backoff)
+                        else:
+                            # andere HTTP-Fehler: kurze Pause und weiter
+                            await asyncio.sleep(0.8)
+                        continue
+                else:
+                    # Keine weiteren Nachrichten gefunden
+                    break
+
             embed = discord.Embed(
                 colour=discord.Colour.green(),
                 description=f"{total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} gelöscht."
@@ -293,7 +299,6 @@ class mod(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            # Catch-all, damit der Command nicht mit Traceback endet
             await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
 
