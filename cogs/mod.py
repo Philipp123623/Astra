@@ -7,9 +7,20 @@ from discord.ui.view import View
 import asyncio
 from typing import Literal
 from discord.utils import utcnow
+from dataclasses import dataclass
+
+import logging
+logging.getLogger("discord.http").setLevel(logging.ERROR)
 
 BULK_CUTOFF_DAYS = 14
-SLEEP_PER_DELETE = 0.35  # sanfte Drosselung für Einzel-Deletes
+SLEEP_PER_DELETE = 1.2     # konservativ & stabil für alte Nachrichten
+MAX_HISTORY_FETCH = 200     # pro Batch
+
+@dataclass
+class OldDeleteJob:
+    channel_id: int
+    amount: int
+    requested_by: str  # nur für Logs/Reason-Strings
 
 class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     def __init__(self, *, color2: Literal['Rot', 'Orange', 'Gelb', 'Grün', 'Blau', 'Blurple'] = None):
@@ -100,9 +111,70 @@ class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
 class mod(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.snipe_message_author = {}
-        self.snipe_message_content = {}
-        self.snipe_message_channel = {}
+        # pro Kanal eine Queue + ein Worker-Task
+        self._delete_queues: dict[int, asyncio.Queue[OldDeleteJob]] = {}
+        self._delete_workers: dict[int, asyncio.Task] = {}
+
+    def _ensure_worker(self, channel: discord.TextChannel):
+        if channel.id not in self._delete_queues:
+            self._delete_queues[channel.id] = asyncio.Queue()
+        if channel.id not in self._delete_workers or self._delete_workers[channel.id].done():
+            self._delete_workers[channel.id] = asyncio.create_task(self._delete_worker(channel))
+
+    async def _delete_worker(self, channel: discord.TextChannel):
+        queue = self._delete_queues[channel.id]
+        while True:
+            job: OldDeleteJob = await queue.get()
+            try:
+                await self._process_old_deletes(channel, job.amount)
+            except Exception:
+                # nie den Worker sterben lassen
+                pass
+            finally:
+                queue.task_done()
+
+    async def _process_old_deletes(self, channel: discord.TextChannel, amount: int):
+        """Löscht 'amount' alte Nachrichten (>14 Tage) gedrosselt & fehlertolerant."""
+        cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
+        remaining = amount
+        last_message = None
+        backoff = 0.0
+
+        while remaining > 0:
+            found_any = False
+            async for msg in channel.history(
+                    limit=min(remaining * 2, MAX_HISTORY_FETCH),
+                    before=last_message,
+                    oldest_first=False
+            ):
+                last_message = msg
+                # Nur alte Nachrichten (sollte eh so sein, aber doppelt hält besser)
+                if msg.created_at >= cutoff:
+                    continue
+                found_any = True
+                try:
+                    # Einzel-Delete: KEIN reason hier (PartialMessage!)
+                    await msg.delete()
+                    remaining -= 1
+                    backoff = 0.0
+                    await asyncio.sleep(SLEEP_PER_DELETE)
+                    if remaining == 0:
+                        break
+                except discord.NotFound:
+                    continue
+                except discord.Forbidden:
+                    continue
+                except discord.HTTPException as e:
+                    # bei 429 ruhig stärker warten
+                    if getattr(e, "status", None) == 429:
+                        backoff = min(3.0, backoff + 0.5)
+                        await asyncio.sleep(1.5 + backoff)
+                    else:
+                        await asyncio.sleep(0.8)
+                    continue
+            if not found_any:
+                break  # nichts mehr zu tun
+
 
     @app_commands.command(name="kick")
     @app_commands.guild_only()
@@ -206,7 +278,7 @@ class mod(commands.Cog):
                         await interaction.response.send_message(embed=embed)
                         await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
 
-    @app_commands.command(name="clear", description="Löscht eine bestimmte Anzahl an Nachrichten.")
+    @app_commands.command(name="clear", description="Löscht Nachrichten schnell (nur ≤14 Tage) oder komplett.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True, read_message_history=True)
@@ -214,30 +286,32 @@ class mod(commands.Cog):
             self,
             interaction: discord.Interaction,
             channel: discord.TextChannel,
-            amount: int
+            amount: int,
+            mode: discord.app_commands.Transform[str, app_commands.Range[str, 1, 10]] = "fast"  # "fast" oder "all"
     ):
-        # Eingaben prüfen
+        """
+        mode:
+          - "fast": nur ≤14 Tage, sehr schnell & ohne Rate-Limits
+          - "all" : ≤14 Tage sofort + >14 Tage im Hintergrund
+        """
+        mode = (mode or "fast").lower()
         if amount <= 0:
-            await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
-            return
+            return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
         if amount > 300:
             embed = discord.Embed(
                 colour=discord.Colour.red(),
                 description="❌ Deine Zahl darf nicht größer als 300 sein."
             )
             embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # Antwort deferren (damit der Command nicht wegen Timeout fehlschlägt)
         await interaction.response.defer(ephemeral=True)
 
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         total_deleted = 0
 
         try:
-            # 1) So viel wie möglich via BULK löschen (nur Nachrichten neuer als 14 Tage)
-            # Hinweis: Slash-Commands erzeugen keine mitzupurgende Nachricht -> KEIN +1
+            # 1) Bulk für ≤14 Tage
             deleted_bulk = await channel.purge(
                 limit=amount,
                 after=cutoff,
@@ -247,53 +321,35 @@ class mod(commands.Cog):
             total_deleted += len(deleted_bulk)
             remaining = amount - total_deleted
 
-            # 2) Ältere Nachrichten (>14 Tage) einzeln löschen
-            if remaining > 0:
-                backoff = 0.0
-                last_message = None
+            # 2) Modus-Handling für alte Nachrichten
+            scheduled = 0
+            if remaining > 0 and mode == "all":
+                # Hintergrund-Queue für alte Nachrichten
+                self._ensure_worker(channel)
+                await self._delete_queues[channel.id].put(
+                    OldDeleteJob(channel_id=channel.id, amount=remaining, requested_by=str(interaction.user))
+                )
+                scheduled = remaining
 
-                while remaining > 0:
-                    # Kleiner History-Batch; *2* gibt Puffer, falls einige nicht löschbar sind
-                    async for msg in channel.history(
-                            limit=min(remaining * 2, 200),
-                            before=last_message,
-                            oldest_first=False
-                    ):
-                        last_message = msg
-                        try:
-                            # Einzel-Delete: KEIN 'reason' verwenden (PartialMessage)!
-                            await msg.delete()
-                            total_deleted += 1
-                            remaining -= 1
-                            backoff = 0.0
-                            await asyncio.sleep(SLEEP_PER_DELETE)
-                            if remaining == 0:
-                                break
-                        except discord.NotFound:
-                            # schon weg -> überspringen
-                            continue
-                        except discord.Forbidden:
-                            # keine Rechte für diese Nachricht -> überspringen
-                            continue
-                        except discord.HTTPException:
-                            # sanftes Backoff (z. B. bei 429)
-                            backoff = min(2.0, backoff + 0.25)
-                            await asyncio.sleep(0.8 + backoff)
-                            continue
-                    else:
-                        # Keine weiteren Nachrichten gefunden
-                        break
+            # Ergebnis
+            parts = [f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."]
+            if remaining > 0 and mode == "fast":
+                parts.append(
+                    f"ℹ️ {remaining} weitere sind älter als 14 Tage und wurden im *fast*-Modus **nicht** gelöscht.")
+                parts.append(
+                    "Tipp: Nutze `mode: all`, um auch alte Nachrichten zu entfernen (läuft dann im Hintergrund).")
+            elif scheduled > 0:
+                parts.append(
+                    f"🕒 {scheduled} alte Nachricht{'' if scheduled == 1 else 'en'} werden im Hintergrund sicher gelöscht (gedrosselt, ohne Rate-Limits).")
 
-            # Ergebnis melden
             embed = discord.Embed(
                 colour=discord.Colour.green(),
-                description=f"{total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} gelöscht."
+                description="\n".join(parts)
             )
             embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            # Catch-all, damit der Command nicht mit Traceback endet
             await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
 
