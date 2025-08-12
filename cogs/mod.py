@@ -218,7 +218,7 @@ class mod(commands.Cog):
     ):
         # Eingaben prüfen
         if amount <= 0:
-            await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
+            await interaction.response.send_message("Die Anzahl muss über 0 sein.", ephemeral=True)
             return
         if amount > 300:
             embed = discord.Embed(
