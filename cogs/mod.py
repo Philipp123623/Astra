@@ -1,29 +1,35 @@
+import logging
+import asyncio
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Optional, List
+
 import discord
 from discord.ext import commands
-from datetime import datetime, timedelta, timezone
 from discord import app_commands
-import traceback
-from discord.ui.view import View
-import asyncio
-from typing import Literal
 from discord.utils import utcnow
-from dataclasses import dataclass
+from discord.ui import View
 
-import logging
 logging.getLogger("discord.http").setLevel(logging.ERROR)
 
-BULK_CUTOFF_DAYS = 14
-SLEEP_PER_DELETE = 1.2     # konservativ & stabil für alte Nachrichten
-MAX_HISTORY_FETCH = 200     # pro Batch
+# --- Tuning ---
+BULK_CUTOFF_DAYS = 14            # Bulk delete für <= 14 Tage
+SLEEP_PER_DELETE = 1.2           # stabil für alte Nachrichten
+MAX_HISTORY_FETCH = 200          # msgs pro Batch bei History
 
+# --- Jobs (persistiert in MySQL; Tabelle legst du in main.py an) ---
 @dataclass
 class OldDeleteJob:
+    id: int
     channel_id: int
     amount: int
-    requested_by: str  # nur für Logs/Reason-Strings
+    requested_by: str
+    status: str  # 'pending' | 'processing' | 'done'
 
+
+# ---- Modal für Embeds (unverändert, nur kleine URL-Fixes unten) ----
 class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
-    def __init__(self, *, color2: Literal['Rot', 'Orange', 'Gelb', 'Grün', 'Blau', 'Blurple'] = None):
+    def __init__(self, *, color2: Optional[str] = None):
         super().__init__()
         self.colour = color2
 
@@ -61,80 +67,169 @@ class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """The bot will display your message in a Embed."""
         if self.colour == "Rot":
-            embed = discord.Embed(colour=discord.Colour.red(), title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.red(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         elif self.colour == "Orange":
-            embed = discord.Embed(colour=discord.Colour.orange(),
-                                  title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.orange(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         elif self.colour == "Gelb":
-            embed = discord.Embed(colour=discord.Colour.yellow(),
-                                  title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.yellow(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         elif self.colour == "Grün":
-            embed = discord.Embed(colour=discord.Colour.green(), title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.green(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         elif self.colour == "Blau":
-            embed = discord.Embed(colour=discord.Colour.blue(), title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.blue(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         elif self.colour == "Blurple":
-            embed = discord.Embed(colour=discord.Colour.blurple(), title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
+            embed = discord.Embed(
+                colour=discord.Colour.blurple(),
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
         else:
-            embed = discord.Embed(title=f"{self.name.value if self.name.value else ' '}",
-                                  description=f"{self.description.value if self.description.value else ' '}")
-        if self.thumbnail.value is not None:
+            embed = discord.Embed(
+                title=self.name.value or " ",
+                description=self.description.value or " "
+            )
+
+        if self.thumbnail.value:
             embed.set_thumbnail(url=self.thumbnail.value)
-        else:
-            pass
-        if self.image.value is not None:
+        if self.image.value:
             embed.set_image(url=self.image.value)
-        else:
-            pass
-        if self.footer.value is not None:
-            embed.set_footer(text=self.footer.value, icon_url=interaction.guild.icon)
-        else:
-            pass
-        embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-        await interaction.response.send_message(embed=embed)
-        return
+        if self.footer.value:
+            icon_url = interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None
+            embed.set_footer(text=self.footer.value, icon_url=icon_url)
+
+        embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message('Oops! Etwas ist schiefgelaufen.', ephemeral=True)
-
-        # Make sure we know what the error actually is
-        traceback.print_tb(error.__traceback__)
+        try:
+            await interaction.response.send_message('Oops! Etwas ist schiefgelaufen.', ephemeral=True)
+        except discord.InteractionResponded:
+            await interaction.followup.send('Oops! Etwas ist schiefgelaufen.', ephemeral=True)
 
 
 class mod(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # pro Kanal eine Queue + ein Worker-Task
-        self._delete_queues: dict[int, asyncio.Queue[OldDeleteJob]] = {}
-        self._delete_workers: dict[int, asyncio.Task] = {}
 
-    def _ensure_worker(self, channel: discord.TextChannel):
-        if channel.id not in self._delete_queues:
-            self._delete_queues[channel.id] = asyncio.Queue()
-        if channel.id not in self._delete_workers or self._delete_workers[channel.id].done():
-            self._delete_workers[channel.id] = asyncio.create_task(self._delete_worker(channel))
+        # Snipe-Store
+        self.snipe_message_author: dict[int, discord.Member] = {}
+        self.snipe_message_content: dict[int, str] = {}
+        self.snipe_message_channel: dict[int, discord.abc.GuildChannel] = {}
 
-    async def _delete_worker(self, channel: discord.TextChannel):
-        queue = self._delete_queues[channel.id]
+        # pro Kanal: Worker + Wake-Event
+        self._workers: dict[int, asyncio.Task] = {}
+        self._wake_events: dict[int, asyncio.Event] = {}
+
+        # Da wir kein cog_load nutzen: Worker-Init als Hintergrund-Task
+        self._startup_task = bot.loop.create_task(self._startup())
+
+    # ---------- Startup: Pending-Jobs finden & Worker starten ----------
+    async def _startup(self):
+        await self.bot.wait_until_ready()
+        channels = await self._get_channels_with_pending()
+        for ch_id in channels:
+            await self._ensure_worker(ch_id)
+            self._wake_events[ch_id].set()
+
+    async def _get_channels_with_pending(self) -> List[int]:
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT DISTINCT channel_id FROM clear_jobs WHERE status='pending'")
+                rows = await cur.fetchall()
+        return [int(r[0]) for r in rows]
+
+    # ---------------- Worker-Infra ----------------
+    async def _ensure_worker(self, channel_id: int):
+        if channel_id not in self._wake_events:
+            self._wake_events[channel_id] = asyncio.Event()
+        if channel_id not in self._workers or self._workers[channel_id].done():
+            self._workers[channel_id] = asyncio.create_task(self._worker_loop(channel_id))
+
+    async def _worker_loop(self, channel_id: int):
         while True:
-            job: OldDeleteJob = await queue.get()
+            job = await self._claim_next_job(channel_id)
+            if not job:
+                evt = self._wake_events[channel_id]
+                evt.clear()
+                await evt.wait()
+                continue
+
+            # Channel holen
+            channel = self.bot.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await self.bot.fetch_channel(channel_id)
+                except Exception:
+                    # Kanal nicht erreichbar → Job als done markieren, damit wir nicht hängen
+                    await self._mark_job_done(job.id)
+                    continue
+
             try:
                 await self._process_old_deletes(channel, job.amount)
             except Exception:
-                # nie den Worker sterben lassen
+                # Worker bricht nicht ab; Job trotzdem als done markieren
                 pass
             finally:
-                queue.task_done()
+                await self._mark_job_done(job.id)
 
+    async def _claim_next_job(self, channel_id: int) -> Optional[OldDeleteJob]:
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT id, channel_id, amount, requested_by, status FROM clear_jobs "
+                    "WHERE channel_id=%s AND status='pending' ORDER BY id ASC LIMIT 1",
+                    (channel_id,)
+                )
+                row = await cur.fetchone()
+                if not row:
+                    return None
+                job_id = int(row[0])
+                await cur.execute("UPDATE clear_jobs SET status='processing' WHERE id=%s", (job_id,))
+                await conn.commit()
+                return OldDeleteJob(
+                    id=job_id, channel_id=int(row[1]), amount=int(row[2]),
+                    requested_by=str(row[3]), status='processing'
+                )
+
+    async def _mark_job_done(self, job_id: int):
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE clear_jobs SET status='done' WHERE id=%s", (job_id,))
+                await conn.commit()
+
+    async def _enqueue_job(self, channel_id: int, amount: int, requested_by: str) -> int:
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT INTO clear_jobs (channel_id, amount, requested_by, status) VALUES (%s, %s, %s, 'pending')",
+                    (channel_id, amount, requested_by)
+                )
+                job_id = cur.lastrowid
+                await conn.commit()
+                return int(job_id)
+
+    # ---------------- Löschlogik (>14 Tage, gedrosselt) ----------------
     async def _process_old_deletes(self, channel: discord.TextChannel, amount: int):
-        """Löscht 'amount' alte Nachrichten (>14 Tage) gedrosselt & fehlertolerant."""
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         remaining = amount
         last_message = None
@@ -143,17 +238,16 @@ class mod(commands.Cog):
         while remaining > 0:
             found_any = False
             async for msg in channel.history(
-                    limit=min(remaining * 2, MAX_HISTORY_FETCH),
-                    before=last_message,
-                    oldest_first=False
+                limit=min(remaining * 2, MAX_HISTORY_FETCH),
+                before=last_message,
+                oldest_first=False
             ):
                 last_message = msg
-                # Nur alte Nachrichten (sollte eh so sein, aber doppelt hält besser)
                 if msg.created_at >= cutoff:
                     continue
                 found_any = True
                 try:
-                    # Einzel-Delete: KEIN reason hier (PartialMessage!)
+                    # Kein reason bei PartialMessage
                     await msg.delete()
                     remaining -= 1
                     backoff = 0.0
@@ -165,7 +259,6 @@ class mod(commands.Cog):
                 except discord.Forbidden:
                     continue
                 except discord.HTTPException as e:
-                    # bei 429 ruhig stärker warten
                     if getattr(e, "status", None) == 429:
                         backoff = min(3.0, backoff + 0.5)
                         await asyncio.sleep(1.5 + backoff)
@@ -173,8 +266,9 @@ class mod(commands.Cog):
                         await asyncio.sleep(0.8)
                     continue
             if not found_any:
-                break  # nichts mehr zu tun
+                break
 
+    # ---------------- Commands ----------------
 
     @app_commands.command(name="kick")
     @app_commands.guild_only()
@@ -184,48 +278,48 @@ class mod(commands.Cog):
         """Kicke einen User."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (interaction.guild.id))
+                await cursor.execute("SELECT channelID FROM modlog WHERE serverID = (%s)", (interaction.guild.id,))
                 result = await cursor.fetchone()
-                if result is None:
-                    return
-                if result is not None:
-                    channel = interaction.guild.get_channel(int(result[0]))
-                    embed = discord.Embed(colour=discord.Colour.orange(),
-                                          description=f"Der User {user} (`{user.id}`) wurde gekickt.")
-                    embed.add_field(name=f"👤 Member:", value=f"{user.mention}", inline=False)
-                    embed.add_field(name=f"👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)",
-                                    inline=False)
-                    embed.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    embed.set_author(name=user, icon_url=user.avatar)
-                    await channel.send(embed=embed)
-                if user.guild_permissions.kick_members:
-                    embed = discord.Embed(colour=discord.Colour.red(),
-                                          description=f"Der User {user.mention} kann nicht gekickt werden, da er die Rechte `Mitglieder Kicken` hat.")
-                    embed.set_author(name=user, icon_url=user.avatar)
-                    await interaction.response.send_message(embed=embed)
-                    return
-                else:
-                    embed = discord.Embed(colour=discord.Colour.orange(),
-                                          description=f"Der User {user} (`{user.id}`) wurde gekickt.")
-                    embed.add_field(name=f"🎛️ Server:", value=f"{interaction.guild.name}", inline=False)
-                    embed.add_field(name=f"👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
-                    embed.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
-                    dm = discord.Embed(colour=discord.Colour.orange(),
-                                       description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gekickt! Mehr Informationen hier:")
-                    dm.add_field(name=f"🎛️ Server:", value=f"{interaction.guild.name}", inline=False)
-                    dm.add_field(name=f"👮 Moderator:", value=f"{interaction.user.mention}", inline=False)
-                    dm.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    dm.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    try:
-                        await user.send(embed=dm)
-                        await user.kick(reason=reason)
-                        await interaction.response.send_message(embed=embed)
-                    except:
-                        await user.kick(reason=reason)
-                        await interaction.response.send_message(embed=embed)
-                        await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
+        if result:
+            channel = interaction.guild.get_channel(int(result[0]))
+            embed = discord.Embed(colour=discord.Colour.orange(),
+                                  description=f"Der User {user} (`{user.id}`) wurde gekickt.")
+            embed.add_field(name="👤 Member:", value=user.mention, inline=False)
+            embed.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
+            embed.add_field(name="📄 Grund:", value=reason, inline=False)
+            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+            if channel:
+                await channel.send(embed=embed)
+
+        if user.guild_permissions.kick_members:
+            embed = discord.Embed(colour=discord.Colour.red(),
+                                  description=f"Der User {user.mention} kann nicht gekickt werden, da er die Rechte `Mitglieder Kicken` hat.")
+            embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        confirm = discord.Embed(colour=discord.Colour.orange(),
+                                description=f"Der User {user} (`{user.id}`) wurde gekickt.")
+        confirm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
+        confirm.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
+        confirm.add_field(name="📄 Grund:", value=reason, inline=False)
+        confirm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+
+        dm = discord.Embed(colour=discord.Colour.orange(),
+                           description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gekickt! Mehr Informationen hier:")
+        dm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
+        dm.add_field(name="👮 Moderator:", value=interaction.user.mention, inline=False)
+        dm.add_field(name="📄 Grund:", value=reason, inline=False)
+        dm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+
+        try:
+            await user.send(embed=dm)
+        except Exception:
+            pass
+
+        await user.kick(reason=reason)
+        await interaction.response.send_message(embed=confirm, ephemeral=False)
 
     @app_commands.command(name="ban")
     @app_commands.guild_only()
@@ -235,66 +329,54 @@ class mod(commands.Cog):
         """Banne einen User."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(f"SELECT channelID FROM modlog WHERE serverID = (%s)", (interaction.guild.id))
+                await cursor.execute("SELECT channelID FROM modlog WHERE serverID = (%s)", (interaction.guild.id,))
                 result = await cursor.fetchone()
-                if result is None:
-                    return
-                if result is not None:
-                    channel = interaction.guild.get_channel(int(result[0]))
-                    embed = discord.Embed(colour=discord.Colour.orange(),
-                                          description=f"Der User {user} (`{user.id}`) wurde gebannt.")
-                    embed.add_field(name=f"👤 Member:", value=f"{user.mention}", inline=False)
-                    embed.add_field(name=f"👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)",
-                                    inline=False)
-                    embed.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    await channel.send(embed=embed)
-                if user.guild_permissions.kick_members:
-                    embed = discord.Embed(colour=discord.Colour.red(),
-                                          description=f"Der User {user.mention} kann nicht gekickt werden, da er die Rechte `Mitglieder Bannen` hat.")
-                    embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    await interaction.response.send_message(embed=embed)
-                    return
-                else:
-                    embed = discord.Embed(colour=discord.Colour.orange(),
-                                          description=f"Der User {user} (`{user.id}`) wurde gebannt.")
-                    embed.add_field(name=f"🎛️ Server:", value=f"{interaction.guild.name}", inline=False)
-                    embed.add_field(name=f"👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
-                    embed.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
 
-                    dm = discord.Embed(colour=discord.Colour.orange(),
-                                       description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gebannt! Mehr Informationen hier:")
-                    dm.add_field(name=f"🎛️ Server:", value=f"{interaction.guild.name}", inline=False)
-                    dm.add_field(name=f"👮 Moderator:", value=f"{interaction.user.mention}", inline=False)
-                    dm.add_field(name=f"📄 Grund:", value=f"{reason}", inline=False)
-                    dm.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    try:
-                        await user.send(embed=dm)
-                        await user.ban(reason=reason)
-                        await interaction.response.send_message(embed=embed)
-                    except:
-                        await user.ban(reason=reason)
-                        await interaction.response.send_message(embed=embed)
-                        await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Ich konnte dem User keine Nachricht senden, da er DM's geschlossen hat**")
+        if result:
+            channel = interaction.guild.get_channel(int(result[0]))
+            embed = discord.Embed(colour=discord.Colour.orange(),
+                                  description=f"Der User {user} (`{user.id}`) wurde gebannt.")
+            embed.add_field(name="👤 Member:", value=user.mention, inline=False)
+            embed.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
+            embed.add_field(name="📄 Grund:", value=reason, inline=False)
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            if channel:
+                await channel.send(embed=embed)
 
-    @app_commands.command(name="clear", description="Löscht Nachrichten schnell (nur ≤14 Tage) oder komplett.")
+        if user.guild_permissions.kick_members:
+            embed = discord.Embed(colour=discord.Colour.red(),
+                                  description=f"Der User {user.mention} kann nicht gebannt werden, da er die Rechte `Mitglieder Bannen` hat.")
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        confirm = discord.Embed(colour=discord.Colour.orange(),
+                                description=f"Der User {user} (`{user.id}`) wurde gebannt.")
+        confirm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
+        confirm.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
+        confirm.add_field(name="📄 Grund:", value=reason, inline=False)
+        confirm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+
+        dm = discord.Embed(colour=discord.Colour.orange(),
+                           description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gebannt! Mehr Informationen hier:")
+        dm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
+        dm.add_field(name="👮 Moderator:", value=interaction.user.mention, inline=False)
+        dm.add_field(name="📄 Grund:", value=reason, inline=False)
+        dm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+        try:
+            await user.send(embed=dm)
+        except Exception:
+            pass
+
+        await user.ban(reason=reason)
+        await interaction.response.send_message(embed=confirm, ephemeral=False)
+
+    @app_commands.command(name="clear", description="Löscht Nachrichten: schnell (≤14 Tage) & alte im Hintergrund.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True, read_message_history=True)
-    async def clear(
-            self,
-            interaction: discord.Interaction,
-            channel: discord.TextChannel,
-            amount: int,
-            mode: discord.app_commands.Transform[str, app_commands.Range[str, 1, 10]] = "fast"  # "fast" oder "all"
-    ):
-        """
-        mode:
-          - "fast": nur ≤14 Tage, sehr schnell & ohne Rate-Limits
-          - "all" : ≤14 Tage sofort + >14 Tage im Hintergrund
-        """
-        mode = (mode or "fast").lower()
+    async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
+        """Automatisch: Bulk für ≤14 Tage, ältere als persistente Jobs im Hintergrund."""
         if amount <= 0:
             return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
         if amount > 300:
@@ -309,9 +391,8 @@ class mod(commands.Cog):
 
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         total_deleted = 0
-
         try:
-            # 1) Bulk für ≤14 Tage
+            # 1) Bulk (≤14 Tage)
             deleted_bulk = await channel.purge(
                 limit=amount,
                 after=cutoff,
@@ -321,69 +402,59 @@ class mod(commands.Cog):
             total_deleted += len(deleted_bulk)
             remaining = amount - total_deleted
 
-            # 2) Modus-Handling für alte Nachrichten
             scheduled = 0
-            if remaining > 0 and mode == "all":
-                # Hintergrund-Queue für alte Nachrichten
-                self._ensure_worker(channel)
-                await self._delete_queues[channel.id].put(
-                    OldDeleteJob(channel_id=channel.id, amount=remaining, requested_by=str(interaction.user))
-                )
+            if remaining > 0:
+                # 2) Ältere Nachrichten als Job persistieren & Worker wecken
+                _ = await self._enqueue_job(channel.id, remaining, str(interaction.user))
                 scheduled = remaining
+                await self._ensure_worker(channel.id)
+                self._wake_events[channel.id].set()
 
-            # Ergebnis
-            parts = [f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."]
-            if remaining > 0 and mode == "fast":
-                parts.append(
-                    f"ℹ️ {remaining} weitere sind älter als 14 Tage und wurden im *fast*-Modus **nicht** gelöscht.")
-                parts.append(
-                    "Tipp: Nutze `mode: all`, um auch alte Nachrichten zu entfernen (läuft dann im Hintergrund).")
-            elif scheduled > 0:
-                parts.append(
-                    f"🕒 {scheduled} alte Nachricht{'' if scheduled == 1 else 'en'} werden im Hintergrund sicher gelöscht (gedrosselt, ohne Rate-Limits).")
-
-            embed = discord.Embed(
-                colour=discord.Colour.green(),
-                description="\n".join(parts)
-            )
+            # Antwort
+            lines = [f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."]
+            if scheduled > 0:
+                lines.append(f"🕒 {scheduled} weitere (älter als 14 Tage) werden im Hintergrund sicher gelöscht.")
+            embed = discord.Embed(colour=discord.Colour.green(), description="\n".join(lines))
             embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
             await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
-
-    @app_commands.command(name="embedfy")
+    @app_commands.command(name="embedfy", description="Erstelle ein schönes Embed.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def embedfy(self, interaction: discord.Interaction,
-                      color: Literal['Rot', 'Orange', 'Gelb', 'Grün', 'Blau', 'Blurple'] = None):
-        """Erstelle ein schönes Embed."""
+    async def embedfy(self, interaction: discord.Interaction, color: Optional[str] = None):
         await interaction.response.send_modal(Feedback(color2=color))
 
     @commands.Cog.listener()
-    async def on_message_delete(self, message):
-        self.snipe_message_author[message.guild.id] = message.author
-        self.snipe_message_content[message.guild.id] = message.content
-        self.snipe_message_channel[message.guild.id] = message.channel
+    async def on_message_delete(self, message: discord.Message):
+        if message.guild:
+            self.snipe_message_author[message.guild.id] = message.author
+            self.snipe_message_content[message.guild.id] = message.content or ""
+            self.snipe_message_channel[message.guild.id] = message.channel
 
     @app_commands.command(name="unban")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
     async def unban(self, interaction: discord.Interaction, usertag: str):
-        """Entbanne einen User."""
-        banned_users = [entry async for entry in interaction.guild.bans(limit=2000)]
+        """Entbanne einen User (Name#1234)."""
+        try:
+            member_name, member_discriminator = usertag.split('#', 1)
+        except ValueError:
+            return await interaction.response.send_message("Format: `Name#1234`", ephemeral=True)
 
-        member_name, member_discriminator = usertag.split('#')
+        banned_users = [entry async for entry in interaction.guild.bans(limit=2000)]
         for ban_entry in banned_users:
             user = ban_entry.user
-
             if (user.name, user.discriminator) == (member_name, member_discriminator):
                 await interaction.guild.unban(user)
-                await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> **Der User {usertag} wurde entbannt.**")
-
+                return await interaction.response.send_message(
+                    f"<:Astra_accept:1141303821176422460> **Der User {usertag} wurde entbannt.**"
+                )
+        await interaction.response.send_message("User nicht in der Bannliste gefunden.", ephemeral=True)
 
     @app_commands.command(name="banlist")
     @app_commands.guild_only()
@@ -391,32 +462,31 @@ class mod(commands.Cog):
     @app_commands.checks.has_permissions(ban_members=True)
     async def banlist(self, interaction: discord.Interaction):
         """Zeigt eine Liste mit gebannten Usern."""
-        a = 0
         users = [entry async for entry in interaction.guild.bans(limit=2000)]
-        if len(users) > 0:
-            msg1 = f'__**Username**__ — __**Grund**__\n'
-            for entry in users:
-                userName = str(entry.user)
-                if entry.user.bot:
-                    userName = '🤖 ' + userName
-                reason = str(entry.reason)
-                msg1 += f'{userName} — {reason}\n'
-                a += 1
-            try:
-                for chunk in [msg1[i:i + 2000] for i in range(0, len(msg1), 2000)]:
-                    embed = discord.Embed(title="Bann Liste", description=f"{msg1}", color=discord.Color.red())
-                    embed.set_thumbnail(url=interaction.guild.icon)
-                    embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    embed.set_footer(text=f"{a} gebannte User auf dem Server.")
-                    await interaction.response.send_message(embed=embed)
-            except discord.HTTPException:
-                embed2 = discord.Embed(title="Bann Liste", description=f"{msg1}", color=discord.Color.red())
-                embed2.set_thumbnail(url=interaction.guild.icon)
-                embed2.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                embed2.set_footer(text=f"{a} gebannte User auf dem Server.")
-                await interaction.response.send_message(embed=embed2)
-        else:
-            await interaction.response.send_message('<:Astra_x:1141303954555289600> **Hier gibt es keine gebannten User.**')
+        if not users:
+            return await interaction.response.send_message(
+                '<:Astra_x:1141303954555289600> **Hier gibt es keine gebannten User.**',
+                ephemeral=True
+            )
+
+        lines = ['__**Username**__ — __**Grund**__']
+        for entry in users:
+            name = f"🤖 {entry.user}" if entry.user.bot else str(entry.user)
+            reason = entry.reason or "—"
+            lines.append(f"{name} — {reason}")
+
+        text = "\n".join(lines)
+        for chunk_start in range(0, len(text), 1800):
+            chunk = text[chunk_start:chunk_start + 1800]
+            embed = discord.Embed(title="Bann Liste", description=chunk, color=discord.Color.red())
+            if interaction.guild.icon:
+                embed.set_thumbnail(url=interaction.guild.icon.url)
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            embed.set_footer(text=f"{len(users)} gebannte User auf dem Server.")
+            if chunk_start == 0:
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
