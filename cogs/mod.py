@@ -7,6 +7,9 @@ from discord.ui.view import View
 from typing import Literal
 from discord.utils import utcnow
 
+BULK_CUTOFF_DAYS = 14
+SLEEP_PER_DELETE = 0.35  # sanfte Drosselung für Einzel-Deletes
+
 class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     def __init__(self, *, color2: Literal['Rot', 'Orange', 'Gelb', 'Grün', 'Blau', 'Blurple'] = None):
         super().__init__()
