@@ -217,7 +217,7 @@ class HelpCog(commands.Cog):
         embed.set_footer(text="Astra Development ©2025", icon_url=guild_icon_url)
 
         # Banner: Entweder absolute URL ODER als Attachment senden (siehe unten)
-        embed.set_image(url="https://astra-bot.de/assets/Neuer-Astra-Banner-animiert.gif")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1141116983358804118/1404850199507243171/Neuer-Astra-Banner-animiert.gif?ex=689cb034&is=689b5eb4&hm=94f6a826f88983e0b39d61449182aa5bad616d02850c34d55fca4d57433274ca&")
 
         await interaction.response.send_message(embed=embed, view=view)
 
