@@ -297,7 +297,7 @@ class mod(commands.Cog):
             await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
 
-@app_commands.command(name="embedfy")
+    @app_commands.command(name="embedfy")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
@@ -327,7 +327,7 @@ class mod(commands.Cog):
             if (user.name, user.discriminator) == (member_name, member_discriminator):
                 await interaction.guild.unban(user)
                 await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> **Der User {usertag} wurde entbannt.**")
-                
+
 
     @app_commands.command(name="banlist")
     @app_commands.guild_only()
