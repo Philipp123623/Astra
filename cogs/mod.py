@@ -159,16 +159,19 @@ class mod(commands.Cog):
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
+                    # Kanal nicht erreichbar → Job entsorgen
                     await self._mark_job_done(job.id)
                     continue
 
             try:
                 deleted_count = await self._process_old_deletes(channel, job.amount, job_id=job.id)
-                # Nachricht an den Kanal, dass Job fertig ist
+
+                # Fertig-Meldung in den Kanal posten
                 try:
                     embed = discord.Embed(
                         colour=discord.Colour.green(),
-                        description=f"✅ **Job abgeschlossen:** {deleted_count} alte Nachrichten wurden erfolgreich gelöscht."
+                        description=f"✅ **Hintergrund-Löschung abgeschlossen** – {deleted_count} alte Nachricht"
+                                    f"{'' if deleted_count == 1 else 'en'} wurden entfernt."
                     )
                     embed.set_author(name=job.requested_by)
                     await channel.send(embed=embed)
