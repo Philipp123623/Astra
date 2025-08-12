@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import random
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional, List
@@ -27,7 +28,7 @@ class OldDeleteJob:
     status: str  # 'pending' | 'processing' | 'done'
 
 
-# ---- Modal für Embeds (unverändert, nur kleine URL-Fixes unten) ----
+# ---- Modal für Embeds ----
 class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     def __init__(self, *, color2: Optional[str] = None):
         super().__init__()
@@ -67,48 +68,19 @@ class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        if self.colour == "Rot":
-            embed = discord.Embed(
-                colour=discord.Colour.red(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        elif self.colour == "Orange":
-            embed = discord.Embed(
-                colour=discord.Colour.orange(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        elif self.colour == "Gelb":
-            embed = discord.Embed(
-                colour=discord.Colour.yellow(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        elif self.colour == "Grün":
-            embed = discord.Embed(
-                colour=discord.Colour.green(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        elif self.colour == "Blau":
-            embed = discord.Embed(
-                colour=discord.Colour.blue(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        elif self.colour == "Blurple":
-            embed = discord.Embed(
-                colour=discord.Colour.blurple(),
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-        else:
-            embed = discord.Embed(
-                title=self.name.value or " ",
-                description=self.description.value or " "
-            )
-
+        colours = {
+            "Rot": discord.Colour.red(),
+            "Orange": discord.Colour.orange(),
+            "Gelb": discord.Colour.yellow(),
+            "Grün": discord.Colour.green(),
+            "Blau": discord.Colour.blue(),
+            "Blurple": discord.Colour.blurple(),
+        }
+        embed = discord.Embed(
+            colour=colours.get(self.colour, discord.Colour.default()),
+            title=self.name.value or " ",
+            description=self.description.value or " ",
+        )
         if self.thumbnail.value:
             embed.set_thumbnail(url=self.thumbnail.value)
         if self.image.value:
@@ -118,7 +90,7 @@ class Feedback(discord.ui.Modal, title="Erstelle dein eigenes Embed."):
             embed.set_footer(text=self.footer.value, icon_url=icon_url)
 
         embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        await interaction.response.send_message(embed=embed)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         try:
@@ -140,12 +112,19 @@ class mod(commands.Cog):
         self._workers: dict[int, asyncio.Task] = {}
         self._wake_events: dict[int, asyncio.Event] = {}
 
-        # Da wir kein cog_load nutzen: Worker-Init als Hintergrund-Task
+        # Kein cog_load -> Startup-Task
         self._startup_task = bot.loop.create_task(self._startup())
 
-    # ---------- Startup: Pending-Jobs finden & Worker starten ----------
+    # ---------- Startup: Recovery + Pending-Jobs anwerfen ----------
     async def _startup(self):
         await self.bot.wait_until_ready()
+
+        # Recovery: hängengebliebene Jobs wieder aktivieren
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE clear_jobs SET status='pending' WHERE status='processing'")
+                await conn.commit()
+
         channels = await self._get_channels_with_pending()
         for ch_id in channels:
             await self._ensure_worker(ch_id)
@@ -180,14 +159,14 @@ class mod(commands.Cog):
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
-                    # Kanal nicht erreichbar → Job als done markieren, damit wir nicht hängen
+                    # Kanal nicht erreichbar → Job als done markieren, um Deadlocks zu vermeiden
                     await self._mark_job_done(job.id)
                     continue
 
             try:
-                await self._process_old_deletes(channel, job.amount)
+                await self._process_old_deletes(channel, job.amount, job_id=job.id)
             except Exception:
-                # Worker bricht nicht ab; Job trotzdem als done markieren
+                # Worker nicht sterben lassen
                 pass
             finally:
                 await self._mark_job_done(job.id)
@@ -196,9 +175,10 @@ class mod(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "SELECT id, channel_id, amount, requested_by, status FROM clear_jobs "
-                    "WHERE channel_id=%s AND status='pending' ORDER BY id ASC LIMIT 1",
-                    (channel_id,)
+                    "SELECT id, channel_id, amount, requested_by, status "
+                    "FROM clear_jobs WHERE channel_id=%s AND status='pending' "
+                    "ORDER BY id ASC LIMIT 1",
+                    (channel_id,),
                 )
                 row = await cur.fetchone()
                 if not row:
@@ -217,11 +197,22 @@ class mod(commands.Cog):
                 await cur.execute("UPDATE clear_jobs SET status='done' WHERE id=%s", (job_id,))
                 await conn.commit()
 
+    async def _decrement_job_amount(self, job_id: int, n: int):
+        """Fortschritt speichern, damit Jobs nach Restart nicht von vorn beginnen."""
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "UPDATE clear_jobs SET amount = GREATEST(amount - %s, 0) WHERE id=%s",
+                    (n, job_id)
+                )
+                await conn.commit()
+
     async def _enqueue_job(self, channel_id: int, amount: int, requested_by: str) -> int:
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "INSERT INTO clear_jobs (channel_id, amount, requested_by, status) VALUES (%s, %s, %s, 'pending')",
+                    "INSERT INTO clear_jobs (channel_id, amount, requested_by, status) "
+                    "VALUES (%s, %s, %s, 'pending')",
                     (channel_id, amount, requested_by)
                 )
                 job_id = cur.lastrowid
@@ -229,11 +220,12 @@ class mod(commands.Cog):
                 return int(job_id)
 
     # ---------------- Löschlogik (>14 Tage, gedrosselt) ----------------
-    async def _process_old_deletes(self, channel: discord.TextChannel, amount: int):
+    async def _process_old_deletes(self, channel: discord.TextChannel, amount: int, job_id: Optional[int] = None):
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         remaining = amount
         last_message = None
         backoff = 0.0
+        checkpoint = 0  # seit letztem DB-Update gelöschte Anzahl
 
         while remaining > 0:
             found_any = False
@@ -247,11 +239,17 @@ class mod(commands.Cog):
                     continue
                 found_any = True
                 try:
-                    # Kein reason bei PartialMessage
-                    await msg.delete()
+                    await msg.delete()  # kein reason bei PartialMessage
                     remaining -= 1
+                    checkpoint += 1
                     backoff = 0.0
-                    await asyncio.sleep(SLEEP_PER_DELETE)
+
+                    # alle 10 Deletes Fortschritt persistieren
+                    if job_id and checkpoint >= 10:
+                        await self._decrement_job_amount(job_id, checkpoint)
+                        checkpoint = 0
+
+                    await asyncio.sleep(SLEEP_PER_DELETE + random.uniform(0.0, 0.2))
                     if remaining == 0:
                         break
                 except discord.NotFound:
@@ -260,13 +258,19 @@ class mod(commands.Cog):
                     continue
                 except discord.HTTPException as e:
                     if getattr(e, "status", None) == 429:
-                        backoff = min(3.0, backoff + 0.5)
-                        await asyncio.sleep(1.5 + backoff)
+                        backoff = min(5.0, backoff + 0.7)
+                        await asyncio.sleep(1.8 + backoff)
                     else:
-                        await asyncio.sleep(0.8)
+                        await asyncio.sleep(0.9)
                     continue
             if not found_any:
                 break
+
+        # Restlichen Fortschritt verbuchen
+        if job_id and checkpoint > 0:
+            await self._decrement_job_amount(job_id, checkpoint)
+
+        return amount - remaining
 
     # ---------------- Commands ----------------
 
@@ -405,13 +409,15 @@ class mod(commands.Cog):
             scheduled = 0
             if remaining > 0:
                 # 2) Ältere Nachrichten als Job persistieren & Worker wecken
-                _ = await self._enqueue_job(channel.id, remaining, str(interaction.user))
+                await self._enqueue_job(channel.id, remaining, str(interaction.user))
                 scheduled = remaining
                 await self._ensure_worker(channel.id)
                 self._wake_events[channel.id].set()
 
             # Antwort
-            lines = [f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."]
+            lines = [
+                f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."
+            ]
             if scheduled > 0:
                 lines.append(f"🕒 {scheduled} weitere (älter als 14 Tage) werden im Hintergrund sicher gelöscht.")
             embed = discord.Embed(colour=discord.Colour.green(), description="\n".join(lines))
