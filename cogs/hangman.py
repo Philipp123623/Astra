@@ -191,9 +191,7 @@ class hangman(commands.Cog):
             return
 
         # Spiel initialisieren
-        word = random.choice([  # Liste von Wörtern
-            "WASSER", "MOND", "HIMMEL", "HAUS", "AUTO", "TISCH", "VOGEL", "BÄUME", "NACHT", "FREUND", "BILD", "FISCH"
-        ])
+        word = random.choice(["WASSER", "MOND", "HIMMEL", "HAUS", "AUTO", "TISCH", "VOGEL", "BÄUME", "NACHT", "FREUND", "BILD", "FISCH"])
 
         hangman_game.update({
             "game": True,

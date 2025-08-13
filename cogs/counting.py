@@ -67,7 +67,7 @@ class counter(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    @app_commands.describe(argument="Argument", channel="Textchannel")
+    @app_commands.describe(argument="Ein oder Ausschalten", channel="In welchem Channel soll das Counting stattfinden?")
     async def counting(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten'], channel: discord.TextChannel):
         """Richte den Zählkanal ein."""
         async with self.bot.pool.acquire() as conn:

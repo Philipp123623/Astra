@@ -1172,10 +1172,15 @@ class Giveaway(app_commands.Group):
             description="Alles rund um Gewinnspiele."
         )
 
-    @app_commands.command(name="starten")
+    @app_commands.command(name="starten", description="Startet ein Gewinnspiel.")
+    @app_commands.describe(preis="Der Preis des Gewinnspiels.")
+    @app_commands.describe(kanal="Der Kanal, in dem das Gewinnspiel stattfinden soll.")
+    @app_commands.describe(gewinner="Anzahl der Gewinner.")
+    @app_commands.describe(zeit="Dauer des Gewinnspiels (z.B. 10m, 2h, 3d).")
+    @app_commands.describe(rolle="Optional: Rolle, die teilnehmen darf.")
+    @app_commands.describe(level="Optional: Mindestlevel für Teilnahme.")
     @app_commands.checks.has_permissions(manage_events=True)
-    async def gw_start(self, interaction: discord.Interaction, *, preis: str, kanal: discord.TextChannel, gewinner: int,
-                       zeit: str, rolle: discord.Role = None, level: int = None):
+    async def gw_start(self, interaction: discord.Interaction, *, preis: str, kanal: discord.TextChannel, gewinner: int, zeit: str, rolle: discord.Role = None, level: int = None):
         """Startet ein Gewinnspiel."""
         async with bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1249,20 +1254,12 @@ class Giveaway(app_commands.Group):
                     f"**<:Astra_accept:1141303821176422460> Das Gewinnspiel wird in {kanal.mention} stattfinden.**"
                 )
 
-    @app_commands.command(name="verwalten")
+    @app_commands.command(name="verwalten", description="Verwalte ein Gewinnspiel.")
+    @app_commands.describe(aktion="Aktion, die durchgeführt werden soll.")
+    @app_commands.describe(messageid="Nachrichten-ID des Gewinnspiels (falls benötigt).")
     @app_commands.checks.has_permissions(manage_events=True)
-    async def gw_verwalten(
-            self,
-            interaction: discord.Interaction,
-            *,
-            aktion: Literal[
-                'Gewinnspiel beenden(Nachrichten ID angeben)',
-                'Gewinnspiel neu würfeln(Nachrichten ID angeben)',
-                'Gewinnspiele Anzeigen'
-            ],
-            messageid: str = None
-    ):
-        """Verwalte deine Gewinnspiele."""
+    async def gw_verwalten(self, interaction: discord.Interaction, *, aktion: Literal['Gewinnspiel beenden(Nachrichten ID angeben)', 'Gewinnspiel neu würfeln(Nachrichten ID angeben)', 'Gewinnspiele Anzeigen'],  messageid: str = None):
+        """Verwalte ein Gewinnspiel."""
         async with bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
 
@@ -1536,10 +1533,11 @@ class Reminder(app_commands.Group):
             description="Verwalte Erinnerungen."
         )
 
-    @app_commands.command(name="erstellen")
-    async def reminder_set(self, interaction: discord.Interaction, beschreibung: str, zeit: Literal[
-        '1m', '3m', '5m', '10m', '20m', '30m', '45m', '1h', '2h', '5h', '10h', '12h', '18h', '1d', '2d', '5d', '6d', '1w', '2w', '4w']):
-        """Set a reminder!"""
+    @app_commands.command(name="erstellen", description="Setze eine Erinnerung.")
+    @app_commands.describe(beschreibung="Beschreibung der Erinnerung.")
+    @app_commands.describe(zeit="Wie lange bis zur Erinnerung.")
+    async def reminder_set(self, interaction: discord.Interaction, beschreibung: str, zeit: Literal['1m', '3m', '5m', '10m', '20m', '30m', '45m', '1h', '2h', '5h', '10h', '12h', '18h', '1d', '2d', '5d', '6d', '1w', '2w', '4w']):
+        """Setze eine Erinnerung."""
         async with bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 description = beschreibung
@@ -1573,9 +1571,9 @@ class Reminder(app_commands.Group):
                         colour=discord.Colour.blue())
                     await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="anzeigen")
+    @app_commands.command(name="anzeigen", description="Zeigt alle Erinnerungen an.")
     async def reminder_list(self, interaction: discord.Interaction):
-        """Get a list of reminders!"""
+        """Zeigt eine Liste aller gesetzten Erinnerungen."""
         async with bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 memberid = interaction.user.id
@@ -1604,9 +1602,10 @@ class Reminder(app_commands.Group):
 
                     await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="löschen")
+    @app_commands.command(name="löschen", description="Löscht eine Erinnerung.")
+    @app_commands.describe(id="Die ID der Erinnerung, die gelöscht werden soll.")
     async def reminder_delete(self, interaction: discord.Interaction, id: int):
-        """Delete a reminder!"""
+        """Löscht eine gespeicherte Erinnerung anhand der ID."""
         async with bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 member = interaction.user

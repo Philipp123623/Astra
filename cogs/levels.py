@@ -327,8 +327,8 @@ class Level(app_commands.Group):
         names = list_styles()
         return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
 
-    # /rank
-    @app_commands.command(name="rank", description="Sendet deine Levelcard.")
+    @app_commands.command(name="rank", description="Zeigt deine Levelkarte oder die eines anderen Mitglieds an.")
+    @app_commands.describe(user="Das Mitglied, dessen Levelkarte angezeigt werden soll (Standard: du selbst).")
     @commands.cooldown(1, 3, commands.BucketType.user)
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction, user: discord.User | None = None):
@@ -433,15 +433,11 @@ class Level(app_commands.Group):
         await interaction.followup.send(file=File(buf, filename=f"rank_{style_name}.png"))
         return None
 
-    # /setstyle
     @app_commands.command(name="setstyle", description="Wähle deine Rank-Card.")
-    @app_commands.describe(style="Style-Name")
+    @app_commands.describe(style="Name des Stils, der für deine Levelkarte verwendet werden soll.")
     @app_commands.guild_only()
-    async def setstyle(
-            self,
-            interaction: discord.Interaction,
-            style: Literal[PRETTY_CHOICES],
-    ):
+    async def setstyle(self, interaction: discord.Interaction, style: Literal[PRETTY_CHOICES]):
+
         internal_style = PRETTY_TO_FILENAME[style]
         available = set(list_styles())
         if internal_style not in available:
@@ -463,15 +459,11 @@ class Level(app_commands.Group):
         await interaction.response.send_message(f"✅ Style auf **{style}** gesetzt.", ephemeral=True)
         return None
 
-    # /previewstyle
-    @app_commands.command(name="previewstyle", description="Preview deiner Rank-Card (ohne zu speichern).")
-    @app_commands.describe(style="Style-Name")
+    @app_commands.command(name="previewstyle", description="Vorschau deiner Levelkarte anzeigen, ohne sie zu speichern.")
+    @app_commands.describe(style="Name des Stils, der für die Vorschau verwendet werden soll.")
     @app_commands.guild_only()
-    async def previewstyle(
-            self,
-            interaction: discord.Interaction,
-            style: Literal[PRETTY_CHOICES],
-    ):
+    async def previewstyle(self, interaction: discord.Interaction, style: Literal[PRETTY_CHOICES]):
+
         internal_style = PRETTY_TO_FILENAME[style]
         if internal_style not in set(list_styles()):
             return await interaction.response.send_message(
@@ -562,10 +554,11 @@ class Level(app_commands.Group):
         )
         return None
 
-    @app_commands.command(name="status")
+    @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Levelsystem auf diesem Server.")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
+
         """Lege einen Kanal fest, in den die Level Up Nachrichten gesendet werden."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -631,11 +624,11 @@ class Level(app_commands.Group):
         embed.description = description
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="levelupkanal")
+    @app_commands.command(name="levelupkanal", description="Lege fest, wo Level-Up-Nachrichten gesendet werden.")
+    @app_commands.describe(arg="Wähle den Modus: letzter Kanal, bestimmter Kanal, private Nachricht oder deaktivieren.")
+    @app_commands.describe(channel="Der Kanal, in dem Level-Up-Nachrichten gesendet werden sollen (falls erforderlich).")
     @app_commands.checks.has_permissions(manage_channels=True)
-    async def levelsystem_setchannel(self, interaction: discord.Interaction, arg: Literal[
-        'Kanal des Levelups', 'Bestimmter Kanal(Kanalangabe benötigt)', 'Private Nachricht', 'Deaktivieren'],
-                                     channel: discord.TextChannel = None):
+    async def levelsystem_setchannel(self, interaction: discord.Interaction, arg: Literal['Kanal des Levelups', 'Bestimmter Kanal(Kanalangabe benötigt)', 'Private Nachricht', 'Deaktivieren'], channel: discord.TextChannel = None):
         """Set a channel for your levelmessages."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -704,10 +697,10 @@ class Level(app_commands.Group):
                             await interaction.response.send_message(
                                 "<:Astra_accept:1141303821176422460> **Der Levelupkanal wurde erfolgreich zurückgesetzt.**")
 
-    @app_commands.command(name="levelupnachricht")
+    @app_commands.command(name="levelupnachricht", description="Lege eine individuelle oder keine Level-Up-Nachricht fest.")
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def levelsystem_setmessage(self, interaction: discord.Interaction,
-                                     arg: Literal['Custom Nachricht', 'Deaktivieren'], message: str = None):
+    async def levelsystem_setmessage(self, interaction: discord.Interaction, arg: Literal['Custom Nachricht', 'Deaktivieren'], message: str = None):
+
         """Custom levelmessage: Use %level for the level and %member as member mention."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -746,15 +739,9 @@ class Level(app_commands.Group):
                                 "<:Astra_accept:1141303821176422460> **Die Level-UP-Nachricht wurde erfolgreich zurückgesetzt.**")
 
     @app_commands.command(name="role")
-    @app_commands.describe(
-        modus="Was soll passieren?",
-        level="Ab welchem Level (1–100)?",
-        role="Welche Rolle?"
-    )
+    @app_commands.describe(modus="Was soll passieren?", level="Ab welchem Level (1–100)?", role="Welche Rolle?")
     @app_commands.checks.has_permissions(manage_roles=True)
-    async def levelsystem_role_add(self, interaction: discord.Interaction,
-                                   modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int,
-                                   role: discord.Role):
+    async def levelsystem_role_add(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int, role: discord.Role):
         """Füge/Entferne Rollen die man ab dem jeweiligem Level bekommt."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1129,11 +1116,10 @@ class levelsystem(commands.Cog):
                         await channel.send(msg.author.mention, embed=embed)
                     return
 
-    @app_commands.command(name="xpboost")
+    @app_commands.command(name="xpboost", description="Aktiviere oder deaktiviere den XP-Boost für deinen Server.")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_messages=True)
-    async def levelsystem_xpboost(self, interaction: discord.Interaction,
-                                  status: Literal['Aktivieren(x2)', 'Deaktivieren(x1)']):
+    async def levelsystem_xpboost(self, interaction: discord.Interaction, status: Literal['Aktivieren(x2)', 'Deaktivieren(x1)']):
         """Aktiviere den XP-Boost für deinen Server."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -1167,7 +1153,7 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message(
                                 "<:Astra_accept:1141303821176422460> **Der XP-Boost ist jetzt für diesen Server deaktiviert. User bekommen nun nichtmehr 2x XP**")
 
-    @app_commands.command(name="setlevel")
+    @app_commands.command(name="setlevel", description="Setze das Level eines Mitglieds auf deinem Server.")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def levelsystem_setlevel(self, interaction: discord.Interaction, member: discord.Member, level: int):
@@ -1205,7 +1191,7 @@ class levelsystem(commands.Cog):
                             await interaction.response.send_message(
                                 f"<:Astra_accept:1141303821176422460> **Der User {member.mention} wurde auf Level `{level}` gesetzt.**")
 
-    @app_commands.command(name="setxp")
+    @app_commands.command(name="setxp", description="Setze die XP eines Mitglieds innerhalb seines aktuellen Levels.")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def levelsystem_setxp(self, interaction: discord.Interaction, member: discord.Member, xp: int):

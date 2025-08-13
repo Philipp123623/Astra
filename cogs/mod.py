@@ -286,7 +286,9 @@ class mod(commands.Cog):
 
     # ---------------- Commands ----------------
 
-    @app_commands.command(name="kick")
+    @app_commands.command(name="kick", description="Kicke einen Nutzer vom Server.")
+    @app_commands.describe(user="Das Mitglied, das gekickt werden soll.")
+    @app_commands.describe(reason="Grund für den Kick.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(kick_members=True)
@@ -299,8 +301,7 @@ class mod(commands.Cog):
 
         if result:
             channel = interaction.guild.get_channel(int(result[0]))
-            embed = discord.Embed(colour=discord.Colour.orange(),
-                                  description=f"Der User {user} (`{user.id}`) wurde gekickt.")
+            embed = discord.Embed(colour=discord.Colour.orange(), description=f"Der User {user} (`{user.id}`) wurde gekickt.")
             embed.add_field(name="👤 Member:", value=user.mention, inline=False)
             embed.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
             embed.add_field(name="📄 Grund:", value=reason, inline=False)
@@ -309,21 +310,18 @@ class mod(commands.Cog):
                 await channel.send(embed=embed)
 
         if user.guild_permissions.kick_members:
-            embed = discord.Embed(colour=discord.Colour.red(),
-                                  description=f"Der User {user.mention} kann nicht gekickt werden, da er die Rechte `Mitglieder Kicken` hat.")
+            embed = discord.Embed(colour=discord.Colour.red(), description=f"Der User {user.mention} kann nicht gekickt werden, da er die Rechte `Mitglieder Kicken` hat.")
             embed.set_author(name=str(user), icon_url=user.display_avatar.url)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        confirm = discord.Embed(colour=discord.Colour.orange(),
-                                description=f"Der User {user} (`{user.id}`) wurde gekickt.")
+        confirm = discord.Embed(colour=discord.Colour.orange(), description=f"Der User {user} (`{user.id}`) wurde gekickt.")
         confirm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
         confirm.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
         confirm.add_field(name="📄 Grund:", value=reason, inline=False)
         confirm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
 
-        dm = discord.Embed(colour=discord.Colour.orange(),
-                           description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gekickt! Mehr Informationen hier:")
+        dm = discord.Embed(colour=discord.Colour.orange(), description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gekickt! Mehr Informationen hier:")
         dm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
         dm.add_field(name="👮 Moderator:", value=interaction.user.mention, inline=False)
         dm.add_field(name="📄 Grund:", value=reason, inline=False)
@@ -337,7 +335,9 @@ class mod(commands.Cog):
         await user.kick(reason=reason)
         await interaction.response.send_message(embed=confirm, ephemeral=False)
 
-    @app_commands.command(name="ban")
+    @app_commands.command(name="ban", description="Banne einen Nutzer vom Server.")
+    @app_commands.describe(user="Das Mitglied, das gebannt werden soll.")
+    @app_commands.describe(reason="Grund für den Bann.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
@@ -350,8 +350,7 @@ class mod(commands.Cog):
 
         if result:
             channel = interaction.guild.get_channel(int(result[0]))
-            embed = discord.Embed(colour=discord.Colour.orange(),
-                                  description=f"Der User {user} (`{user.id}`) wurde gebannt.")
+            embed = discord.Embed(colour=discord.Colour.orange(), description=f"Der User {user} (`{user.id}`) wurde gebannt.")
             embed.add_field(name="👤 Member:", value=user.mention, inline=False)
             embed.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
             embed.add_field(name="📄 Grund:", value=reason, inline=False)
@@ -360,21 +359,18 @@ class mod(commands.Cog):
                 await channel.send(embed=embed)
 
         if user.guild_permissions.kick_members:
-            embed = discord.Embed(colour=discord.Colour.red(),
-                                  description=f"Der User {user.mention} kann nicht gebannt werden, da er die Rechte `Mitglieder Bannen` hat.")
+            embed = discord.Embed(colour=discord.Colour.red(), description=f"Der User {user.mention} kann nicht gebannt werden, da er die Rechte `Mitglieder Bannen` hat.")
             embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        confirm = discord.Embed(colour=discord.Colour.orange(),
-                                description=f"Der User {user} (`{user.id}`) wurde gebannt.")
+        confirm = discord.Embed(colour=discord.Colour.orange(), description=f"Der User {user} (`{user.id}`) wurde gebannt.")
         confirm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
         confirm.add_field(name="👮 Moderator:", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
         confirm.add_field(name="📄 Grund:", value=reason, inline=False)
         confirm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
 
-        dm = discord.Embed(colour=discord.Colour.orange(),
-                           description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gebannt! Mehr Informationen hier:")
+        dm = discord.Embed(colour=discord.Colour.orange(), description=f"Hey {user.mention}! \nDu wurdest vom Server **{interaction.guild.name}** gebannt! Mehr Informationen hier:")
         dm.add_field(name="🎛️ Server:", value=interaction.guild.name, inline=False)
         dm.add_field(name="👮 Moderator:", value=interaction.user.mention, inline=False)
         dm.add_field(name="📄 Grund:", value=reason, inline=False)
@@ -388,6 +384,8 @@ class mod(commands.Cog):
         await interaction.response.send_message(embed=confirm, ephemeral=False)
 
     @app_commands.command(name="clear", description="Löscht Nachrichten: schnell (≤14 Tage) & alte im Hintergrund.")
+    @app_commands.describe(channel="Der Kanal, in dem gelöscht werden soll.")
+    @app_commands.describe(amount="Wie viele Nachrichten sollen gelöscht werden? (max. 300)")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True, read_message_history=True)
@@ -440,6 +438,7 @@ class mod(commands.Cog):
             await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
     @app_commands.command(name="embedfy", description="Erstelle ein schönes Embed.")
+    @app_commands.describe(color="Optional: Farbnamen wie Rot, Orange, Gelb, Grün, Blau oder Blurple.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True)
@@ -453,7 +452,8 @@ class mod(commands.Cog):
             self.snipe_message_content[message.guild.id] = message.content or ""
             self.snipe_message_channel[message.guild.id] = message.channel
 
-    @app_commands.command(name="unban")
+    @app_commands.command(name="unban", description="Entbanne einen Nutzer per Tag (Name#1234).")
+    @app_commands.describe(usertag="Tag des Nutzers im Format Name#1234.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)
@@ -472,9 +472,11 @@ class mod(commands.Cog):
                 return await interaction.response.send_message(
                     f"<:Astra_accept:1141303821176422460> **Der User {usertag} wurde entbannt.**"
                 )
-        await interaction.response.send_message("User nicht in der Bannliste gefunden.", ephemeral=True)
 
-    @app_commands.command(name="banlist")
+        await interaction.response.send_message("User nicht in der Bannliste gefunden.", ephemeral=True)
+        return None
+
+    @app_commands.command(name="banlist", description="Zeigt eine Liste aller gebannten Nutzer.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(ban_members=True)

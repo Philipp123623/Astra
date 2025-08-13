@@ -82,7 +82,7 @@ class leave(commands.Cog):
                         pass
                     return
 
-    @app_commands.command(name="testleave")
+    @app_commands.command(name="testleave", description="Simuliere, dass du den Server verlässt, um Leave-Nachrichten oder Logs zu testen.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
@@ -119,14 +119,13 @@ class leave(commands.Cog):
                         pass
                     return
 
-    @app_commands.command(name="leavemsg")
+    @app_commands.command(name="leavemsg", description="Verwalte die Nachricht, die beim Verlassen eines Mitglieds gesendet wird.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def leavemsg(self, interaction: discord.Interaction, argument: Literal[
-        'Einschalten', 'Ausschalten', 'Anzeigen'],
-                       channel: discord.TextChannel = None):
-        """Lege eine Nachricht fest für User, die deinen Server verlassen."""
+    @app_commands.describe(argument="Aktion auswählen: 'Einschalten', 'Ausschalten' oder 'Anzeigen'.", channel="Kanal, in dem die Nachricht gesendet werden soll (nur bei 'Einschalten' nötig).")
+    async def leavemsg(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], channel: discord.TextChannel = None):
+        """Legt fest, ob und wo eine Nachricht beim Serververlassen eines Mitglieds gesendet wird."""
         if argument == "Einschalten":
             await interaction.response.send_modal(Leave(channel=channel, bot=self.bot))
         if argument == "Ausschalten":

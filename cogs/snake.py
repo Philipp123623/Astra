@@ -229,6 +229,7 @@ class Snake(app_commands.Group):
         )
 
     @app_commands.command(name="start", description="Starte Snake!")
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def snake(self, interaction: discord.Interaction):
         """Spiele Snake."""
         async with self.bot.pool.acquire() as conn:

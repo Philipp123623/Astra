@@ -544,6 +544,7 @@ class Backup(app_commands.Group):
         return cog
 
     @app_commands.command(name="create", description="Erstellt ein Server-Backup.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def create(self, interaction: discord.Interaction):
         cog = self._cog()
         await interaction.response.defer(ephemeral=True)
@@ -557,6 +558,7 @@ class Backup(app_commands.Group):
         await interaction.followup.send(embed=emb, ephemeral=True)
 
     @app_commands.command(name="list", description="Listet alle Backups dieses Servers mit Details auf.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def backup_list(self, interaction: discord.Interaction):
         cog = self._cog()
 
@@ -614,6 +616,7 @@ class Backup(app_commands.Group):
             await interaction.followup.send(embed=emb, ephemeral=True)
 
     @app_commands.command(name="load", description="Stellt ein Backup mithilfe eines Codes wieder her.")
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(code="Der Backup-Code, der wiederhergestellt werden soll.")
     async def load(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
@@ -645,6 +648,7 @@ class Backup(app_commands.Group):
         )
 
     @app_commands.command(name="undo", description="Setzt den Server auf den Stand vor der letzten Wiederherstellung zurück.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def undo(self, interaction: discord.Interaction):
         cog = self._cog()
         last_restore = await cog._fetch_last_restore_job(interaction.guild_id)
@@ -680,6 +684,7 @@ class Backup(app_commands.Group):
         )
 
     @app_commands.command(name="status", description="Zeigt den Fortschritt oder das Ergebnis des letzten Backup- oder Wiederherstellungsvorgangs.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction):
         cog = self._cog()
         job = await cog._fetch_last_job_for_guild(interaction.guild_id)
@@ -698,6 +703,7 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
     @app_commands.command(name="delete", description="Lösche ältere Backups.")
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(code="Der Backup-Code, der gelöscht werden soll.")
     async def delete(self, interaction: discord.Interaction, code: str):
         cog = self._cog()

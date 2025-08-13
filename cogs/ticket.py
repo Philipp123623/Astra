@@ -243,11 +243,15 @@ class Ticket(app_commands.Group):
             description="Alles rund ums Ticketsystem."
         )
 
-    @app_commands.command(name="setup")
+    @app_commands.command(name="setup", description="Erstelle ein Ticket-Panel.")
+    @app_commands.describe(channel="Kanal, in dem das Ticket-Panel gesendet werden soll.")
+    @app_commands.describe(title="Titel des Ticket-Panels.")
+    @app_commands.describe(description="Beschreibung des Ticket-Panels.")
+    @app_commands.describe(supportrole="Rolle, die Zugriff auf Tickets haben soll.")
+    @app_commands.describe(categorie="Kategorie, in der die Tickets erstellt werden.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_setup(self, interaction: discord.Interaction, channel: discord.TextChannel, title: str,
-                           description: str, supportrole: discord.Role, categorie: discord.CategoryChannel):
+    async def ticket_setup(self, interaction: discord.Interaction, channel: discord.TextChannel, title: str, description: str, supportrole: discord.Role, categorie: discord.CategoryChannel):
         """Erstelle ein Ticket-Panel."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -271,7 +275,8 @@ class Ticket(app_commands.Group):
                 await interaction.response.send_message(f"{interaction.user.mention} | Dein Panel wurde erstellt.",
                                                         embed=em, ephemeral=True)
 
-    @app_commands.command(name="löschen")
+    @app_commands.command(name="löschen", description="Lösche ein Ticket-Panel.")
+    @app_commands.describe(channel="Der Kanal, in dem sich das Ticket-Panel befindet.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_delete(self, interaction: discord.Interaction, channel: discord.TextChannel):
@@ -282,7 +287,7 @@ class Ticket(app_commands.Group):
                 await interaction.response.send_message(
                     "<:Astra_accept:1141303821176422460> **Das Ticket-Panel wurde gelöscht.**", ephemeral=True)
 
-    @app_commands.command(name="anzeigen")
+    @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels deines Servers auf.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def ticket_list(self, interaction: discord.Interaction):
@@ -316,14 +321,13 @@ class Ticket(app_commands.Group):
                         embed.add_field(name=ch.mention, value=thema, inline=True)
                     await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="log")
+    @app_commands.command(name="log", description="Richte ein Ticket-Log für deinen Server ein.")
+    @app_commands.describe(argument="Einschalten oder Ausschalten.")
+    @app_commands.describe(channel="Der Kanal, in dem Ticket-Logs gesendet werden sollen.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def ticketlog(self, interaction: discord.Interaction,
-                        argument: Literal['Einschalten', 'Ausschalten'],
-                        channel: discord.TextChannel):
+    async def ticketlog(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten'], channel: discord.TextChannel):
         """Setup a Ticketlog for your Server!"""
-        print(1)
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 if argument == "Einschalten":

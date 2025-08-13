@@ -344,13 +344,13 @@ class modlog(commands.Cog):
                         embed.add_field(name=name, value=value, inline=inline)
                     await channel.send(embed=embed)
 
-    @app_commands.command(name="modlog")
+    @app_commands.command(name="modlog", description="Modlog für deinen Server einrichten, anzeigen oder entfernen.")
+    @app_commands.describe(argument="Aktion: 'Add' (hinzufügen), 'Delete' (entfernen) oder 'Show' (anzeigen).")
+    @app_commands.describe(channel="Kanal für Modlog-Einträge (nur bei 'Add' erforderlich).")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def modlog(self, interaction: discord.Interaction,
-                     argument: Literal['Add', 'Delete', 'Show'],
-                     channel: discord.TextChannel = None):
+    async def modlog(self, interaction: discord.Interaction, argument: Literal['Add', 'Delete', 'Show'], hannel: discord.TextChannel = None):
         """Setup a Modlog for your Server!"""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:

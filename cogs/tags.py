@@ -37,11 +37,14 @@ class tags(commands.Cog):
                             embed.set_thumbnail(url=msg.guild.icon)
                             await msg.channel.send(embed=embed)
 
-    @app_commands.command(name="tags")
+    @app_commands.command(name="tags", description="Erstelle eigene Befehle (Tags) nur für deinen Server.")
+    @app_commands.describe(modus="Aktion: 'Hinzufügen', 'Entfernen' oder 'Anzeigen'.")
+    @app_commands.describe(name="Name des Tags.")
+    @app_commands.describe(ausgabe="Inhalt oder Antwort des Tags (nur bei 'Hinzufügen' erforderlich).")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def tags(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], name: str, ausgabe: str=None):
+    async def tags(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], name: str, ausgabe: str = None):
         """Erstelle eigene Befehle nur für deinen Server."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:

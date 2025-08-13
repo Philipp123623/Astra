@@ -83,7 +83,7 @@ class welcome(commands.Cog):
                         pass
                     return
 
-    @app_commands.command(name="testjoin")
+    @app_commands.command(name="testjoin", description="Schaue ob deine Joinmsg gut funktioniert.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
@@ -120,13 +120,11 @@ class welcome(commands.Cog):
                         pass
                     return
 
-    @app_commands.command(name="joinmsg")
+    @app_commands.command(name="joinmsg", description="Lege eine Nachricht fest für User, die deinem Server joinen.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def joinmsg(self, interaction: discord.Interaction, argument: Literal[
-        'Einschalten', 'Ausschalten', 'Anzeigen'],
-                      channel: discord.TextChannel = None):
+    async def joinmsg(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], channel: discord.TextChannel = None):
         """Lege eine Nachricht fest für User, die deinem Server joinen."""
         if argument == "Einschalten":
             await interaction.response.send_modal(Modal2(channel=channel, bot=self.bot))

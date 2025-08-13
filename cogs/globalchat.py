@@ -312,6 +312,7 @@ class globalchat(commands.Cog):
                     pass
 
     @commands.command(name="globalban")
+    @commands.is_owner()
     async def globalban(self, ctx, member: discord.Member):
         if not await is_mod(ctx.author.id, self.bot.pool):
             await ctx.send(
@@ -331,6 +332,7 @@ class globalchat(commands.Cog):
         await ctx.send(embed=discord.Embed(description=f'{member.mention} wurde erfolgreich gebannt!', colour=0xF44D4D))
 
     @commands.command(name="setstaff")
+    @commands.is_owner()
     async def setstaff(self, ctx, member: discord.Member):
         if not await is_owner(ctx.author.id):
             await ctx.send(
@@ -346,6 +348,7 @@ class globalchat(commands.Cog):
             embed=discord.Embed(description=f'{member.mention} wurde zum Teammitglied ernannt!', colour=0x56F44D))
 
     @commands.command(name="setlevel")
+    @commands.is_owner()
     async def setlevel(self, ctx, member: discord.Member, level: int):
         if not await is_owner(ctx.author.id):
             await ctx.send(embed=discord.Embed(
@@ -401,6 +404,7 @@ class globalchat(commands.Cog):
             colour=0x56F44D))
 
     @commands.command(name="removestaff")
+    @commands.is_owner()
     async def removestaff(self, ctx, member: discord.Member):
         if not await is_owner(ctx.author.id):
             await ctx.send(embed=discord.Embed(
@@ -418,10 +422,15 @@ class globalchat(commands.Cog):
             description=f'{member.mention} wurde aus dem Team entfernt.',
             colour=0xF44D4D))
 
-    @app_commands.command(name="globalchat")
+    @app_commands.command(name="globalchat", description="Richtet den globalen Chat für diesen Server ein oder schaltet ihn aus.")
+    @app_commands.describe(argument="Wähle 'Einschalten', um den Globalchat zu aktivieren, oder 'Ausschalten', um ihn zu deaktivieren.")
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.guild_only()
-    async def globalchat(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten']):
-        """Richte unseren Globalchat für deinen Server ein."""
+    async def globalchat(
+            self,
+            interaction: discord.Interaction,
+            argument: Literal['Einschalten', 'Ausschalten']
+    ):
         if argument == 'Einschalten':
             logger.info(1)
             if interaction.user.guild_permissions.administrator:
