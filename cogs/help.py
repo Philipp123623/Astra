@@ -79,48 +79,31 @@ class HelpCog(commands.Cog):
         self.pages: dict[str, str] = {}
 
     async def on_ready_cache_ids(self):
-        """
-        Lädt alle global/guild-registrierten Application Commands
-        und cached:
-        - IDs für Slash-Mentions
-        - Beschreibungen (inkl. Subcommands)
-        """
+        await self.bot.wait_until_ready()
+        self.command_ids.clear()
+        self.command_descriptions.clear()
+
+        def walk(prefix: str, node: app_commands.Command, top_id: int):
+            full_key = (f"{prefix} {node.name}".strip()).lower()
+            self.command_descriptions[full_key] = (node.description or "").strip()
+            self.command_ids[full_key] = top_id  # immer die Top-Level-ID für Mentions
+            if isinstance(node, app_commands.Group):
+                for child in node.commands:
+                    walk(full_key, child, top_id)
+
         cmds = await self.bot.tree.fetch_commands()
         for cmd in cmds:
             if isinstance(cmd, app_commands.Group):
-                # root group
-                root_key = cmd.name.lower()
-                self.command_ids[root_key] = cmd.id
-                # Group-Description speichern (falls du sie brauchst)
-                self.command_descriptions[root_key] = cmd.description or ""
-
-                # Subcommands + Subgroups
-                for sub in cmd.commands:
-                    if isinstance(sub, app_commands.Group):
-                        # subgroup (group sub)
-                        subgroup_key = f"{cmd.name} {sub.name}".lower()
-                        self.command_ids[subgroup_key] = cmd.id  # Mention geht weiterhin über die Gruppen-ID
-                        self.command_descriptions[subgroup_key] = sub.description or ""
-
-                        for subsub in sub.commands:
-                            subsub_key = f"{cmd.name} {sub.name} {subsub.name}".lower()
-                            self.command_ids[subsub_key] = cmd.id
-                            self.command_descriptions[subsub_key] = subsub.description or ""
-                    else:
-                        # subcommand (group sub)
-                        sub_key = f"{cmd.name} {sub.name}".lower()
-                        self.command_ids[sub_key] = cmd.id  # Mention bleibt auf der Group-ID
-                        self.command_descriptions[sub_key] = sub.description or ""
+                walk("", cmd, cmd.id)
             else:
                 key = cmd.name.lower()
                 self.command_ids[key] = cmd.id
-                self.command_descriptions[key] = cmd.description or ""
+                self.command_descriptions[key] = (cmd.description or "").strip()
 
-        # Aliasse direkt mappen, wenn möglich
+        # Aliasse
         for alias, real in self.ALIASES.items():
             if real in self.command_ids and alias not in self.command_ids:
                 self.command_ids[alias] = self.command_ids[real]
-            # Descriptions finden wir dynamisch in _cdesc mit Alias-Auflösung
 
     def _normalize_key(self, path: str) -> str:
         return path.strip().lower()
