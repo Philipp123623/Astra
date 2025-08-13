@@ -1,19 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Astra Backup System – Neustart-Resistent mit Fortschritts-Embeds & Undo
-
-Slash-Commands (guild-only):
-- /backup create   → erstellt sofort ein Backup und gibt den CODE zurück (Embed)
-- /backup latest   → zeigt den letzten Code dieser Guild (Embed)
-- /backup load     → stellt ein Backup wieder her (nicht-destruktiv), mit Fortschritts-Embed
-- /backup undo     → entfernt alles, was beim letzten Restore-Job hinzugefügt wurde
-- /backup status   → zeigt den Fortschritt des letzten Jobs (Embed)
-- /backup delete   → löscht ein Backup per Code (Embed)
-
-Speichert Rollen, Channels, Kategorien, Overwrites (keine Nachrichten/Emojis).
-Restore ist NICHT destruktiv. Undo löscht nur durch den letzten Restore neu angelegte Objekte.
-"""
-
 from __future__ import annotations
 import asyncio
 import hashlib
@@ -218,7 +202,7 @@ def build_category_tree_block(guild: discord.Guild, chans: list[dict]) -> str:
         cats.setdefault(parent, []).append(c)
 
     # Sortierung
-    def sort_key(c): return (0 if c.get("type") == discord.ChannelType.category.value else 1, str(c.get("name","")).casefold())
+    def sort_key(c): return 0 if c.get("type") == discord.ChannelType.category.value else 1, str(c.get("name", "")).casefold()
 
     lines: list[str] = []
     # Kategorien (ohne None) zuerst
@@ -824,15 +808,15 @@ class Backup(app_commands.Group):
             # Zähler hübsch in zwei Reihen
             row1 = " | ".join([
                 f"<:Astra_users:1141303946602872872> Rollen **{entry['roles_count']}**",
-                f"🗂️ Kategorien **{entry['categories_count']}**",
-                f"💬 Text **{entry['text_count']}**",
-                f"🔊 Voice **{entry['voice_count']}**",
+                f"<:Astra_file2:1141303839543279666> Kategorien **{entry['categories_count']}**",
+                f"<:Astra_messages:1141303867850641488> Text **{entry['text_count']}**",
+                f"<:Astra_hear:1141303854881833081> Voice **{entry['voice_count']}**",
             ])
             row2 = " | ".join([
-                f"📣 News **{entry['news_count']}**",
-                f"🎤 Stage **{entry['stage_count']}**",
-                f"🧵 Forum **{entry['forum_count']}**",
-                f"🔒 Berechtigungen **{entry['overwrites_total']}**",
+                f"<:Astra_news:1141303885533827072> News **{entry['news_count']}**",
+                f"<:Astra_mic_on:1141303873294844005> Stage **{entry['stage_count']}**",
+                f"<:Astra_stift:1141825585836998716> Forum **{entry['forum_count']}**",
+                f"<:Astra_locked:1141824745243942912> Berechtigungen **{entry['overwrites_total']}**",
             ])
             e.add_field(name="Inhalt (Zähler)", value=f"{row1}\n{row2}", inline=False)
 
