@@ -363,7 +363,7 @@ class modlog(commands.Cog):
                         await cursor.execute("INSERT INTO modlog (serverID, channelID) VALUES (%s, %s)",
                                              (interaction.guild.id, channel.id))
 
-                        embed1 = discord.Embed(title="Setted up a modlog!",
+                        embed1 = discord.Embed(title="Modlog Aktiviert!",
                                                description=f"The modlog will take place in {channel.mention}.",
                                                color=discord.Color.blue())
                         await interaction.response.send_message(embed=embed1)

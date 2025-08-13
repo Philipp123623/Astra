@@ -551,8 +551,8 @@ class Backup(app_commands.Group):
         payload = await cog._snapshot_guild(interaction.guild)
         code = await cog._store_backup(interaction.guild_id, payload)
         emb = discord.Embed(
-            title="✅ Backup erstellt",
-            description=f"**Code:** `{code}`\nEnthält Rollen, Kategorien, Channels & Overwrites.",
+            title="Backup erstellt",
+            description=f"<:Astra_accept:1141303821176422460> **Code:** `{code}`\nEnthält Rollen, Kategorien, Channels & Overwrites.",
             color=discord.Colour.blue(),
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
@@ -590,8 +590,8 @@ class Backup(app_commands.Group):
 
         # Erste Embed mit Info
         first_embed = discord.Embed(
-            title="🗂️ Backups",
-            description=f"Anzahl: **{total}**\nSortiert nach Erstellungsdatum (neu → alt).",
+            title="Alle Backups:",
+            description=f"<:Astra_file1:1141303837181886494> Anzahl: **{total}**\nSortiert nach Erstellungsdatum (neu → alt).",
             color=discord.Colour.blue()
         )
         await interaction.response.send_message(embed=first_embed, ephemeral=True)
