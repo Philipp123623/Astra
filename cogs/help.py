@@ -79,28 +79,38 @@ class HelpCog(commands.Cog):
         self.pages: dict[str, str] = {}
 
     async def on_ready_cache_ids(self):
+        """Cacht IDs (für Slash-Mentions) und Beschreibungen inkl. aller Subcommands – direkt aus der API-Struktur."""
         await self.bot.wait_until_ready()
         self.command_ids.clear()
         self.command_descriptions.clear()
 
-        def walk(prefix: str, node: app_commands.Command, top_id: int):
-            full_key = (f"{prefix} {node.name}".strip()).lower()
-            self.command_descriptions[full_key] = (node.description or "").strip()
-            self.command_ids[full_key] = top_id  # immer die Top-Level-ID für Mentions
-            if isinstance(node, app_commands.Group):
-                for child in node.commands:
-                    walk(full_key, child, top_id)
+        def walk_api(prefix: str, node: dict, top_id: int):
+            # node: {"name":..., "description":..., "type":..., "options":[...]}
+            name = node.get("name", "")
+            full_key = (f"{prefix} {name}".strip()).lower()
+            desc = (node.get("description") or "").strip()
+            if full_key:
+                self.command_ids[full_key] = top_id
+                self.command_descriptions[full_key] = desc
+            # Rekursiv für Subcommand(-groups)
+            for opt in (node.get("options") or []):
+                if opt.get("type") in (1, 2):  # 1=SUB_COMMAND, 2=SUB_COMMAND_GROUP
+                    walk_api(full_key, opt, top_id)
 
         cmds = await self.bot.tree.fetch_commands()
         for cmd in cmds:
-            if isinstance(cmd, app_commands.Group):
-                walk("", cmd, cmd.id)
-            else:
-                key = cmd.name.lower()
-                self.command_ids[key] = cmd.id
-                self.command_descriptions[key] = (cmd.description or "").strip()
+            data = cmd.to_dict()
+            top_id = cmd.id
+            # Top-Level Command selbst
+            top_key = data["name"].lower()
+            self.command_ids[top_key] = top_id
+            self.command_descriptions[top_key] = (data.get("description") or "").strip()
+            # Kinder (Subcommands/-groups) rekursiv verarbeiten
+            for opt in (data.get("options") or []):
+                if opt.get("type") in (1, 2):
+                    walk_api(top_key, opt, top_id)
 
-        # Aliasse
+        # Aliasse (IDs spiegeln, Descriptions werden per _resolve_alias gefunden)
         for alias, real in self.ALIASES.items():
             if real in self.command_ids and alias not in self.command_ids:
                 self.command_ids[alias] = self.command_ids[real]
@@ -123,23 +133,19 @@ class HelpCog(commands.Cog):
         key = self._normalize_key(path)
         key = self._resolve_alias(key)
 
-        # exakter Treffer
         if key in self.command_ids:
             return self.command_ids[key]
 
-        # Wenn "group sub" nicht direkt drin ist, versuche: irgendein Sub unter der Group
         if " " in key:
             group = key.split(" ", 1)[0]
             for k in self.command_ids.keys():
                 if k == group or k.startswith(group + " "):
                     return self.command_ids[k]
 
-        # fuzzy root
         for k in self.command_ids.keys():
             if k == key or k.startswith(key + " ") or key.startswith(k + " "):
                 return self.command_ids[k]
 
-        # Fallback: 0 (ungültig) – Mention wird dann nicht klickbar, aber dein Text bleibt bestehen
         return 0
 
     def _cdesc(self, path: str) -> str:
@@ -150,17 +156,14 @@ class HelpCog(commands.Cog):
         key = self._normalize_key(path)
         key = self._resolve_alias(key)
 
-        # exakter Treffer zuerst
         if key in self.command_descriptions and self.command_descriptions[key]:
             return self.command_descriptions[key]
 
-        # Falls Subcommand nicht gefunden -> versuche Group-Description
         if " " in key:
             group = key.split(" ", 1)[0]
             if group in self.command_descriptions and self.command_descriptions[group]:
                 return self.command_descriptions[group]
 
-        # Letzter Versuch: irgendeine, die passt
         for k, v in self.command_descriptions.items():
             if (k == key or k.startswith(key + " ") or key.startswith(k + " ")) and v:
                 return v
