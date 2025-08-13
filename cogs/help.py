@@ -14,17 +14,22 @@ class Dropdown(discord.ui.Select):
     def __init__(self, cog):
         self.cog = cog
         options = [
+            # Administration / Moderation
             discord.SelectOption(label='Moderation', value="Mod", emoji='<:Astra_moderation:1141303878541918250>'),
-            discord.SelectOption(label="Levelsystem", value="Level", emoji="<:Astra_level:1141825043278598154>"),
-            discord.SelectOption(label="Giveaways", value="GW", emoji="<:Astra_gw1:1141303852889550928>"),
-            discord.SelectOption(label='Settings & Setup', value="Settings", emoji='<:Astra_settings:1061390649200476170>'),
-            discord.SelectOption(label="Backup", value="backups", emoji='<:Astra_file1:1141303837181886494>'),
-            discord.SelectOption(label='Tickets', value="Ticket", emoji='<:Astra_ticket:1141833836204937347>'),
             discord.SelectOption(label='Automod', value="Automod", emoji="<:Astra_time:1141303932061233202>"),
-            discord.SelectOption(label='Information', value="Info", emoji='<:Astra_support:1141303923752325210>'),
-            discord.SelectOption(label='Fun', value="Fun", emoji='<:Astra_fun:1141303841665601667>'),
+            discord.SelectOption(label='Backup', value="backups", emoji='<:Astra_file1:1141303837181886494>'),
+            discord.SelectOption(label='Tickets', value="Ticket", emoji='<:Astra_ticket:1141833836204937347>'),
+            discord.SelectOption(label='Settings & Setup', value="Settings", emoji='<:Astra_settings:1061390649200476170>'),
+
+            # Server Features
+            discord.SelectOption(label="Levelsystem", value="Level", emoji="<:Astra_level:1141825043278598154>"),
             discord.SelectOption(label='Economy', value="Eco", emoji='<:Astra_cookie:1141303831293079633>'),
             discord.SelectOption(label='Nachrichten', value="Messages", emoji='<:Astra_messages:1141303867850641488>'),
+            discord.SelectOption(label="Giveaways", value="GW", emoji="<:Astra_gw1:1141303852889550928>"),
+            discord.SelectOption(label='Information', value="Info", emoji='<:Astra_support:1141303923752325210>'),
+
+            # Unterhaltung
+            discord.SelectOption(label='Fun', value="Fun", emoji='<:Astra_fun:1141303841665601667>'),
             discord.SelectOption(label='Minispiele', value="Minigames", emoji='<:Astra_minigames:1141303876528648232>'),
         ]
         super().__init__(placeholder='Wähle eine Seite', min_values=1, max_values=1, options=options)
