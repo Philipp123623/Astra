@@ -350,7 +350,7 @@ class modlog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def modlog(self, interaction: discord.Interaction, argument: Literal['Add', 'Delete', 'Show'], hannel: discord.TextChannel = None):
+    async def modlog(self, interaction: discord.Interaction, argument: Literal['Add', 'Delete', 'Show'], channel: discord.TextChannel = None):
         """Setup a Modlog for your Server!"""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
@@ -402,7 +402,7 @@ class modlog(commands.Cog):
                         channelID = result[0]
                         guild = interaction.guild
                         channelid = guild.get_channel(channelID)
-                        
+
                         await interaction.response.send_message(f"`✅` The modlog takes place in {channelid.mention}", ephemeral=True)
 
 
