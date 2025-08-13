@@ -341,6 +341,7 @@ class EconomyClass(app_commands.Group):
                 await cur.execute("SELECT wallet, bank FROM economy_users WHERE user_id = %s", (user_id,))
                 return await cur.fetchone()
 
+
     @app_commands.command(name="balance", description="Zeigt deinen aktuellen Kontostand an.")
     @app_commands.guild_only()
     async def balance(self, interaction: discord.Interaction):
@@ -667,6 +668,41 @@ class EconomyClass(app_commands.Group):
             await interaction.response.send_message(f"<:Astra_x:1141303954555289600> Es gab einen Fehler beim Abrufen der Rangliste: {e}", ephemeral=True)
             print(f"Fehler beim Abrufen der Rangliste: {e}")
 
+    @app_commands.command(name="blackjack", description="Spiele eine Runde Blackjack.")
+    @app_commands.guild_only()
+    @app_commands.describe(einsatz="Der Betrag, den du setzen möchtest.")
+    async def blackjack(self, interaction: discord.Interaction, einsatz: int):
+        """Spiele eine Runde Blackjack."""
+        user_data = await self.get_user(interaction.user.id)
+        wallet = user_data[1]
+
+        if einsatz <= 0:
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Bitte gib einen gültigen Einsatz an.", ephemeral=True)
+            return
+
+        if wallet < einsatz:
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> hast nicht genug Münzen.",
+                                                    ephemeral=True)
+            return
+
+        # Abziehen des Einsatzes
+        await self.update_balance(interaction.user.id, wallet_change=-einsatz)
+
+        # Blackjack-View mit dem Economy-System
+        view = BlackjackView(self.bot, interaction, einsatz, self)  # Übergabe des Economy-Cogs
+
+        embed = discord.Embed(
+            title="Blackjack wird gestartet!",
+            description="Ziehe Karten mit `Hit` oder beende mit `Stand`. Ziel: So nah wie möglich an 21!",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811>", inline=False)
+
+        await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()  # Damit `update_message` funktioniert
+        await view.update_message()
+
 
 @app_commands.guild_only()
 class Job(app_commands.Group):
@@ -816,40 +852,6 @@ class Economy(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute("SELECT wallet, bank FROM economy_users WHERE user_id = %s", (user_id,))
                 return await cur.fetchone()
-
-
-    @app_commands.command(name="blackjack", description="Spiele eine Runde Blackjack.")
-    @app_commands.guild_only()
-    @app_commands.describe(einsatz="Der Betrag, den du setzen möchtest.")
-    async def blackjack(self, interaction: discord.Interaction, einsatz: int):
-        """Spiele eine Runde Blackjack."""
-        user_data = await self.get_user(interaction.user.id)
-        wallet = user_data[1]
-
-        if einsatz <= 0:
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Einsatz an.", ephemeral=True)
-            return
-
-        if wallet < einsatz:
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> hast nicht genug Münzen.", ephemeral=True)
-            return
-
-        # Abziehen des Einsatzes
-        await self.update_balance(interaction.user.id, wallet_change=-einsatz)
-
-        # Blackjack-View mit dem Economy-System
-        view = BlackjackView(self.bot, interaction, einsatz, self)  # Übergabe des Economy-Cogs
-
-        embed = discord.Embed(
-            title="Blackjack wird gestartet!",
-            description="Ziehe Karten mit `Hit` oder beende mit `Stand`. Ziel: So nah wie möglich an 21!",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811>", inline=False)
-
-        await interaction.response.send_message(embed=embed, view=view)
-        view.message = await interaction.original_response()  # Damit `update_message` funktioniert
-        await view.update_message()
 
     @commands.command(name="addcoins",
                       description="Füge einem Nutzer <:Coin:1359178077011181811> hinzu (Nur für Botbesitzer).")
