@@ -93,6 +93,13 @@ class HelpCog(commands.Cog):
     def _normalize_key(self, path: str) -> str:
         return path.strip().lower()
 
+    def _resolve_alias(self, key: str) -> str:
+        """Wendet Alias nur auf das erste Wort (Group) an, respektiert Subcommands."""
+        if " " in key:
+            head, tail = key.split(" ", 1)
+            return f"{self.ALIASES.get(head, head)} {tail}".lower()
+        return self.ALIASES.get(key, key).lower()
+
     def _cid(self, path: str) -> int:
         """
         Holt robust die Command-ID:
