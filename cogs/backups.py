@@ -86,6 +86,19 @@ def human_bytes(n: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
 
+def join_limit(names: list[str], *, max_len: int = 900) -> str:
+    out, used = [], 0
+    for i, name in enumerate(names):
+        add = (", " if out else "") + name
+        if used + len(add) > max_len:
+            rest = len(names) - i
+            if rest > 0:
+                out.append(f" … +{rest} weitere")
+            break
+        out.append(add if out else name)
+        used += len(add)
+    return "".join(out) if out else "—"
+
 def compute_includes(payload: dict) -> str:
     parts = []
     if payload.get("roles"):
@@ -111,6 +124,44 @@ def build_progress_embed(*, title: str, step: int, total: int, status: str,
         emb.add_field(name="Hinweis", value=error[:1000], inline=False)
     return emb
 
+
+class BackupListView(discord.ui.View):
+    def __init__(self, entries: list[dict], build_embed, *, timeout: int = 300):
+        super().__init__(timeout=timeout)
+        self.entries = entries
+        self.index = 0
+        self.build_embed = build_embed
+
+        # Dropdown mit max. 25 Optionen
+        options = []
+        for i, e in enumerate(entries[:25]):
+            ts = int(e["created_at"].timestamp())
+            options.append(discord.SelectOption(
+                label=e["code"],
+                description=f"{e['size']} • v{e['version']} • {e['roles_count']} Rollen, {e['channels_total']} Channels • {e['categories_count']} Kategorien",
+                value=str(i)
+            ))
+        sel = discord.ui.Select(placeholder="Backup auswählen", options=options, min_values=1, max_values=1)
+        async def _on_select(inter: discord.Interaction):
+            self.index = int(sel.values[0])
+            await inter.response.edit_message(embed=self.build_embed(self.entries[self.index]), view=self)
+        sel.callback = _on_select
+        self.add_item(sel)
+
+    @discord.ui.button(label="◀︎ Zurück", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index = (self.index - 1) % len(self.entries)
+        await interaction.response.edit_message(embed=self.build_embed(self.entries[self.index]), view=self)
+
+    @discord.ui.button(label="Weiter ▶︎", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index = (self.index + 1) % len(self.entries)
+        await interaction.response.edit_message(embed=self.build_embed(self.entries[self.index]), view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
 
 # =====================================================================
 # Cog: DB, Worker, Restore/Undo-Logik, Fortschritt & Aufräumen
@@ -580,16 +631,16 @@ class Backup(app_commands.Group):
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="list", description="Listet alle Backups dieses Servers mit Details auf.")
+    @app_commands.command(name="list", description="Listet alle Backups dieses Servers – eine Nachricht, mit Details.")
     @app_commands.checks.has_permissions(administrator=True)
     async def backup_list(self, interaction: discord.Interaction):
         cog = self._cog()
 
-        # Alle Backups inkl. Datum & Meta holen (sortiert nach neuestem zuerst)
-        async with cog.pool.acquire() as conn, conn.cursor() as cur:
+        # Alles holen – wir lesen die Blobs, um Details auszurechnen
+        async with cog.pool.acquire() as conn, conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
                 """
-                SELECT code, created_at, includes, version, size_bytes
+                SELECT code, created_at, includes, version, size_bytes, data_blob
                 FROM backups
                 WHERE guild_id = %s
                 ORDER BY created_at DESC
@@ -599,61 +650,97 @@ class Backup(app_commands.Group):
             rows = await cur.fetchall()
 
         if not rows:
-            await interaction.response.send_message(
-                embed=discord.Embed(title="ℹ️ Keine Backups vorhanden", color=discord.Colour.blue()),
-                ephemeral=True
-            )
+            emb = discord.Embed(title="ℹ️ Keine Backups vorhanden", color=discord.Colour.blue())
+            await interaction.response.send_message(embed=emb, ephemeral=True)
             return
 
-        total = len(rows)
+        # Inhalte der Backups analysieren
+        entries: list[dict] = []
+        for r in rows:
+            blob = r["data_blob"]
+            raw = zstd.ZstdDecompressor().decompress(blob) if _HAS_ZSTD else gzip.decompress(blob)  # type: ignore
+            data = loads(raw)
 
-        def chunks(seq, size):
-            for i in range(0, len(seq), size):
-                yield seq[i:i + size]
+            roles = data.get("roles", []) or []
+            chans = data.get("channels", []) or []
 
-        icon_map = {
-            "roles": "🧑‍🤝‍🧑 Rollen",
-            "channels": "📂 Channels",
-            "overwrites": "🔒 Overwrites",
-        }
+            # Zähler
+            roles_count = len(roles)
+            categories = [c for c in chans if c.get("type") == discord.ChannelType.category.value]
+            categories_count = len(categories)
+            text = [c for c in chans if
+                    c.get("type") in (discord.ChannelType.text.value, discord.ChannelType.news.value)]
+            voice = [c for c in chans if c.get("type") == discord.ChannelType.voice.value]
+            stage = [c for c in chans if c.get("type") == discord.ChannelType.stage_voice.value]
+            forum = [c for c in chans if c.get("type") == discord.ChannelType.forum.value]
+            news = [c for c in chans if c.get("type") == discord.ChannelType.news.value]
+            overwrites_total = sum(len(c.get("overwrites") or []) for c in chans)
 
-        # Kopf-Embed
-        head = discord.Embed(
-            title="Alle Backups",
-            description=f"<:Astra_file1:1141303837181886494> Anzahl: **{total}**\nSortiert nach Erstellungsdatum (neu → alt).",
-            color=discord.Colour.blue()
-        )
-        await interaction.response.send_message(embed=head, ephemeral=True)
+            # Beispiel-Listen
+            role_names = [r["name"] for r in roles if r.get("name") != "@everyone"]
+            cat_names = [c["name"] for c in categories]
+            text_names = [c["name"] for c in text]
+            voice_names = [c["name"] for c in voice]
 
-        # Seitenweise Liste (10 pro Seite)
-        for idx, block in enumerate(chunks(rows, 10), start=1):
-            desc_lines = []
-            for code, created_at, includes, version, size_bytes in block:
-                # includes normalisieren -> Icons
-                if isinstance(includes, str):
-                    parts = [p for p in includes.split(",") if p]
-                elif isinstance(includes, (list, tuple)):
-                    parts = list(includes)
-                else:
-                    parts = []
-                includes_str = ", ".join(icon_map.get(p, p) for p in parts) or "—"
+            entries.append({
+                "code": r["code"],
+                "created_at": r["created_at"],
+                "version": r["version"],
+                "size": human_bytes(r["size_bytes"]) if isinstance(r["size_bytes"], (int, float)) else "?",
+                "roles_count": roles_count,
+                "categories_count": categories_count,
+                "channels_total": len(chans) - categories_count,
+                "text_count": len(text),
+                "voice_count": len(voice),
+                "stage_count": len(stage),
+                "forum_count": len(forum),
+                "news_count": len(news),
+                "overwrites_total": overwrites_total,
+                "role_names": role_names,
+                "cat_names": cat_names,
+                "text_names": text_names,
+                "voice_names": voice_names,
+            })
 
-                # Discord relative timestamp + Größe
-                ts = int(created_at.timestamp())
-                when = f"<t:{ts}:f> • <t:{ts}:R>"  # z.B. 13.08.2025 18:25 • vor 2 Minuten
-                size_str = human_bytes(size_bytes) if isinstance(size_bytes, (int, float)) else "?"
-                meta = f"v{version} • {size_str}"
+        total = len(entries)
 
-                desc_lines.append(
-                    f"**`{code}`**\n📅 {when}\n🧾 {meta} • Enthält: {includes_str}"
-                )
+        # Embed-Builder: ausführliche Ansicht eines Backups
+        def build_embed(entry: dict) -> discord.Embed:
+            ts = int(entry["created_at"].timestamp())
+            head = f"**`{entry['code']}`**  •  v{entry['version']}  •  {entry['size']}\n" \
+                   f"📅 <t:{ts}:f> • <t:{ts}:R>\n" \
+                   f"💾 Insgesamt **{total}** Backups (neu → alt)."
 
-            emb = discord.Embed(
-                title=f"Liste ({(idx - 1) * 10 + 1}–{(idx - 1) * 10 + len(block)})",
-                description="\n\n".join(desc_lines),
-                color=discord.Colour.blue()
-            )
-            await interaction.followup.send(embed=emb, ephemeral=True)
+            e = discord.Embed(title="Astra • Backups (Detailansicht)", description=head, color=discord.Colour.blue())
+
+            # Block: Zähler
+            counts = [
+                f"👥 Rollen: **{entry['roles_count']}**",
+                f"🗂️ Kategorien: **{entry['categories_count']}**",
+                f"💬 Text: **{entry['text_count']}**",
+                f"🔊 Voice: **{entry['voice_count']}**",
+                f"📣 News: **{entry['news_count']}**",
+                f"🎤 Stage: **{entry['stage_count']}**",
+                f"🧵 Forum: **{entry['forum_count']}**",
+                f"🔒 Overwrites gesamt: **{entry['overwrites_total']}**",
+            ]
+            e.add_field(name="Inhalt (Zähler)", value=" • ".join(counts), inline=False)
+
+            # Beispiel-Listen (jeweils gekürzt)
+            e.add_field(name=f"Rollen ({entry['roles_count']})", value=join_limit(entry["role_names"]), inline=False)
+            e.add_field(name=f"Kategorien ({entry['categories_count']})", value=join_limit(entry["cat_names"]),
+                        inline=False)
+            e.add_field(name=f"Textkanäle ({entry['text_count']})", value=join_limit(entry["text_names"]), inline=False)
+            e.add_field(name=f"Voicekanäle ({entry['voice_count']})", value=join_limit(entry["voice_names"]),
+                        inline=False)
+
+            e.set_footer(
+                text="Nutze die Buttons/Dropdown, um zwischen Backups zu wechseln – es bleibt bei EINER Nachricht.")
+            return e
+
+        # Eine (!) Nachricht senden – mit View zum Wechseln
+        view = BackupListView(entries, build_embed)
+        await interaction.response.send_message(embed=build_embed(entries[0]), view=view, ephemeral=True)
 
     @app_commands.command(name="load", description="Stellt ein Backup mithilfe eines Codes wieder her.")
     @app_commands.checks.has_permissions(administrator=True)
