@@ -309,7 +309,7 @@ class JobListView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=self)
 
 @app_commands.guild_only()
-class Eco(app_commands.Group):
+class EconomyClass(app_commands.Group):
     def __init__(self, bot):
         self.bot = bot  # <--- Hinzufügen!
         super().__init__(
@@ -907,5 +907,5 @@ class Economy(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
-    bot.tree.add_command(Eco(bot))
+    bot.tree.add_command(EconomyClass(bot))
     bot.tree.add_command(Job(bot))
