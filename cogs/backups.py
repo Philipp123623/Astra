@@ -79,6 +79,24 @@ def progress_bar(step: int, total: int, width: int = 20) -> str:
     filled = int(round(width * step / max(1, total)))
     return "█" * filled + "░" * (width - filled)
 
+def human_bytes(n: int) -> str:
+    size = float(n)
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024 or unit == "TB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+
+def compute_includes(payload: dict) -> str:
+    parts = []
+    if payload.get("roles"):
+        parts.append("roles")
+    chans = payload.get("channels") or []
+    if chans:
+        parts.append("channels")
+        if any((c.get("overwrites") or []) for c in chans):
+            parts.append("overwrites")
+    return ",".join(parts)
+
 def build_progress_embed(*, title: str, step: int, total: int, status: str,
                          color: discord.Color, error: str | None = None) -> discord.Embed:
     pct = 0 if total == 0 else min(100, int(step * 100 / max(1, total)))
@@ -257,14 +275,19 @@ class BackupCog(commands.Cog):
         digest = blake128(raw)
         blob = zstd.ZstdCompressor(level=12).compress(raw) if _HAS_ZSTD else gzip.compress(raw)  # type: ignore
 
+        includes = compute_includes(payload)  # NEW: was ist drin? -> "roles,channels,overwrites"
+
         # Garantiert eindeutiger Code (mehrere Versuche)
         for _ in range(5):
             code = gen_backup_code()
             try:
                 async with self.pool.acquire() as conn, conn.cursor() as cur:
                     await cur.execute(
-                        "INSERT INTO backups (code, guild_id, version, size_bytes, `hash`, `data_blob`) VALUES (%s,%s,%s,%s,%s,%s)",
-                        (code, guild_id, BACKUP_VERSION, len(blob), digest, blob)
+                        """
+                        INSERT INTO backups (code, guild_id, includes, version, size_bytes, `hash`, `data_blob`)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (code, guild_id, includes, BACKUP_VERSION, len(blob), digest, blob)
                     )
                     await conn.commit()
                 return code
@@ -566,7 +589,7 @@ class Backup(app_commands.Group):
         async with cog.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
                 """
-                SELECT code, created_at, includes
+                SELECT code, created_at, includes, version, size_bytes
                 FROM backups
                 WHERE guild_id = %s
                 ORDER BY created_at DESC
@@ -588,25 +611,42 @@ class Backup(app_commands.Group):
             for i in range(0, len(seq), size):
                 yield seq[i:i + size]
 
-        # Erste Embed mit Info
-        first_embed = discord.Embed(
-            title="Alle Backups:",
+        icon_map = {
+            "roles": "🧑‍🤝‍🧑 Rollen",
+            "channels": "📂 Channels",
+            "overwrites": "🔒 Overwrites",
+        }
+
+        # Kopf-Embed
+        head = discord.Embed(
+            title="Alle Backups",
             description=f"<:Astra_file1:1141303837181886494> Anzahl: **{total}**\nSortiert nach Erstellungsdatum (neu → alt).",
             color=discord.Colour.blue()
         )
-        await interaction.response.send_message(embed=first_embed, ephemeral=True)
+        await interaction.response.send_message(embed=head, ephemeral=True)
 
-        # Folge-Embeds mit den Listen
+        # Seitenweise Liste (10 pro Seite)
         for idx, block in enumerate(chunks(rows, 10), start=1):
             desc_lines = []
-            for code, created_at, includes in block:
-                date_str = created_at.strftime("%d.%m.%Y %H:%M")
-                # Beispiel: includes könnte eine Liste oder ein String wie "roles,channels,overwrites" sein
-                if isinstance(includes, (list, tuple)):
-                    includes_str = ", ".join(includes)
+            for code, created_at, includes, version, size_bytes in block:
+                # includes normalisieren -> Icons
+                if isinstance(includes, str):
+                    parts = [p for p in includes.split(",") if p]
+                elif isinstance(includes, (list, tuple)):
+                    parts = list(includes)
                 else:
-                    includes_str = str(includes)
-                desc_lines.append(f"**`{code}`**\n📅 {date_str} • Enthält: {includes_str}")
+                    parts = []
+                includes_str = ", ".join(icon_map.get(p, p) for p in parts) or "—"
+
+                # Discord relative timestamp + Größe
+                ts = int(created_at.timestamp())
+                when = f"<t:{ts}:f> • <t:{ts}:R>"  # z.B. 13.08.2025 18:25 • vor 2 Minuten
+                size_str = human_bytes(size_bytes) if isinstance(size_bytes, (int, float)) else "?"
+                meta = f"v{version} • {size_str}"
+
+                desc_lines.append(
+                    f"**`{code}`**\n📅 {when}\n🧾 {meta} • Enthält: {includes_str}"
+                )
 
             emb = discord.Embed(
                 title=f"Liste ({(idx - 1) * 10 + 1}–{(idx - 1) * 10 + len(block)})",
