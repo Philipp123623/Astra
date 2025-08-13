@@ -647,7 +647,7 @@ class Backup(app_commands.Group):
             ephemeral=True
         )
 
-    @app_commands.command(name="undo", description="Setzt den Server auf den Stand vor der letzten Wiederherstellung zurück.")
+    @app_commands.command(name="undo", description="Stellt den Stand vor der letzten Wiederherstellung wieder her.")
     @app_commands.checks.has_permissions(administrator=True)
     async def undo(self, interaction: discord.Interaction):
         cog = self._cog()
@@ -683,7 +683,7 @@ class Backup(app_commands.Group):
             ephemeral=True
         )
 
-    @app_commands.command(name="status", description="Zeigt den Fortschritt oder das Ergebnis des letzten Backup- oder Wiederherstellungsvorgangs.")
+    @app_commands.command(name="status", description="Zeigt den Status des letzten Backup- oder Wiederherstellungsvorgangs.")
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction):
         cog = self._cog()

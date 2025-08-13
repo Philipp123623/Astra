@@ -520,8 +520,7 @@ class Eco(app_commands.Group):
         await interaction.response.send_message(embed=embed)
 
 
-    @app_commands.command(name="coinflip",
-                          description="Lass die Münze entscheiden! Wähle 'Kopf' oder 'Zahl' und setze einen Einsatz.")
+    @app_commands.command(name="coinflip", description="Münzwurf: Wähle Kopf oder Zahl und setze.")
     @app_commands.guild_only()
     @app_commands.describe(wahl="Deine Wahl: 'Kopf' oder 'Zahl'", betrag="Der Betrag, den du setzen möchtest.")
     async def coinflip(self, interaction: discord.Interaction, wahl: str, betrag: int):

@@ -327,7 +327,7 @@ class Level(app_commands.Group):
         names = list_styles()
         return [app_commands.Choice(name=n, value=n) for n in names if current.lower() in n.lower()][:25]
 
-    @app_commands.command(name="rank", description="Zeigt deine Levelkarte oder die eines anderen Mitglieds an.")
+    @app_commands.command(name="rank", description="Zeigt dir dein aktuelles Level")
     @app_commands.describe(user="Das Mitglied, dessen Levelkarte angezeigt werden soll (Standard: du selbst).")
     @commands.cooldown(1, 3, commands.BucketType.user)
     @app_commands.guild_only()
@@ -554,7 +554,7 @@ class Level(app_commands.Group):
         )
         return None
 
-    @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Levelsystem auf diesem Server.")
+    @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Levelsystem.")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
@@ -697,7 +697,7 @@ class Level(app_commands.Group):
                             await interaction.response.send_message(
                                 "<:Astra_accept:1141303821176422460> **Der Levelupkanal wurde erfolgreich zurückgesetzt.**")
 
-    @app_commands.command(name="levelupnachricht", description="Lege eine individuelle oder keine Level-Up-Nachricht fest.")
+    @app_commands.command(name="levelupnachricht", description="Richte eine Levelup Nachricht ein.")
     @app_commands.checks.has_permissions(manage_messages=True)
     async def levelsystem_setmessage(self, interaction: discord.Interaction, arg: Literal['Custom Nachricht', 'Deaktivieren'], message: str = None):
 
@@ -738,7 +738,7 @@ class Level(app_commands.Group):
                             await interaction.response.send_message(
                                 "<:Astra_accept:1141303821176422460> **Die Level-UP-Nachricht wurde erfolgreich zurückgesetzt.**")
 
-    @app_commands.command(name="role")
+    @app_commands.command(name="role", description="Füge Levelrollen hinzu oder entferne sie.")
     @app_commands.describe(modus="Was soll passieren?", level="Ab welchem Level (1–100)?", role="Welche Rolle?")
     @app_commands.checks.has_permissions(manage_roles=True)
     async def levelsystem_role_add(self, interaction: discord.Interaction, modus: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'], level: int, role: discord.Role):

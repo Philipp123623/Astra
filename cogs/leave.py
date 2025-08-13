@@ -119,7 +119,7 @@ class leave(commands.Cog):
                         pass
                     return
 
-    @app_commands.command(name="leavemsg", description="Verwalte die Nachricht, die beim Verlassen eines Mitglieds gesendet wird.")
+    @app_commands.command(name="leavemsg", description="Lege eine Nachricht fest für User, die den Server verlassen.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)

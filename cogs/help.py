@@ -55,7 +55,6 @@ class HelpCog(commands.Cog):
     ALIASES = {
         # englisch -> tatsächlich genutzter Name
         "economy": "eco",
-        "eco": "eco",
         "job": "job",
         # hier ggf. weitere Synonyme hinterlegen
         "levels": "levelsystem",

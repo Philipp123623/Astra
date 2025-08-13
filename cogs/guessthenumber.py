@@ -67,7 +67,7 @@ class guessthenumber(commands.Cog):
                         else:
                             pass
 
-    @app_commands.command(name="guessthenumber", description="Verwalte das Minispiel 'Guess the Number' auf deinem Server.")
+    @app_commands.command(name="guessthenumber", description="Minispiel ‚Guess the Number‘ auf deinem Server verwalten.")
     @app_commands.describe(modus="Wähle 'Einschalten', um das Spiel zu starten, oder 'Ausschalten', um es zu beenden.", kanal="Der Kanal, in dem das Spiel stattfinden soll.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
