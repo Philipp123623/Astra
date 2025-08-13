@@ -412,7 +412,7 @@ class Benachrichtigung(app_commands.Group):
     @app_commands.command(name="twitch", description="Twitch-Kanal hinzufügen oder entfernen")
     @app_commands.describe(aktion="Hinzufügen oder Entfernen", channel="Discord-Kanal für Benachrichtigungen", channelname="Twitch-Channelname", rolle="(Optional) Rolle, die gepingt wird")
     @app_commands.guild_only()
-    async def twitch( self, interaction: discord.Interaction, aktion: Literal["Hinzufügen", "Entfernen"], channel: discord.TextChannel, channelname: str, rolle: Optional[discord.Role] = None):
+    async def twitch(self, interaction: discord.Interaction, aktion: Literal["Hinzufügen", "Entfernen"], channel: discord.TextChannel, channelname: str, rolle: Optional[discord.Role] = None):
         cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
         if not cog:
             return await interaction.response.send_message(embed=astra_embed(
