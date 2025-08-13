@@ -74,21 +74,53 @@ class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.uptime = datetime.utcnow()
-        self.command_ids = {}  # keys werden lowercase gehalten
-        self.pages = {}
+        self.command_ids: dict[str, int] = {}           # "key" -> command id
+        self.command_descriptions: dict[str, str] = {}  # "key" -> description
+        self.pages: dict[str, str] = {}
 
     async def on_ready_cache_ids(self):
+        """
+        Lädt alle global/guild-registrierten Application Commands
+        und cached:
+        - IDs für Slash-Mentions
+        - Beschreibungen (inkl. Subcommands)
+        """
         cmds = await self.bot.tree.fetch_commands()
         for cmd in cmds:
             if isinstance(cmd, app_commands.Group):
                 # root group
-                self.command_ids[cmd.name.lower()] = cmd.id
-                # subcommands -> wir mappen "group sub" auf die group-id (für Mentions ausreichend)
+                root_key = cmd.name.lower()
+                self.command_ids[root_key] = cmd.id
+                # Group-Description speichern (falls du sie brauchst)
+                self.command_descriptions[root_key] = cmd.description or ""
+
+                # Subcommands + Subgroups
                 for sub in cmd.commands:
-                    key = f"{cmd.name} {sub.name}".lower()
-                    self.command_ids[key] = cmd.id
+                    if isinstance(sub, app_commands.Group):
+                        # subgroup (group sub)
+                        subgroup_key = f"{cmd.name} {sub.name}".lower()
+                        self.command_ids[subgroup_key] = cmd.id  # Mention geht weiterhin über die Gruppen-ID
+                        self.command_descriptions[subgroup_key] = sub.description or ""
+
+                        for subsub in sub.commands:
+                            subsub_key = f"{cmd.name} {sub.name} {subsub.name}".lower()
+                            self.command_ids[subsub_key] = cmd.id
+                            self.command_descriptions[subsub_key] = subsub.description or ""
+                    else:
+                        # subcommand (group sub)
+                        sub_key = f"{cmd.name} {sub.name}".lower()
+                        self.command_ids[sub_key] = cmd.id  # Mention bleibt auf der Group-ID
+                        self.command_descriptions[sub_key] = sub.description or ""
             else:
-                self.command_ids[cmd.name.lower()] = cmd.id
+                key = cmd.name.lower()
+                self.command_ids[key] = cmd.id
+                self.command_descriptions[key] = cmd.description or ""
+
+        # Aliasse direkt mappen, wenn möglich
+        for alias, real in self.ALIASES.items():
+            if real in self.command_ids and alias not in self.command_ids:
+                self.command_ids[alias] = self.command_ids[real]
+            # Descriptions finden wir dynamisch in _cdesc mit Alias-Auflösung
 
     def _normalize_key(self, path: str) -> str:
         return path.strip().lower()
@@ -102,42 +134,30 @@ class HelpCog(commands.Cog):
 
     def _cid(self, path: str) -> int:
         """
-        Holt robust die Command-ID:
-        - exakter key (lowercase)
-        - Alias (z. B. economy -> eco)
-        - bei "group sub": Alias auf group anwenden
+        Holt robust die Command-ID für Slash-Mentions.
+        Für Subcommands wird weiterhin die Gruppen-ID verwendet.
         """
         key = self._normalize_key(path)
+        key = self._resolve_alias(key)
 
         # exakter Treffer
         if key in self.command_ids:
             return self.command_ids[key]
 
-        # Alias auf gesamten key
-        if key in self.ALIASES and self.ALIASES[key] in self.command_ids:
-            return self.command_ids[self.ALIASES[key]]
-
-        # group + sub?
+        # Wenn "group sub" nicht direkt drin ist, versuche: irgendein Sub unter der Group
         if " " in key:
-            group, sub = key.split(" ", 1)
-            group_alias = self.ALIASES.get(group, group)
-            combo = f"{group_alias} {sub}".lower()
-            if combo in self.command_ids:
-                return self.command_ids[combo]
-            # Falls Subcommand als anderer Name existiert (fallback: startswith-match)
+            group = key.split(" ", 1)[0]
             for k in self.command_ids.keys():
-                if k.startswith(f"{group_alias} "):
-                    # irgendein sub unter dieser group gefunden -> nutze group-id
+                if k == group or k.startswith(group + " "):
                     return self.command_ids[k]
 
-        # letzter Versuch: fuzzy startswith auf root-namen
+        # fuzzy root
         for k in self.command_ids.keys():
             if k == key or k.startswith(key + " ") or key.startswith(k + " "):
                 return self.command_ids[k]
 
-        # nichts gefunden -> klare Fehlermeldung
-        available = ", ".join(sorted(self.command_ids.keys()))
-        raise KeyError(f"Command '{path}' nicht gefunden. Verfügbar: {available}")
+        # Fallback: 0 (ungültig) – Mention wird dann nicht klickbar, aber dein Text bleibt bestehen
+        return 0
 
     def _cdesc(self, path: str) -> str:
         """
