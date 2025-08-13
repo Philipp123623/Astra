@@ -172,6 +172,85 @@ class BackupListView(discord.ui.View):
             if isinstance(child, (discord.ui.Button, discord.ui.Select)):
                 child.disabled = True
 
+
+def esc_md(s: str) -> str:
+    return discord.utils.escape_markdown(s or "")
+
+def fmt_mention_role(guild: discord.Guild, name: str) -> str:
+    r = discord.utils.find(lambda rr: rr.name == name, guild.roles)
+    return r.mention if r else esc_md(name)
+
+def fmt_mention_channel(guild: discord.Guild, name: str, ctype: int | None) -> str:
+    # Versuche, aktuellen Channel per Name zu finden und zu pingen
+    if name:
+        ch = discord.utils.find(lambda cc: cc.name == name, guild.channels)
+        if ch and hasattr(ch, "mention"):
+            return ch.mention
+    # Fallback nach Typ
+    if ctype == discord.ChannelType.voice.value:
+        return f"🔊 {esc_md(name)}"
+    elif ctype == discord.ChannelType.stage_voice.value:
+        return f"🎤 {esc_md(name)}"
+    elif ctype == discord.ChannelType.forum.value:
+        return f"🧵 {esc_md(name)}"
+    elif ctype == discord.ChannelType.news.value:
+        return f"📣 {esc_md(name)}"
+    else:
+        return f"# {esc_md(name)}"
+
+def join_vertical(lines: list[str], *, max_len: int = 1000) -> tuple[str, int]:
+    """Gibt multiline-String zurück; schneidet ab und liefert Restanzahl."""
+    out, used, rest = [], 0, 0
+    for i, line in enumerate(lines):
+        add = ("" if not out else "\n") + line
+        if used + len(add) > max_len:
+            rest = len(lines) - i
+            break
+        out.append(add if not out else line)
+        used += len(add)
+    return ("\n".join(out) if out else "—"), rest
+
+def build_category_tree_block(guild: discord.Guild, chans: list[dict]) -> str:
+    # Gruppiere nach Kategorie
+    cats: dict[str | None, list[dict]] = {}
+    for c in chans:
+        parent = c.get("parent_name")
+        cats.setdefault(parent, []).append(c)
+
+    # Sortierung
+    def sort_key(c): return (0 if c.get("type") == discord.ChannelType.category.value else 1, str(c.get("name","")).casefold())
+
+    lines: list[str] = []
+    # Kategorien (ohne None) zuerst
+    for cat_name in sorted([k for k in cats.keys() if k], key=lambda s: s.casefold()):
+        lines.append(f"**{esc_md(cat_name)}**")
+        for ch in sorted([c for c in cats[cat_name] if c.get('type') != discord.ChannelType.category.value], key=sort_key):
+            lines.append(f"└─ {fmt_mention_channel(guild, ch.get('name',''), ch.get('type'))}")
+
+    # Unkategorisiert
+    if None in cats:
+        lines.append("**Unkategorisiert**")
+        for ch in sorted([c for c in cats[None] if c.get('type') != discord.ChannelType.category.value], key=sort_key):
+            lines.append(f"└─ {fmt_mention_channel(guild, ch.get('name',''), ch.get('type'))}")
+
+    text, rest = join_vertical(lines, max_len=1000)
+    if rest:
+        text += f"\n… **+{rest} weitere**"
+    return text
+
+def build_vertical_list_role_mentions(guild: discord.Guild, names: list[str]) -> str:
+    lines = [fmt_mention_role(guild, n) for n in names]
+    text, rest = join_vertical(lines, max_len=1000)
+    if rest:
+        text += f"\n… **+{rest} weitere**"
+    return text
+
+def build_vertical_list_mentions(guild: discord.Guild, names: list[str], *, prefix_channel_type: int | None = None) -> str:
+    lines = [fmt_mention_channel(guild, n, prefix_channel_type) for n in names]
+    text, rest = join_vertical(lines, max_len=1000)
+    if rest:
+        text += f"\n… **+{rest} weitere**"
+    return text
 # =====================================================================
 # Cog: DB, Worker, Restore/Undo-Logik, Fortschritt & Aufräumen
 # =====================================================================
@@ -694,6 +773,7 @@ class Backup(app_commands.Group):
             role_names = sorted([x["name"] for x in roles if x.get("name") and x["name"] != "@everyone"],
                                 key=lambda s: s.casefold())
             categories = [c for c in chans if c.get("type") == discord.ChannelType.category.value]
+            category_tree = build_category_tree_block(interaction.guild, chans)
             text = [c for c in chans if
                     c.get("type") in (discord.ChannelType.text.value, discord.ChannelType.news.value)]
             voice = [c for c in chans if c.get("type") == discord.ChannelType.voice.value]
@@ -705,6 +785,7 @@ class Backup(app_commands.Group):
             text_names = sorted([c["name"] for c in text if c.get("name")], key=lambda s: s.casefold())
             voice_names = sorted([c["name"] for c in voice if c.get("name")], key=lambda s: s.casefold())
 
+
             entries.append({
                 "code": r["code"],
                 "created_at": r["created_at"],
@@ -712,6 +793,7 @@ class Backup(app_commands.Group):
                 "size": human_bytes(r["size_bytes"]) if isinstance(r["size_bytes"], (int, float)) else "?",
                 "roles_count": len(role_names),
                 "categories_count": len(cat_names),
+                "category_tree": category_tree,
                 "channels_total": len(chans) - len(categories),
                 "text_count": len(text_names),
                 "voice_count": len(voice_names),
@@ -729,6 +811,7 @@ class Backup(app_commands.Group):
 
         # hübsches Embed für EIN Backup
         def build_embed(entry: dict, idx: int, total_count: int) -> discord.Embed:
+            guild = interaction.guild
             ts = int(entry["created_at"].timestamp())
             head = (
                 f"<:Astra_info:1141303860556738620> **`{entry['code']}`**  •  v{entry['version']}  •  {entry['size']}\n"
@@ -738,31 +821,50 @@ class Backup(app_commands.Group):
 
             e = discord.Embed(title="Astra • Backups (Detailansicht)", description=head, color=discord.Colour.blue())
 
-            # Stats – erste Reihe
+            # Zähler hübsch in zwei Reihen
             row1 = " | ".join([
                 f"<:Astra_users:1141303946602872872> Rollen **{entry['roles_count']}**",
-                f"<:Astra_file2:1141303839543279666> Kategorien **{entry['categories_count']}**",
-                f"<:Astra_messages:1141303867850641488> Text **{entry['text_count']}**",
-                f"<:Astra_hear:1141303854881833081> Voice **{entry['voice_count']}**",
+                f"🗂️ Kategorien **{entry['categories_count']}**",
+                f"💬 Text **{entry['text_count']}**",
+                f"🔊 Voice **{entry['voice_count']}**",
             ])
-            # zweite Reihe
             row2 = " | ".join([
-                f"<:Astra_news:1141303885533827072> News **{entry['news_count']}**",
-                f"<:Astra_mic_on:1141303873294844005> Stage **{entry['stage_count']}**",
-                f"<:Astra_stift:1141825585836998716> Forum **{entry['forum_count']}**",
-                f"<:Astra_locked:1141824745243942912> Berechtigungen **{entry['overwrites_total']}**",
+                f"📣 News **{entry['news_count']}**",
+                f"🎤 Stage **{entry['stage_count']}**",
+                f"🧵 Forum **{entry['forum_count']}**",
+                f"🔒 Berechtigungen **{entry['overwrites_total']}**",
             ])
-
             e.add_field(name="Inhalt (Zähler)", value=f"{row1}\n{row2}", inline=False)
 
-            # Beispiel-Listen (eingekürzt & sortiert)
-            e.add_field(name=f"Rollen ({entry['roles_count']})", value=pretty_list(entry["role_names"]), inline=False)
-            e.add_field(name=f"Kategorien ({entry['categories_count']})", value=pretty_list(entry["cat_names"], "➜ "),
-                        inline=False)
-            e.add_field(name=f"Textkanäle ({entry['text_count']})", value=pretty_list(entry["text_names"], "# "),
-                        inline=False)
-            e.add_field(name=f"Voicekanäle ({entry['voice_count']})", value=pretty_list(entry["voice_names"], "🔊 "),
-                        inline=False)
+            # Vertikale Listen mit Pings (untereinander)
+            e.add_field(
+                name=f"Rollen ({entry['roles_count']})",
+                value=build_vertical_list_role_mentions(guild, entry["role_names"]),
+                inline=False
+            )
+
+            # Kategorie-Baum: Kategorie → darunter Channels (mit Pings)
+            # Dafür brauchen wir die original Channel-Struktur aus dem Backup;
+            # packen wir in entry["tree"] beim Aufbereiten (siehe unten) – oder bauen hier schnell aus Counts:
+            e.add_field(
+                name=f"Kategorien ({entry['categories_count']}) & Kanäle",
+                value=entry.get("category_tree", "—"),
+                inline=False
+            )
+
+            # Zusätzlich (falls du explizit getrennte Listen willst)
+            e.add_field(
+                name=f"Textkanäle ({entry['text_count']})",
+                value=build_vertical_list_mentions(guild, entry["text_names"],
+                                                   prefix_channel_type=discord.ChannelType.text.value),
+                inline=False
+            )
+            e.add_field(
+                name=f"Voicekanäle ({entry['voice_count']})",
+                value=build_vertical_list_mentions(guild, entry["voice_names"],
+                                                   prefix_channel_type=discord.ChannelType.voice.value),
+                inline=False
+            )
 
             e.set_footer(text=f"Seite {idx + 1}/{total_count} — Dropdown/Buttons zum Wechseln (eine Nachricht).")
             return e
