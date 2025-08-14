@@ -14,6 +14,8 @@ load_dotenv(dotenv_path="/root/Astra/.env")
 
 POLL_INTERVAL_MINUTES = 1
 WEBHOOK_NAME = "Astra-Notifier"
+# << Profilbild für den Webhook >>
+WEBHOOK_AVATAR_PATH = "/assets/Profilbilder/Idee_2_blau.jpg"
 
 YOUTUBE_USE_RSS = False
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
@@ -244,6 +246,7 @@ class Notifier(commands.Cog):
                         url=YOUTUBE_VIDEO_URL.format(video_id=vid),
                         color=YOUTUBE_COLOR,
                         ping_role_id=ping_role_id,
+                        button_label="Zum Video",
                     )
         else:
             if not YOUTUBE_API_KEY:
@@ -284,6 +287,7 @@ class Notifier(commands.Cog):
                     ping_role_id=ping_role_id,
                     author=(channel_title, details.get("channel_thumb")),
                     fields=fields,
+                    button_label="Zum Video",
                 )
 
     # ---------- Twitch ----------
@@ -310,7 +314,6 @@ class Notifier(commands.Cog):
         s = streams[0]
         stream_id = s.get("id")
         if stream_id and self._twitch_live_cache.get(login) == stream_id:
-            # Bereits gemeldet
             return
         if stream_id:
             self._twitch_live_cache[login] = stream_id
@@ -333,6 +336,7 @@ class Notifier(commands.Cog):
             ping_role_id=ping_role_id,
             author=(login, None),
             fields=fields,
+            button_label="Zum Stream",
         )
 
     # ---------- Webhooks ----------
@@ -348,8 +352,10 @@ class Notifier(commands.Cog):
         ping_role_id: Optional[int] = None,
         author: Optional[Tuple[str, Optional[str]]] = None,
         fields: Optional[Dict[str, str]] = None,
+        button_label: Optional[str] = None,
     ):
         webhook = await self._get_or_create_webhook(channel.guild.id, channel.id)
+
         e = discord.Embed(title=title, description=(description or "")[:2000], url=url, color=color)
         e.timestamp = datetime.now(timezone.utc)
         if thumbnail:
@@ -362,27 +368,55 @@ class Notifier(commands.Cog):
             for k, v in fields.items():
                 e.add_field(name=str(k), value=str(v) if v is not None else "—", inline=True)
         e.set_footer(text="Astra Notifier • Jetzt reinschauen!")
+
+        # Link-Button
+        view = None
+        if button_label and url:
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label=button_label, url=url))
+
         content = None
         allowed = discord.AllowedMentions(roles=True)
         if ping_role_id:
             role = channel.guild.get_role(int(ping_role_id))
             if role:
                 content = role.mention
-        await webhook.send(embed=e, content=content, allowed_mentions=allowed)
+
+        await webhook.send(
+            embed=e,
+            content=content,
+            allowed_mentions=allowed,
+            username=WEBHOOK_NAME,  # sicherheitshalber pro Nachricht
+            view=view,
+        )
 
     async def _get_or_create_webhook(self, guild_id: int, channel_id: int):
         key = (guild_id, channel_id)
         if key in self._webhook_cache:
             return self._webhook_cache[key]
+
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
         for wh in await channel.webhooks():
             if wh.name == WEBHOOK_NAME:
+                # Avatar ggf. einmal setzen, falls leer
+                await self._ensure_webhook_avatar(wh)
                 self._webhook_cache[key] = wh
                 return wh
+
         wh = await channel.create_webhook(name=WEBHOOK_NAME, reason="Astra Notifier")
+        await self._ensure_webhook_avatar(wh)
         self._webhook_cache[key] = wh
         return wh
+
+    async def _ensure_webhook_avatar(self, webhook: discord.Webhook):
+        try:
+            if WEBHOOK_AVATAR_PATH and os.path.isfile(WEBHOOK_AVATAR_PATH):
+                with open(WEBHOOK_AVATAR_PATH, "rb") as f:
+                    avatar_bytes = f.read()
+                await webhook.edit(name=WEBHOOK_NAME, avatar=avatar_bytes, reason="Set webhook avatar")
+        except Exception as e:
+            logging.info(f"[Notifier] Konnte Webhook-Avatar nicht setzen: {e}")
 
     async def _get_twitch_token(self):
         now = datetime.now(timezone.utc)
@@ -490,7 +524,6 @@ class Benachrichtigung(app_commands.Group):
                 ),
                 ephemeral=True,
             )
-            return None
         else:
             await cog.delete_subscription(interaction.guild_id, "twitch", channel.id, login)
             await interaction.response.send_message(
