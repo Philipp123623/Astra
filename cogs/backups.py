@@ -436,6 +436,224 @@ class BackupCog(commands.Cog):
             row = await cur.fetchone()
             return row[0] if row else None
 
+    # ---------- Export/Import (Datei <-> DB) ----------
+    async def _export_backup_bytes(self, code: str) -> tuple[str, bytes]:
+        """
+        Exportiert einen bestehenden DB-Backup-Datensatz als Datei.
+        WICHTIG: DB-Eintrag bleibt bestehen (kein Delete).
+        Datei enthält Metadaten + payload; ganze Datei wird (wie in DB) komprimiert.
+        """
+        data, row = await self._fetch_backup(code)
+
+        doc = {
+            "format": "astra-backup",
+            "format_version": 1,
+            "backup_version": int(row["version"]),
+            "code": row["code"],
+            "guild_id": int(row["guild_id"]),
+            "includes": (row.get("includes") or compute_includes(data)),
+            "hash": (row["hash"].hex() if isinstance(row["hash"], (bytes, bytearray)) else str(row["hash"])),
+            "payload": data,
+        }
+        raw = dumps(doc)
+
+        if _HAS_ZSTD:
+            out = zstd.ZstdCompressor(level=12).compress(raw)
+            ext = "zst.json"
+        else:
+            out = gzip.compress(raw)  # type: ignore
+            ext = "gz.json"
+
+        filename = f"astra-backup_{row['code']}_v{row['version']}.{ext}"
+        return filename, out
+
+    async def _verify_and_fix_db_entry(self, code: str) -> None:
+        """
+        Prüft den DB-Datensatz auf Vollständigkeit/Konsistenz:
+        - dekomprimiert data_blob -> payload
+        - recompute includes, size_bytes, hash
+        - korrigiert fehlende/falsche Werte per UPDATE
+        """
+        data, row = await self._fetch_backup(code)
+
+        # payload (re-)serialisieren für Hash/Blob-Vergleich
+        payload_raw = dumps(data)
+        digest = blake128(payload_raw)
+        size_bytes = int(row.get("size_bytes") or 0)
+        includes = (row.get("includes") or compute_includes(data))
+
+        blob_db: bytes = row["data_blob"]
+        try:
+            # Falls in DB ZSTD liegt
+            _ = zstd.ZstdDecompressor().decompress(blob_db)  # type: ignore
+            blob_should = zstd.ZstdCompressor(level=12).compress(payload_raw)  # type: ignore
+        except Exception:
+            # sonst gzip
+            _ = gzip.decompress(blob_db)
+            blob_should = gzip.compress(payload_raw)  # type: ignore
+
+        needs_update = False
+        fields: dict[str, T.Any] = {}
+
+        if size_bytes != len(row["data_blob"]):
+            fields["size_bytes"] = len(row["data_blob"])
+            needs_update = True
+
+        # hash in DB kann bytes oder hex-string sein
+        db_hash = row["hash"]
+        db_hash_hex = db_hash.hex() if isinstance(db_hash, (bytes, bytearray)) else str(db_hash)
+        if db_hash_hex.lower() != digest.hex():
+            fields["hash"] = digest
+            needs_update = True
+
+        if not row.get("includes") or row.get("includes") != includes:
+            fields["includes"] = includes
+            needs_update = True
+
+        # Wenn blob inhaltlich nicht passt (z. B. aus extern importiert ohne korrekte Kompression)
+        if blob_db != blob_should:
+            fields["data_blob"] = blob_should
+            fields["size_bytes"] = len(blob_should)
+            needs_update = True
+
+        if needs_update:
+            async with self.pool.acquire() as conn, conn.cursor() as cur:
+                parts = ", ".join(f"{k}=%s" for k in fields)
+                await cur.execute(f"UPDATE backups SET {parts} WHERE code=%s", (*fields.values(), code))
+                await conn.commit()
+
+    async def _import_backup_bytes(self, file_bytes: bytes, *, guild_id: int, overwrite: bool = False) -> str:
+        """
+        Importiert eine Backup-Datei (zstd/gzip/plain JSON/.txt) und schreibt/upsertet in DB.
+        - Prüft/rekonstruiert alle Felder (includes, version, size, hash, blob)
+        - 'overwrite=False': bei Code-Kollision wird ein neuer Code vergeben
+        - 'overwrite=True' : vorhandener Code wird aktualisiert
+        Rückgabe: effektiver Backup-Code in der DB.
+        """
+        # 1) Versuche dekomprimieren → JSON parsen
+        raw_candidates: list[bytes] = []
+
+        # zstd
+        try:
+            raw_candidates.append(zstd.ZstdDecompressor().decompress(file_bytes))  # type: ignore
+        except Exception:
+            pass
+
+        # gzip
+        if not raw_candidates:
+            try:
+                raw_candidates.append(gzip.decompress(file_bytes))  # type: ignore
+            except Exception:
+                pass
+
+        # plain bytes als UTF-8
+        if not raw_candidates:
+            try:
+                raw_candidates.append(file_bytes)
+            except Exception:
+                pass
+
+        doc = None
+        last_err = None
+        for raw in raw_candidates:
+            try:
+                # 1) direkt JSON
+                doc = loads(raw)
+                break
+            except Exception as e_json:
+                last_err = e_json
+                # 2) .txt mit "payload=" herausparsen (Fallback)
+                try:
+                    text = raw.decode("utf-8", "ignore")
+                    if "payload=" in text:
+                        payload_str = text.split("payload=", 1)[1].strip()
+                        # bis evtl. delimiter
+                        for stop in ["\n---", "\n###", "\nEND", "\nEOF"]:
+                            payload_str = payload_str.split(stop, 1)[0]
+                        payload = loads(payload_str.encode())
+                        # minimaler Container bauen
+                        doc = {
+                            "format": "astra-backup",
+                            "format_version": 1,
+                            "backup_version": BACKUP_VERSION,
+                            "code": None,
+                            "guild_id": guild_id,
+                            "includes": compute_includes(payload),
+                            "hash": blake128(dumps(payload)).hex(),
+                            "payload": payload,
+                        }
+                        break
+                except Exception as e_fallback:
+                    last_err = e_fallback
+                    continue
+
+        if not isinstance(doc, dict):
+            raise commands.UserInputError(f"Ungültige Backup-Datei (.txt/.json): {last_err or 'keine lesbaren Daten'}")
+
+        # 2) Validieren / Defaults setzen
+        if doc.get("format") != "astra-backup":
+            # Falls Nutzer rohen payload reinkopiert hat (ohne Header), akzeptieren
+            if "roles" in doc or "channels" in doc:
+                doc = {
+                    "format": "astra-backup",
+                    "format_version": 1,
+                    "backup_version": int(doc.get("version") or BACKUP_VERSION),
+                    "code": None,
+                    "guild_id": guild_id,
+                    "includes": compute_includes(doc),
+                    "hash": blake128(dumps(doc)).hex(),
+                    "payload": doc,
+                }
+            else:
+                raise commands.UserInputError("Ungültiges Format. Erwartet 'astra-backup' oder rohen payload (roles/channels).")
+
+        payload = doc.get("payload")
+        if not isinstance(payload, dict):
+            raise commands.UserInputError("Fehlendes oder ungültiges 'payload' im Backup.")
+
+        version = int(doc.get("backup_version") or BACKUP_VERSION)
+        code_in_file = (doc.get("code") or "").strip() or gen_backup_code()
+
+        # 3) Hash/Includes aus payload berechnen
+        payload_raw = dumps(payload)
+        digest = blake128(payload_raw)
+        includes = compute_includes(payload)
+
+        # 4) DB upsert (mit korrekter Kompression)
+        blob = zstd.ZstdCompressor(level=12).compress(payload_raw) if _HAS_ZSTD else gzip.compress(payload_raw)  # type: ignore
+
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM backups WHERE code=%s", (code_in_file,))
+            exists = await cur.fetchone()
+            if exists and not overwrite:
+                code = gen_backup_code()
+            else:
+                code = code_in_file
+
+            if exists and overwrite:
+                await cur.execute(
+                    """
+                    UPDATE backups
+                    SET guild_id=%s, includes=%s, version=%s, size_bytes=%s, `hash`=%s, data_blob=%s, created_at=NOW()
+                    WHERE code=%s
+                    """,
+                    (guild_id, includes, version, len(blob), digest, blob, code)
+                )
+            else:
+                await cur.execute(
+                    """
+                    INSERT INTO backups (code, guild_id, includes, version, size_bytes, `hash`, data_blob)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (code, guild_id, includes, version, len(blob), digest, blob)
+                )
+            await conn.commit()
+
+        # 5) Sicherheit: gleich verifizieren/ggf. korrigieren
+        await self._verify_and_fix_db_entry(code)
+        return code
+
+
     # ---------- Snapshot ----------
     async def _snapshot_guild(self, guild: discord.Guild) -> dict:
         roles = [{
@@ -987,6 +1205,69 @@ class Backup(app_commands.Group):
             ),
             ephemeral=True
         )
+
+    @app_commands.command(name="export", description="Exportiert ein Backup als Datei (.zst.json oder .gz.json).")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(code="Backup-Code, der exportiert werden soll.")
+    async def backup_export(self, interaction: discord.Interaction, code: str):
+        cog = self._cog()
+        try:
+            filename, file_bytes = await cog._export_backup_bytes(code)
+        except commands.UserInputError:
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Backup-Code.", ephemeral=True)
+            return
+        except Exception as e:
+            await interaction.response.send_message(f"<:Astra_x:1141303954555289600> Export-Fehler: {e}", ephemeral=True)
+            return
+
+        file = discord.File(fp=discord.BytesIO(file_bytes), filename=filename)
+        emb = discord.Embed(
+            title="Backup exportiert",
+            description=(
+                f"**Code:** `{code}`\n"
+                f"Der Datensatz bleibt **in der Datenbank erhalten**. "
+                f"Du kannst ihn separat mit `/backup delete` entfernen."
+            ),
+            color=discord.Colour.blue()
+        )
+        await interaction.response.send_message(embed=emb, file=file, ephemeral=True)
+
+    @app_commands.command(name="import", description="Importiert ein Backup aus einer Datei (.txt/.json/.zst.json/.gz.json) in die DB.")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(file="Die Export-Datei (oder .txt mit JSON/Payload)", overwrite="Vorhandenen Code überschreiben?")
+    async def backup_import(self, interaction: discord.Interaction, file: discord.Attachment, overwrite: bool = False):
+        cog = self._cog()
+        await interaction.response.defer(ephemeral=True)
+
+        # Datei laden
+        try:
+            file_bytes = await file.read()
+        except Exception as e:
+            await interaction.followup.send(f"<:Astra_x:1141303954555289600> Konnte Datei nicht lesen: {e}", ephemeral=True)
+            return
+
+        try:
+            code = await cog._import_backup_bytes(file_bytes, guild_id=interaction.guild_id, overwrite=overwrite)
+            await cog._verify_and_fix_db_entry(code)
+        except commands.UserInputError as ue:
+            await interaction.followup.send(f"<:Astra_x:1141303954555289600> {ue}", ephemeral=True)
+            return
+        except Exception as e:
+            await interaction.followup.send(f"<:Astra_x:1141303954555289600> Import-Fehler: {e}", ephemeral=True)
+            return
+
+        # Success
+        emb = discord.Embed(
+            title="Backup importiert",
+            description=(
+                f"**Code:** `{code}`\n"
+                f"Eintrag wurde in der **DB angelegt/aktualisiert** und ist damit lösch-/wiederherstellbar.\n"
+                f"→ Du kannst es jetzt z. B. mit `/backup load code:{code}` laden."
+            ),
+            color=discord.Colour.blue()
+        )
+        await interaction.followup.send(embed=emb, ephemeral=True)
+
 
 
 # -------------- setup: Cog + Group im Tree registrieren --------------
