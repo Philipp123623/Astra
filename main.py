@@ -112,6 +112,7 @@ class Astra(commands.Bot):
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
+            self.tree.add_command(testfehler)
             self.tree.add_command(Giveaway())
             self.tree.add_command(Reminder())
             logging.info("Astra ist online!")
@@ -1717,7 +1718,25 @@ async def sync(ctx, serverid: int = None):
         if guild is None:
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
+@app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
+async def testfehler(interaction: discord.Interaction, art: app_commands.Transform[str, str] = "runtime"):
+    # mehrere Varianten, damit du unterschiedliche Traces bekommst
+    if art == "runtime":
+        raise RuntimeError("Absichtlich ausgelöster Testfehler (runtime).")
+    elif art == "zero":
+        1 / 0  # ZeroDivisionError
+    elif art == "nested":
+        def a():
+            def b():
+                raise ValueError("Absichtlich verschachtelt (nested).")
+            b()
+        a()
+    else:
+        raise Exception(f"Unbekannte Testart: {art!r}")
 
+
+
+PROJECT_ROOT = "/root/Astra"          # zum Filtern deiner eigenen Frames
 LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
 
 # Slash-Command Fehlerbehandlung
@@ -1725,7 +1744,6 @@ LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     # Nutzer-Embed (ephemeral)
     embed = discord.Embed(colour=discord.Colour.red())
-    # display_avatar.url ist sicherer als avatar.url (kann None sein)
     try:
         embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
     except Exception:
@@ -1768,7 +1786,32 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         embed.title = "Unbekannter Fehler"
         embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt!"
 
-        # Helpers
+        # ===== Originalfehler auspacken (wichtig für echte Quelle/Traceback) =====
+        exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
+
+        # Voller Traceback-Text
+        full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+
+        # Frames extrahieren & beste "Origin" bestimmen (deine Datei/Zeile/Funktion)
+        tb_list = traceback.extract_tb(exc.__traceback__)
+        origin = "unbekannt"
+        code_line = None
+
+        def _shorten(p: str) -> str:
+            try:
+                return str(Path(p).resolve()).replace(PROJECT_ROOT + "/", "")
+            except Exception:
+                return p
+
+        project_frames = [f for f in tb_list if str(f.filename).startswith(PROJECT_ROOT)]
+        chosen = project_frames[-1] if project_frames else (tb_list[-1] if tb_list else None)
+        if chosen:
+            origin = f"{_shorten(chosen.filename)}:{chosen.lineno} in {chosen.name}()"
+            code_line = (chosen.line or "").strip()
+
+        short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+
+        # --------------------- Command/Options hübsch sammeln ---------------------
         def _safe(o):
             try:
                 return str(o)
@@ -1803,40 +1846,23 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             except Exception:
                 return None
 
-        # Traceback / Ort
-        etype, exc, tb = type(error), error, error.__traceback__
-        tb_list = traceback.extract_tb(tb)
-        last = tb_list[-1] if tb_list else None
-        location = "unbekannt"
-        code_line = None
-        if last:
-            location = f"{Path(last.filename).name}:{last.lineno} in {last.name}()"
-            code_line = (last.line or "").strip()
-        short_exc = "".join(traceback.format_exception_only(etype, exc)).strip()
-        full_trace = "".join(traceback.format_exception(etype, exc, tb))
-
-        # Command / Options
         cmd_name = _get_command_name(interaction)
         options = _get_options(interaction)
-        options_pretty = None
-        if options is not None:
-            try:
-                options_pretty = json.dumps(options, ensure_ascii=False, indent=2, default=_safe)
-                if len(options_pretty) > 950:
-                    options_pretty = options_pretty[:950] + " …"
-            except Exception:
-                options_pretty = _safe(options)
+        try:
+            options_pretty = json.dumps(options, ensure_ascii=False, indent=2, default=_safe)
+            if len(options_pretty) > 950:
+                options_pretty = options_pretty[:950] + " …"
+        except Exception:
+            options_pretty = _safe(options)
 
         # Tipps (heuristisch)
         tips = []
-        msg = str(exc)
-        if "NoneType" in msg and "url" in msg:
-            tips.append("Wahrscheinlich Zugriff auf `.url` eines None-Objekts (z. B. `avatar`). "
-                        "Nutze `display_avatar.url` oder prüfe vorher auf `None`.")
+        if "NoneType" in short_exc and "url" in short_exc:
+            tips.append("Wahrscheinlich Zugriff auf `.url` eines None-Objekts (z. B. `avatar`). Nutze `display_avatar.url`.")
         if code_line:
             tips.append(f"Zeile prüfen: `{code_line}`")
 
-        # Log an Channel
+        # --------------------------- Log an Channel ---------------------------
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             error_embed = discord.Embed(
@@ -1858,7 +1884,9 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             error_embed.add_field(name="Command", value=cmd_name or "unbekannt", inline=False)
             if options_pretty:
                 error_embed.add_field(name="Options", value=f"```json\n{options_pretty}\n```", inline=False)
-            error_embed.add_field(name="Ort", value=location, inline=False)
+
+            # >>> Hier steht jetzt wirklich deine Datei/Zeile
+            error_embed.add_field(name="Ort", value=origin, inline=False)
             error_embed.add_field(name="Fehler", value=f"```{short_exc}```", inline=False)
             if tips:
                 error_embed.add_field(name="Tipps", value="\n".join(f"• {t}" for t in tips), inline=False)
@@ -1871,7 +1899,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 inline=False
             )
 
-            # ---- Artefakte als TEMP-DATEIEN, um Buffer/Bytes-Probleme zu vermeiden ----
+            # Trace & Kontext als Dateien anhängen
             trace_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt")
             trace_tmp.write(full_trace)
             trace_tmp.close()
@@ -1882,7 +1910,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 "channel": {"id": getattr(channel, "id", None), "name": getattr(channel, "name", None)} if channel else None,
                 "command": cmd_name,
                 "options": options,
-                "location": location,
+                "origin": origin,  # wichtig
                 "short_error": short_exc,
             }
             ctx_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".json")
@@ -1893,7 +1921,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 discord.File(trace_tmp.name, filename="traceback.txt"),
                 discord.File(ctx_tmp.name, filename="context.json"),
             ]
-
             try:
                 await log_channel.send(embed=error_embed, files=files)
             finally:
