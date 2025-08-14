@@ -302,7 +302,7 @@ class Astra(commands.Bot):
         if msg.content in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>"):
             embed = discord.Embed(
                 title="Astra",
-                url="https://discord.gg/vwh2raq2Xu",
+                url="https://astra-bot.de/support",
                 colour=discord.Colour.blue(),
                 description=(
                     f"Hallo Discord! 👋\n"
@@ -311,9 +311,9 @@ class Astra(commands.Bot):
                     f"Automod-Schutz, Statistiken, temporäre Sprachkanäle und weitere hilfreiche Funktionen mit. "
                     f"Alle Befehle findest du bequem als **Slash-Befehle** (z. B. `/help`).\n\n"
                     f"Falls du Fragen oder Probleme hast, besuche gerne unseren "
-                    f"**[Support-Server ↗](https://discord.gg/vwh2raq2Xu)**. "
+                    f"**[Support-Server ↗](https://astra-bot.de/support)**. "
                     f"Wenn ich dein Interesse geweckt habe, kannst du mich "
-                    f"**[hier einladen ↗](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)** "
+                    f"**[hier einladen ↗](https://astra-bot.de/invite)** "
                     f"und direkt ausprobieren 🚀"
                 )
             )
