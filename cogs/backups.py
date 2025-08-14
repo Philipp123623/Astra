@@ -1215,13 +1215,15 @@ class Backup(app_commands.Group):
         try:
             filename, file_bytes = await cog._export_backup_bytes(code)
         except commands.UserInputError:
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Backup-Code.", ephemeral=True)
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Backup-Code.",
+                                                    ephemeral=True)
             return
         except Exception as e:
-            await interaction.response.send_message(f"<:Astra_x:1141303954555289600> Export-Fehler: {e}", ephemeral=True)
+            await interaction.response.send_message(f"<:Astra_x:1141303954555289600> Export-Fehler: {e}",
+                                                    ephemeral=True)
             return
 
-        file = discord.File(fp=discord.BytesIO(file_bytes), filename=filename)
+        file = discord.File(fp=io.BytesIO(file_bytes), filename=filename)  # FIXED
         emb = discord.Embed(
             title="Backup exportiert",
             description=(
