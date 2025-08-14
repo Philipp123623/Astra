@@ -1740,6 +1740,127 @@ PROJECT_ROOT = "/root/Astra"          # zum Filtern deiner eigenen Frames
 LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
 
 # Slash-Command Fehlerbehandlung
+# ---------- kleine Hilfsfunktionen ----------
+def _safe(o):
+    try:
+        return str(o)
+    except Exception:
+        return repr(o)
+
+def _shorten_path(p: str) -> str:
+    try:
+        return str(Path(p).resolve()).replace(PROJECT_ROOT + "/", "")
+    except Exception:
+        return p
+
+
+def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None, short_exc: str) -> list[str]:
+    """
+    Heuristiken für hilfreiche Tipps. Füge gerne weitere Regeln hinzu.
+    """
+    msg = f"{type(exc).__name__}: {str(exc)}"
+    tips: list[str] = []
+
+    # ---- Generische Python-Fehler ----
+    if isinstance(exc, AttributeError):
+        if "NoneType" in msg:
+            tips.append("Du greifst auf ein Objekt zu, das `None` ist. Prüfe vorher `if obj is not None:` oder nutze "
+                        "sichere Properties wie `user.display_avatar.url` statt `user.avatar.url`.")
+        else:
+            tips.append("Attribut existiert nicht. Tippfehler? Oder falscher Objekttyp? Mit `dir(obj)` prüfen.")
+    if isinstance(exc, KeyError):
+        m = re.search(r"KeyError: '?(.*?)'?$", msg)
+        k = f"`{m.group(1)}` " if m else ""
+        tips.append(f"Dict-Schlüssel {k}fehlt. Vorher `if key in d:` prüfen oder `dict.get(key)` mit Default nutzen.")
+    if isinstance(exc, TypeError):
+        tips.append("Falsche Typen/Argumente. Signatur der Funktion prüfen und Parameterreihenfolge/Default-Werte checken.")
+    if isinstance(exc, ValueError):
+        if "invalid literal for int()" in msg:
+            tips.append("String → int fehlgeschlagen. Vorher mit `.isdigit()` prüfen oder `try/except` umwandeln.")
+        else:
+            tips.append("Ungültiger Wert. Vor Übergabe validieren; ggf. klare Fehlermeldung werfen.")
+    if isinstance(exc, ZeroDivisionError):
+        tips.append("Division durch 0. Nenner vorab prüfen (`if x:`) oder `max(x, 1)`/Fehlerfälle abfangen.")
+    if isinstance(exc, AssertionError):
+        tips.append("Assertion schlug fehl. Prüfe die Annahmen in Tests/Guards oder ersetze `assert` durch sauberes Error-Handling.")
+
+    # ---- Async/Netzwerk ----
+    if isinstance(exc, asyncio.TimeoutError):
+        tips.append("Timeout. Timeout-Wert erhöhen oder Operation beschleunigen; ggf. Retry mit Backoff einbauen.")
+    if isinstance(exc, aiohttp.ClientConnectorError):
+        tips.append("Konnte keine Verbindung aufbauen. DNS/Host, Firewall, Proxy und Internet-Zugang prüfen.")
+    if isinstance(exc, aiohttp.ClientResponseError):
+        tips.append(f"HTTP-Status {exc.status}. URL/Parameter/Token prüfen. Bei 401/403: Credentials/Rechte; bei 404: Endpoint/ID; "
+                    "bei 5xx: später erneut versuchen / Retry mit Backoff.")
+
+    # ---- Discord spezifisch ----
+    if isinstance(exc, discord.Forbidden):
+        tips.append("Discord `Forbidden`: Dem Bot fehlen Berechtigungen (z. B. Nachrichten senden, Webhooks verwalten, Rollen erwähnen). "
+                    "Rollenhierarchie/Channel-Overrides prüfen.")
+    if isinstance(exc, discord.NotFound):
+        tips.append("Discord `NotFound`: Objekt existiert nicht (gelöschte Nachricht/Kanal/Webhook?). IDs/Cache neu laden.")
+    if isinstance(exc, discord.HTTPException):
+        if getattr(exc, "status", None) == 429 or "429" in msg:
+            tips.append("Rate-Limit (429). Weniger häufig senden, Requests bündeln oder Backoff/Retry einbauen.")
+        else:
+            tips.append("Allgemeiner Discord HTTP-Fehler. Payload/Größenlimits (Embeds, Dateien) und Rechte prüfen.")
+
+    # ---- MySQL / MariaDB (aiomysql/pymysql) ----
+    try:
+        import pymysql
+        if isinstance(exc, (pymysql.err.IntegrityError, pymysql.err.OperationalError, pymysql.err.ProgrammingError)):
+            # Duplicate
+            if "1062" in msg or "Duplicate entry" in msg:
+                tips.append("MySQL 1062 Duplicate Key: PRIMARY/UNIQUE-Key verletzt. Entweder vorher prüfen, "
+                            "`INSERT ... ON DUPLICATE KEY UPDATE` nutzen oder Schlüssel ändern.")
+            # Ambiguous column
+            if "1052" in msg and "ambiguous" in msg.lower():
+                tips.append("MySQL 1052 Ambiguous Column: Spaltennamen in `ON DUPLICATE KEY UPDATE` qualifizieren, z. B. "
+                            "`subscriptions.content_id` vs. `new.content_id` oder `VALUES(content_id)`.\n"
+                            "Beispiel:\n"
+                            "```sql\n"
+                            "ON DUPLICATE KEY UPDATE\n"
+                            "  last_item_id = IF(subscriptions.content_id <> VALUES(content_id), NULL, subscriptions.last_item_id)\n"
+                            "```")
+            # Unknown table
+            if "1146" in msg or "doesn't exist" in msg:
+                tips.append("Tabelle existiert nicht. Migration/CREATE TABLE ausführen und DB-User-Rechte prüfen.")
+            # Unknown column
+            if "1054" in msg and "Unknown column" in msg:
+                tips.append("Spalte existiert nicht. Migration anpassen (`ALTER TABLE ... ADD COLUMN ...`) "
+                            "oder Code auf Schema abstimmen.")
+            # Access denied
+            if "1045" in msg:
+                tips.append("MySQL 1045 Access denied: Benutzer/Passwort/Host prüfen; Rechte (GRANT) setzen.")
+            # Unknown DB
+            if "1049" in msg:
+                tips.append("MySQL 1049 Unknown database: DB-Name in der Config prüfen oder DB anlegen.")
+    except Exception:
+        pass
+
+    # ---- YouTube/Twitch spezifische Hinweise (aus deinem Projekt) ----
+    if "Invalid client credentials" in msg:
+        tips.append("OAuth-Credentials invalid: Prüfe `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` oder rotiere das Secret.")
+    if "quota" in msg.lower() and "youtube" in msg.lower():
+        tips.append("YouTube-Quota erreicht. API-Schlüssel prüfen, Abfragen drosseln, ggf. auf RSS umstellen (`YOUTUBE_USE_RSS=True`).")
+
+    # ---- Codezeile als Hinweis ----
+    if code_line:
+        tips.append(f"Zeile prüfen: `{code_line}`")
+
+    # ---- Origin-Hinweis (Datei) spezifisch ----
+    if origin.endswith("notifier.py") and ("ambiguous" in msg.lower() or "Duplicate" in msg):
+        tips.append("In `notifier.py` die SQL-Query noch einmal prüfen: alias `AS new` nur ab MySQL 8.0.19; "
+                    "für breite Kompatibilität `VALUES()` nutzen.")
+
+    # Fallback generisch
+    if not tips:
+        tips.append("Fehler lokal reproduzieren, Stacktrace aus `traceback.txt` lesen und die Stelle im Code (Origin) untersuchen.")
+
+    return tips
+
+
+# Slash-Command Fehlerbehandlung
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     # Nutzer-Embed (ephemeral)
@@ -1786,38 +1907,25 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         embed.title = "Unbekannter Fehler"
         embed.description = "❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt!"
 
-        # ===== Originalfehler auspacken (wichtig für echte Quelle/Traceback) =====
+        # Originalfehler auspacken (für echte Quelle/Traceback)
         exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
 
         # Voller Traceback-Text
         full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
-        # Frames extrahieren & beste "Origin" bestimmen (deine Datei/Zeile/Funktion)
+        # Frames extrahieren & Origin bestimmen (deine Datei/Zeile/Funktion)
         tb_list = traceback.extract_tb(exc.__traceback__)
         origin = "unbekannt"
         code_line = None
-
-        def _shorten(p: str) -> str:
-            try:
-                return str(Path(p).resolve()).replace(PROJECT_ROOT + "/", "")
-            except Exception:
-                return p
-
         project_frames = [f for f in tb_list if str(f.filename).startswith(PROJECT_ROOT)]
         chosen = project_frames[-1] if project_frames else (tb_list[-1] if tb_list else None)
         if chosen:
-            origin = f"{_shorten(chosen.filename)}:{chosen.lineno} in {chosen.name}()"
+            origin = f"{_shorten_path(chosen.filename)}:{chosen.lineno} in {chosen.name}()"
             code_line = (chosen.line or "").strip()
 
         short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
 
-        # --------------------- Command/Options hübsch sammeln ---------------------
-        def _safe(o):
-            try:
-                return str(o)
-            except Exception:
-                return repr(o)
-
+        # Command / Options
         def _get_command_name(itx: discord.Interaction) -> str:
             try:
                 if itx.command:
@@ -1855,14 +1963,10 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         except Exception:
             options_pretty = _safe(options)
 
-        # Tipps (heuristisch)
-        tips = []
-        if "NoneType" in short_exc and "url" in short_exc:
-            tips.append("Wahrscheinlich Zugriff auf `.url` eines None-Objekts (z. B. `avatar`). Nutze `display_avatar.url`.")
-        if code_line:
-            tips.append(f"Zeile prüfen: `{code_line}`")
+        # >>> SMART TIPS bauen
+        tips = _build_smart_tips(exc, origin=origin, code_line=code_line, short_exc=short_exc)
 
-        # --------------------------- Log an Channel ---------------------------
+        # ---- Log an Channel
         log_channel = bot.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             error_embed = discord.Embed(
@@ -1885,7 +1989,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             if options_pretty:
                 error_embed.add_field(name="Options", value=f"```json\n{options_pretty}\n```", inline=False)
 
-            # >>> Hier steht jetzt wirklich deine Datei/Zeile
             error_embed.add_field(name="Ort", value=origin, inline=False)
             error_embed.add_field(name="Fehler", value=f"```{short_exc}```", inline=False)
             if tips:
@@ -1910,7 +2013,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 "channel": {"id": getattr(channel, "id", None), "name": getattr(channel, "name", None)} if channel else None,
                 "command": cmd_name,
                 "options": options,
-                "origin": origin,  # wichtig
+                "origin": origin,
                 "short_error": short_exc,
             }
             ctx_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".json")
@@ -1938,6 +2041,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             await interaction.response.send_message(embed=embed, ephemeral=True)
     except discord.InteractionResponded:
         pass
+
 
 
 app = Flask(__name__)
