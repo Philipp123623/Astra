@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="/root/Astra/.env")
 
-POLL_INTERVAL_MINUTES = 5
+POLL_INTERVAL_MINUTES = 1
 WEBHOOK_NAME = "Astra-Notifier"
 
 YOUTUBE_USE_RSS = False
@@ -490,6 +490,7 @@ class Benachrichtigung(app_commands.Group):
                 ),
                 ephemeral=True,
             )
+            return None
         else:
             await cog.delete_subscription(interaction.guild_id, "twitch", channel.id, login)
             await interaction.response.send_message(
