@@ -296,14 +296,36 @@ class Astra(commands.Bot):
         if msg.author.bot:
             return
         await bot.process_commands(msg)
-        botcreated = str(bot.user.created_at.__format__('%A, %d %B, %Y'))
-        if msg.content == f"<@{bot.user.id}>" or msg.content == f"<@!{bot.user.id}>":
-            embed = discord.Embed(title="Astra", url="https://discord.gg/vwh2raq2Xu", colour=discord.Colour.blue(),
-                                  description=f"Hallo Discord!\nIch bin Astra. Ich wurde geboren am {botcreated}\nIch habe viele Verschiedene Systeme und Befehle, welche ein Level- und Ticketsystem beinhalten.\nAlle Befehle sind /-Befehle. Das bedeueter, dass du sie ganz einfach finden kannst.\nWenn du irgendwelche Fragen und Probleme hast, kannst du uns gerne über unseren **[Support Server ➚](https://discord.gg/vwh2raq2Xu)** kontaktieren.\nWenn ich nun dein Interesse geweckt habe, kannst du mich ganz einfach **[Einladen ➚](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)** und mich ausprobieren")
-            embed.set_author(name=msg.author, icon_url=msg.author.avatar)
-            embed.set_footer(text="Astra Development ©2025 | Für mehr Informationen kontaktiere uns via Discord.",
-                             icon_url=msg.guild.icon)
-            embed.set_thumbnail(url=msg.guild.icon)
+
+        # Bot-Erstellungsdatum als Discord UTC-Timestamp
+        botcreated_ts = int(bot.user.created_at.timestamp())
+
+        if msg.content in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>"):
+            embed = discord.Embed(
+                title="Astra",
+                url="https://astra-bot.de/support",
+                colour=discord.Colour.blue(),
+                description=(
+                    f"Hallo Discord! 👋\n"
+                    f"Ich bin **Astra** – geboren am <t:{botcreated_ts}:D>.\n\n"
+                    f"Ich bringe viele nützliche Systeme mit, darunter ein **Levelsystem** "
+                    f"und ein **Ticketsystem**. Sämtliche Befehle sind als **Slash-Befehle** verfügbar – "
+                    f"du kannst sie also ganz bequem im Chat finden.\n\n"
+                    f"Falls du Fragen oder Probleme hast, besuche gerne unseren "
+                    f"**[Support-Server ➚](https://astra-bot.de/support)**.\n\n"
+                    f"Habe ich dein Interesse geweckt? "
+                    f"Dann kannst du mich ganz einfach **[hier einladen ➚](https://astra-bot.de/invite)** "
+                    f"und ausprobieren! 🚀"
+                )
+            )
+            embed.set_author(name=str(msg.author), icon_url=msg.author.avatar.url if msg.author.avatar else None)
+            embed.set_footer(
+                text="Astra Development ©2025 | Mehr Infos gibt’s auf unserem Support-Server.",
+                icon_url=msg.guild.icon.url if msg.guild and msg.guild.icon else None
+            )
+            if msg.guild and msg.guild.icon:
+                embed.set_thumbnail(url=msg.guild.icon.url)
+
             await msg.channel.send(embed=embed)
             await bot.process_commands(msg)
 
