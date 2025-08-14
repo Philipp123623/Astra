@@ -112,13 +112,15 @@ class Notifier(commands.Cog):
             # Wenn content_id sich ändert, last_item_id/last_sent_at zurücksetzen
             await cur.execute(
                 """
-                INSERT INTO subscriptions (guild_id, discord_channel_id, platform, content_id, ping_role_id, last_item_id, last_sent_at)
-                VALUES (%s, %s, %s, %s, %s, NULL, NULL) AS new
-                ON DUPLICATE KEY UPDATE
-                    ping_role_id = new.ping_role_id,
-                    last_item_id = IF(content_id <> new.content_id, NULL, last_item_id),
-                    last_sent_at = IF(content_id <> new.content_id, NULL, last_sent_at),
-                    content_id = new.content_id
+                INSERT INTO subscriptions
+                (guild_id, discord_channel_id, platform, content_id, ping_role_id, last_item_id, last_sent_at)
+                    VALUES (%s, %s, %s, %s, %s, NULL, NULL) AS new
+                ON DUPLICATE KEY UPDATE ping_role_id = new.ping_role_id,
+                                        last_item_id = IF(subscriptions.content_id <> new.content_id, NULL,
+                                                          subscriptions.last_item_id),
+                                        last_sent_at = IF(subscriptions.content_id <> new.content_id, NULL,
+                                                          subscriptions.last_sent_at),
+                                        content_id   = new.content_id
                 """,
                 (str(guild_id), str(channel_id), platform, content_id, ping_role_id),
             )
