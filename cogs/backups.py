@@ -12,6 +12,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+def is_guild_owner():
+    async def predicate(interaction: discord.Interaction) -> bool:
+        return interaction.user.id == interaction.guild.owner_id
+    return app_commands.check(predicate)
+
 # ---------------- JSON & Kompression ----------------
 try:
     import orjson
@@ -1076,9 +1081,10 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=build_embed(entries[0], 0, total), view=view, ephemeral=True)
 
     @app_commands.command(name="load", description="Stellt ein Backup mithilfe eines Codes wieder her.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @is_guild_owner()
     @app_commands.describe(code="Der Backup-Code, der wiederhergestellt werden soll.")
     async def backup_load(self, interaction: discord.Interaction, code: str):
+
         cog = self._cog()
         try:
             await cog._fetch_backup(code)
@@ -1105,7 +1111,7 @@ class Backup(app_commands.Group):
         )
 
     @app_commands.command(name="undo", description="Stellt den Stand vor der letzten Wiederherstellung wieder her.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @is_guild_owner()
     async def backup_undo(self, interaction: discord.Interaction):
         cog = self._cog()
         last_restore = await cog._fetch_last_restore_job(interaction.guild_id)
@@ -1157,7 +1163,7 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
     @app_commands.command(name="delete", description="Lösche ältere Backups.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @is_guild_owner()
     @app_commands.describe(code="Der Backup-Code, der gelöscht werden soll.")
     async def backup_delete(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
@@ -1236,7 +1242,7 @@ class Backup(app_commands.Group):
         await interaction.response.send_message(embed=emb, file=file, ephemeral=True)
 
     @app_commands.command(name="import", description="Importiert ein Backup aus einer Datei (.txt/.json/.zst.json/.gz.json) in die DB.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @is_guild_owner()
     @app_commands.describe(file="Die Export-Datei (oder .txt mit JSON/Payload)", overwrite="Vorhandenen Code überschreiben?")
     async def backup_import(self, interaction: discord.Interaction, file: discord.Attachment, overwrite: bool = False):
         cog = self._cog()
