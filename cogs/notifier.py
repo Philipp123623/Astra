@@ -14,7 +14,6 @@ load_dotenv(dotenv_path="/root/Astra/.env")
 
 POLL_INTERVAL_MINUTES = 1
 WEBHOOK_NAME = "Astra-Notifier"
-# << Profilbild für den Webhook >>
 WEBHOOK_AVATAR_PATH = "/assets/Profilbilder/Idee_2_blau.jpg"
 
 YOUTUBE_USE_RSS = False
@@ -89,7 +88,6 @@ class Notifier(commands.Cog):
         self._webhook_cache: Dict[Tuple[int, int], discord.Webhook] = {}
         self._twitch_token: Optional[str] = None
         self._twitch_token_expire: Optional[datetime] = None
-        self._twitch_live_cache: Dict[str, str] = {}  # login -> stream_id
 
     async def cog_load(self):
         self.http = aiohttp.ClientSession()
@@ -111,11 +109,16 @@ class Notifier(commands.Cog):
         ping_role_id: Optional[int] = None,
     ):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
+            # Wenn content_id sich ändert, last_item_id/last_sent_at zurücksetzen
             await cur.execute(
                 """
-                INSERT INTO subscriptions (guild_id, discord_channel_id, platform, content_id, ping_role_id)
-                VALUES (%s, %s, %s, %s, %s) AS new
-                ON DUPLICATE KEY UPDATE content_id = new.content_id, ping_role_id = new.ping_role_id
+                INSERT INTO subscriptions (guild_id, discord_channel_id, platform, content_id, ping_role_id, last_item_id, last_sent_at)
+                VALUES (%s, %s, %s, %s, %s, NULL, NULL) AS new
+                ON DUPLICATE KEY UPDATE
+                    ping_role_id = new.ping_role_id,
+                    last_item_id = IF(content_id <> new.content_id, NULL, last_item_id),
+                    last_sent_at = IF(content_id <> new.content_id, NULL, last_sent_at),
+                    content_id = new.content_id
                 """,
                 (str(guild_id), str(channel_id), platform, content_id, ping_role_id),
             )
@@ -145,23 +148,42 @@ class Notifier(commands.Cog):
             row = await cur.fetchone()
         return True if row is None else bool(row[0])
 
+    async def _update_last_sent(
+        self,
+        guild_id: int,
+        platform: str,
+        channel_id: int,
+        content_id: str,
+        item_id: str,
+    ):
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        async with self.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE subscriptions
+                   SET last_item_id=%s, last_sent_at=%s
+                 WHERE guild_id=%s AND platform=%s AND discord_channel_id=%s AND content_id=%s
+                """,
+                (item_id, now, str(guild_id), platform, str(channel_id), content_id),
+            )
+
     # ---------- Poll Loop ----------
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
     async def check_for_updates(self):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT guild_id, discord_channel_id, platform, content_id, ping_role_id FROM subscriptions"
+                "SELECT guild_id, discord_channel_id, platform, content_id, ping_role_id, last_item_id FROM subscriptions"
             )
             subs = await cur.fetchall()
 
-        for guild_id, channel_id, platform, content_id, ping_role_id in subs:
+        for guild_id, channel_id, platform, content_id, ping_role_id, last_item_id in subs:
             try:
                 if not await self.is_enabled(int(guild_id), platform):
                     continue
                 if platform == "youtube":
-                    await self._check_youtube(content_id, int(guild_id), int(channel_id), ping_role_id)
+                    await self._check_youtube(content_id, int(guild_id), int(channel_id), ping_role_id, last_item_id)
                 elif platform == "twitch":
-                    await self._check_twitch(content_id, int(guild_id), int(channel_id), ping_role_id)
+                    await self._check_twitch(content_id, int(guild_id), int(channel_id), ping_role_id, last_item_id)
             except Exception as e:
                 g = self.bot.get_guild(int(guild_id))
                 guild_name = f"{g.name} ({g.id})" if g else str(guild_id)
@@ -218,7 +240,7 @@ class Notifier(commands.Cog):
         ch_thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url")
         return {"duration": duration, "views": views, "channel_thumb": ch_thumb}
 
-    async def _check_youtube(self, yt_channel_id: str, guild_id: int, target_channel_id: int, ping_role_id: Optional[int]):
+    async def _check_youtube(self, yt_channel_id: str, guild_id: int, target_channel_id: int, ping_role_id: Optional[int], last_item_id: Optional[str]):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         channel = guild.get_channel(target_channel_id) or await guild.fetch_channel(target_channel_id)
         if not isinstance(channel, discord.TextChannel):
@@ -226,6 +248,8 @@ class Notifier(commands.Cog):
             return
 
         published_after = (datetime.now(timezone.utc) - timedelta(minutes=POLL_INTERVAL_MINUTES))
+        items = []
+
         if YOUTUBE_USE_RSS:
             url = YOUTUBE_RSS_URL.format(channel_id=yt_channel_id)
             async with self.http.get(url) as resp:
@@ -235,19 +259,17 @@ class Notifier(commands.Cog):
                 r"<yt:videoId>(.*?)</yt:videoId>.*?<published>(.*?)</published>.*?<title>(.*?)</title>",
                 xml, flags=re.S
             )
+            parsed = []
             for vid, published, title in entries:
                 pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
                 if pub_dt > published_after:
-                    await self._send_webhook(
-                        channel,
-                        title=f"🎥 Neues Video: {title}",
-                        description="Ein neues Video ist online!",
-                        thumbnail="",
-                        url=YOUTUBE_VIDEO_URL.format(video_id=vid),
-                        color=YOUTUBE_COLOR,
-                        ping_role_id=ping_role_id,
-                        button_label="Zum Video",
-                    )
+                    parsed.append((pub_dt.isoformat().replace("+00:00", "Z"), vid, title))
+            parsed.sort(key=lambda t: t[0])  # älteste zuerst
+            for published_at, vid, title in parsed:
+                items.append({
+                    "id": {"videoId": vid},
+                    "snippet": {"title": title, "publishedAt": published_at}
+                })
         else:
             if not YOUTUBE_API_KEY:
                 return
@@ -257,41 +279,49 @@ class Notifier(commands.Cog):
                 "order": "date",
                 "type": "video",
                 "publishedAfter": published_after.isoformat().replace("+00:00", "Z"),
+                "maxResults": 5,
                 "key": YOUTUBE_API_KEY,
             }
             async with self.http.get(YOUTUBE_SEARCH_URL, params=params) as resp:
                 data = await resp.json()
-            for item in data.get("items", []):
-                vid = item["id"]["videoId"]
-                snip = item["snippet"]
-                title = snip["title"]
-                desc = snip.get("description", "")
-                thumb = snip["thumbnails"].get("high", snip["thumbnails"].get("default", {})).get("url", "")
-                channel_title = snip.get("channelTitle", "YouTube")
-                published_at = snip.get("publishedAt")
+            items = data.get("items", [])
+            items.sort(key=lambda it: it["snippet"].get("publishedAt", ""))  # älteste zuerst
 
-                details = await self._get_youtube_video_details(vid)
-                fields = {
-                    "Kanal": channel_title,
-                    "Veröffentlicht": published_at.replace("T", " ").replace("Z", " UTC") if published_at else "—",
-                    "Dauer": details.get("duration", "—"),
-                    "Aufrufe": details.get("views", "—"),
-                }
-                await self._send_webhook(
-                    channel,
-                    title=f"🎥 Neues Video: {title}",
-                    description=(desc or "Ein neues Video ist online!")[:500],
-                    thumbnail=thumb,
-                    url=YOUTUBE_VIDEO_URL.format(video_id=vid),
-                    color=YOUTUBE_COLOR,
-                    ping_role_id=ping_role_id,
-                    author=(channel_title, details.get("channel_thumb")),
-                    fields=fields,
-                    button_label="Zum Video",
-                )
+        for item in items:
+            vid = item["id"]["videoId"]
+            if last_item_id and vid == last_item_id:
+                continue  # bereits gemeldet
+            snip = item["snippet"]
+            title = snip.get("title", "Neues Video")
+            desc = snip.get("description", "")
+            thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url", "")
+            channel_title = snip.get("channelTitle", "YouTube")
+            published_at = snip.get("publishedAt")
+
+            details = await self._get_youtube_video_details(vid)
+            fields = {
+                "Kanal": channel_title,
+                "Veröffentlicht": published_at.replace("T", " ").replace("Z", " UTC") if published_at else "—",
+                "Dauer": details.get("duration", "—"),
+                "Aufrufe": details.get("views", "—"),
+            }
+            await self._send_webhook(
+                channel,
+                title=f"🎥 Neues Video: {title}",
+                description=(desc or "Ein neues Video ist online!")[:500],
+                thumbnail=thumb,
+                url=YOUTUBE_VIDEO_URL.format(video_id=vid),
+                color=YOUTUBE_COLOR,
+                ping_role_id=ping_role_id,
+                author=(channel_title, details.get("channel_thumb")),
+                fields=fields,
+                button_label="Zum Video",
+            )
+            await self._update_last_sent(guild_id, "youtube", target_channel_id, yt_channel_id, vid)
+            break  # nur ein neues pro Durchlauf
 
     # ---------- Twitch ----------
-    async def _check_twitch(self, login: str, guild_id: int, target_channel_id: int, ping_role_id: Optional[int]):
+    async def _check_twitch(self, login: str, guild_id: int, target_channel_id: int, ping_role_id: Optional[int], last_item_id: Optional[str]):
         guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(guild_id)
         channel = guild.get_channel(target_channel_id) or await guild.fetch_channel(target_channel_id)
         if not isinstance(channel, discord.TextChannel):
@@ -313,10 +343,8 @@ class Notifier(commands.Cog):
 
         s = streams[0]
         stream_id = s.get("id")
-        if stream_id and self._twitch_live_cache.get(login) == stream_id:
-            return
-        if stream_id:
-            self._twitch_live_cache[login] = stream_id
+        if stream_id and last_item_id and stream_id == last_item_id:
+            return  # bereits gemeldet
 
         title = s.get("title", f"{login} ist live!")
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
@@ -338,6 +366,8 @@ class Notifier(commands.Cog):
             fields=fields,
             button_label="Zum Stream",
         )
+        if stream_id:
+            await self._update_last_sent(guild_id, "twitch", target_channel_id, login, stream_id)
 
     # ---------- Webhooks ----------
     async def _send_webhook(
@@ -369,7 +399,6 @@ class Notifier(commands.Cog):
                 e.add_field(name=str(k), value=str(v) if v is not None else "—", inline=True)
         e.set_footer(text="Astra Notifier • Jetzt reinschauen!")
 
-        # Link-Button
         view = None
         if button_label and url:
             view = discord.ui.View()
@@ -386,7 +415,7 @@ class Notifier(commands.Cog):
             embed=e,
             content=content,
             allowed_mentions=allowed,
-            username=WEBHOOK_NAME,  # sicherheitshalber pro Nachricht
+            username=WEBHOOK_NAME,
             view=view,
         )
 
@@ -399,7 +428,6 @@ class Notifier(commands.Cog):
         channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
         for wh in await channel.webhooks():
             if wh.name == WEBHOOK_NAME:
-                # Avatar ggf. einmal setzen, falls leer
                 await self._ensure_webhook_avatar(wh)
                 self._webhook_cache[key] = wh
                 return wh

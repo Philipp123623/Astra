@@ -148,9 +148,13 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
+                await cur.execute("DROP TABLE subscriptions;")
+                await cur.execute("DROP TABLE notifier_settings;")
+
                 await cur.execute("CREATE TABLE IF NOT EXISTS clear_jobs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, channel_id BIGINT NOT NULL, amount INT NOT NULL, requested_by VARCHAR(128) NOT NULL, status ENUM('pending','processing','done') NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status_channel (status, channel_id), KEY idx_channel_created (channel_id, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
-                await cur.execute("CREATE TABLE IF NOT EXISTS subscriptions (guild_id BIGINT NOT NULL, discord_channel_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, content_id VARCHAR(255) NOT NULL, ping_role_id BIGINT NULL, PRIMARY KEY (guild_id, discord_channel_id, platform, content_id))")
+                await cur.execute("CREATE TABLE IF NOT EXISTS subscriptions (guild_id BIGINT NOT NULL, discord_channel_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, content_id VARCHAR(255) NOT NULL, ping_role_id BIGINT NULL, last_item_id VARCHAR(255) NULL, last_sent_at DATETIME NULL, PRIMARY KEY (guild_id, discord_channel_id, platform, content_id))")
                 await cur.execute("CREATE TABLE IF NOT EXISTS notifier_settings (guild_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, enabled TINYINT(1) NOT NULL DEFAULT 1, PRIMARY KEY (guild_id, platform))")
+
                 await cur.execute("CREATE TABLE IF NOT EXISTS levelstyle (guild_id BIGINT NOT NULL, client_id BIGINT NOT NULL, style VARCHAR(128) NOT NULL, PRIMARY KEY (guild_id, client_id))")
                 await cur.execute("CREATE TABLE IF NOT EXISTS backups (code VARCHAR(32) PRIMARY KEY, guild_id BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, includes TEXT NULL, version INT NOT NULL, size_bytes INT NOT NULL, `hash` BINARY(16) NOT NULL, `data_blob` LONGBLOB NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
                 await cur.execute("CREATE TABLE IF NOT EXISTS backup_jobs (job_id BIGINT PRIMARY KEY AUTO_INCREMENT, guild_id BIGINT NOT NULL, code VARCHAR(64), type ENUM('create','restore','undo') NOT NULL, status ENUM('pending','running','done','error') NOT NULL DEFAULT 'pending', step INT NOT NULL DEFAULT 0, total_steps INT NOT NULL DEFAULT 0, created_objects JSON NULL, status_channel_id BIGINT NULL, status_message_id BIGINT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, last_error TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
