@@ -297,7 +297,6 @@ class Astra(commands.Bot):
             return
         await bot.process_commands(msg)
 
-        # Bot-Erstellungsdatum als Discord-UTC-Timestamp
         botcreated_ts = int(bot.user.created_at.timestamp())
 
         if msg.content in (f"<@{bot.user.id}>", f"<@!{bot.user.id}>"):
@@ -306,56 +305,28 @@ class Astra(commands.Bot):
                 url="https://discord.gg/vwh2raq2Xu",
                 colour=discord.Colour.blue(),
                 description=(
-                    "Hallo Discord! 👋\n"
-                    "Ich bin **Astra** – geboren am <t:{0}:D>.\n"
-                    "Alle Befehle findest du als **Slash-Befehle** (z. B. `/help`)."
-                ).format(botcreated_ts)
+                    f"Hallo Discord! 👋\n"
+                    f"Ich bin **Astra**, geboren am <t:{botcreated_ts}:D>. "
+                    f"Ich bringe praktische Systeme wie ein Level- und Ticketsystem, Moderationstools, "
+                    f"Automod-Schutz, Statistiken, temporäre Sprachkanäle und weitere hilfreiche Funktionen mit. "
+                    f"Alle Befehle findest du bequem als **Slash-Befehle** (z. B. `/help`).\n\n"
+                    f"Falls du Fragen oder Probleme hast, besuche gerne unseren "
+                    f"**[Support-Server ↗](https://discord.gg/vwh2raq2Xu)**. "
+                    f"Wenn ich dein Interesse geweckt habe, kannst du mich "
+                    f"**[hier einladen ↗](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)** "
+                    f"und direkt ausprobieren 🚀"
+                )
             )
 
-            # Autor + Branding
             embed.set_author(
                 name=str(msg.author),
                 icon_url=msg.author.avatar.url if msg.author.avatar else None
             )
             if msg.guild and msg.guild.icon:
                 embed.set_thumbnail(url=msg.guild.icon.url)
-
-            # Klare Abschnitte
-            embed.add_field(
-                name="✨ Highlights",
-                value=(
-                    "• **Levelsystem** – XP, Rangrollen & Belohnungen\n"
-                    "• **Ticketsystem** – schnelle Hilfe, Transcripts & Kategorien\n"
-                    "• **Moderation** – Timeout, Mute, Warn, Ban mit Logs\n"
-                    "• **Willkommen & Auto-Rollen** – smoothe Onboarding-Erfahrung"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🆕 Neuere Systeme",
-                value=(
-                    "• **Automod & Schutz** – Anti-Spam/Raid, Wortfilter\n"
-                    "• **Statistiken** – Server- und Mitglieder-Stats (Kanäle/Badges)\n"
-                    "• **Temporäre Sprachkanäle** – Auto-Create & Auto-Cleanup\n"
-                    "• **Erinnerungen & Utilities** – kleine Quality-of-Life-Tools"
-                ),
-                inline=False
-            )
-
-            embed.add_field(
-                name="🔗 Nützliche Links",
-                value=(
-                    "• **[Support-Server ↗](https://discord.gg/vwh2raq2Xu)** – Fragen, Feedback & Hilfe\n"
-                    "• **[Astra einladen ↗]"
-                    "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)"
-                ),
-                inline=False
-            )
-
             embed.set_footer(
-                text="Astra Development ©2025 • Für mehr Infos: Support-Server",
-                icon_url=(msg.guild.icon.url if msg.guild and msg.guild.icon else None)
+                text="Astra Development ©2025 • Mehr Infos auf unserem Support-Server",
+                icon_url=msg.guild.icon.url if msg.guild and msg.guild.icon else None
             )
 
             await msg.channel.send(embed=embed)
