@@ -109,6 +109,7 @@ class afk(commands.Cog):
                         return await interaction.response.send_message(embed=embed)
                     if interaction.user == interaction.guild.owner:
                         return await interaction.response.send_message(embed=embed)
+                    return None
 
                 else:
                     embed = discord.Embed(
@@ -117,7 +118,7 @@ class afk(commands.Cog):
                     )
                     embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
                     await interaction.response.send_message(embed=embed)
-                    return
+                    return None
 
 
 async def setup(bot: commands.Bot) -> None:
