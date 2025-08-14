@@ -4,6 +4,7 @@ import hashlib
 import time
 import typing as T
 import uuid
+import io
 
 import aiohttp
 import aiomysql
