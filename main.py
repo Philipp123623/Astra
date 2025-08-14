@@ -1719,8 +1719,10 @@ async def sync(ctx, serverid: int = None):
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
 @app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
-async def testfehler(interaction: discord.Interaction, art: app_commands.Transform[str, str] = "runtime"):
-    # mehrere Varianten, damit du unterschiedliche Traces bekommst
+async def testfehler(
+    interaction: discord.Interaction,
+    art: Literal["runtime", "zero", "nested"] = "runtime",
+):
     if art == "runtime":
         raise RuntimeError("Absichtlich ausgelöster Testfehler (runtime).")
     elif art == "zero":
@@ -1731,8 +1733,6 @@ async def testfehler(interaction: discord.Interaction, art: app_commands.Transfo
                 raise ValueError("Absichtlich verschachtelt (nested).")
             b()
         a()
-    else:
-        raise Exception(f"Unbekannte Testart: {art!r}")
 
 
 
