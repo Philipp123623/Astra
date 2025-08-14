@@ -7,11 +7,12 @@ from datetime import datetime
 
 class WebsiteButton(discord.ui.Button):
     def __init__(self):
+        # Link-Buttons brauchen keinen custom_id und sind automatisch "persistierbar"
         super().__init__(label="🌐 Website", style=discord.ButtonStyle.link, url="https://astra-bot.de")
 
 
 class Dropdown(discord.ui.Select):
-    def __init__(self, cog):
+    def __init__(self, cog: commands.Cog):
         self.cog = cog
         options = [
             # Administration / Moderation
@@ -32,7 +33,14 @@ class Dropdown(discord.ui.Select):
             discord.SelectOption(label='Fun', value="Fun", emoji='<:Astra_fun:1141303841665601667>'),
             discord.SelectOption(label='Minispiele', value="Minigames", emoji='<:Astra_minigames:1141303876528648232>'),
         ]
-        super().__init__(placeholder='Wähle eine Seite', min_values=1, max_values=1, options=options)
+        # WICHTIG: custom_id setzen + timeoutlose View (siehe HelpView) macht das Select persistent
+        super().__init__(
+            placeholder='Wähle eine Seite',
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="help:dropdown"  # <- stabiler, eindeutiger Identifier
+        )
 
     async def callback(self, interaction: discord.Interaction):
         embed = discord.Embed(
@@ -40,19 +48,26 @@ class Dropdown(discord.ui.Select):
             description=self.cog.pages.get(self.values[0], "Seite nicht gefunden!"),
             colour=discord.Colour.blue()
         )
-        # safer: .display_avatar.url
         embed.set_author(
             name=f"Command Menü | {self.values[0]}",
             icon_url=getattr(interaction.client.user.display_avatar, "url", None)
         )
-        # safer: guild icon may be None
         guild_icon_url = getattr(getattr(interaction.guild, "icon", None), "url", None)
         embed.set_footer(text="Astra Development ©2025", icon_url=guild_icon_url)
 
-        view = View(timeout=None)
-        view.add_item(Dropdown(self.cog))
-        view.add_item(WebsiteButton())
+        # Für Folge-Interaktionen wieder dieselbe persistent View-Klasse verwenden
+        view = HelpView(self.cog)
         await interaction.response.edit_message(embed=embed, view=view)
+
+
+class HelpView(View):
+    """Persistent Help-View. Muss mit bot.add_view(...) registriert werden (siehe on_ready)."""
+    def __init__(self, cog: commands.Cog):
+        # timeout=None => persistent
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.add_item(Dropdown(cog))
+        self.add_item(WebsiteButton())
 
 
 class HelpCog(commands.Cog):
@@ -81,6 +96,7 @@ class HelpCog(commands.Cog):
         self.command_ids: dict[str, int] = {}           # "key" -> command id
         self.command_descriptions: dict[str, str] = {}  # "key" -> description
         self.pages: dict[str, str] = {}
+        self._view_registered = False  # verhindert doppeltes Registrieren bei Reconnects
 
     async def on_ready_cache_ids(self):
         """Cacht IDs (für Slash-Mentions) und Beschreibungen inkl. aller Subcommands – direkt aus der API-Struktur."""
@@ -178,6 +194,11 @@ class HelpCog(commands.Cog):
     async def on_ready(self):
         await self.on_ready_cache_ids()
         self._build_pages()
+        # PERSISTENTE VIEW REGISTRIEREN (nur einmal)
+        if not self._view_registered:
+            # Ohne message_id registrieren => reagiert auf alle Komponenten mit passender custom_id
+            self.bot.add_view(HelpView(self))
+            self._view_registered = True
         print(f"✅ Help command IDs cached: {len(self.command_ids)}")
 
     def _build_pages(self):
