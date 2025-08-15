@@ -1845,7 +1845,9 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
     snippet = "\n".join((full_trace or "").splitlines()[-40:])[:2000]
     prompt = (
         "Du bist ein präziser Python/discord.py/aiomysql-Debugger.\n"
-        "Gib maximal 5 konkrete, kurze Schritte zur Behebung (bullet points).\n\n"
+        "Antworte nur in 2–3 sehr kurzen Sätzen.\n"
+        "Gib nur die wichtigsten Schritte, um den Fehler schnell zu beheben.\n"
+        "Keine langen Erklärungen, kein unnötiger Text.\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
@@ -1858,7 +1860,7 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 512,
+                "num_predict": 60,  # ca. 35-40 Wörter
                 "temperature": 0.2,
                 "top_k": 30,
                 "top_p": 0.9,
