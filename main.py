@@ -1814,14 +1814,13 @@ def local_ai_tips(
 
     snippet = "\n".join((full_trace or "").splitlines()[-30:])[:1200]
     prompt = (
-        "Gib genau 3 Bulletpoints mit Lösungen zum Fehler.\n"
+        "Schreibe exakt 3 kurze Lösungsschritte als Bulletpoints.\n"
         "Regeln:\n"
-        "- Jeder Punkt maximal 8 Wörter\n"
-        "- Keine Erklärungen oder zusätzlichen Sätze\n"
-        "- Kein Einleitungstext, keine Überschrift\n"
-        "- Keine Entschuldigungen oder Floskeln\n"
-        "- Nur die Bulletpoints, sonst nichts\n"
-        "Du darfst KEINEN anderen Text ausgeben.\n\n"
+        "- Jeder Punkt beginnt mit '- '\n"
+        "- Maximal 8 Wörter pro Punkt\n"
+        "- Keine Nummerierung, kein Markdown, kein Fett\n"
+        "- Keine Erklärungen, kein Einleitungstext, kein Nachwort\n"
+        "- Nur diese 3 Bulletpoints, sonst nichts\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
@@ -1841,7 +1840,7 @@ def local_ai_tips(
                     "top_k": 30,
                     "top_p": 0.85,
                     "num_ctx": 512,
-                    "stop": ["\n\n", "\n\n\n", "Fehler", "Trace", "Ort", "Codezeile"]
+                    "stop": ["\n\n", "\n\n\n"]
 
                 }
             },
