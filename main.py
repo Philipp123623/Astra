@@ -1841,14 +1841,15 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
 
     snippet = "\n".join((full_trace or "").splitlines()[-40:])[:1500]
     prompt = (
-        "Antworte mit genau 3 Fehlerbehebungs-Schritten.\n"
+        "Du bist ein präziser Python-Fehlerbehebungsassistent.\n"
+        "Antworte NUR mit genau 3 kurzen Text-Anweisungen.\n"
+        "Keine Code-Beispiele, keine Zahlenrechnungen.\n"
         "Format:\n"
-        "- <kurzer Schritt 1>\n"
-        "- <kurzer Schritt 2>\n"
-        "- <kurzer Schritt 3>\n"
-        "Maximal 6 Wörter pro Schritt.\n"
-        "Keine Einleitungen. Keine Erklärungen. Keine 'Schritt 1'.\n"
-        "Nur die drei Zeilen.\n\n"
+        "- <kurzer Schritt>\n"
+        "- <kurzer Schritt>\n"
+        "- <kurzer Schritt>\n"
+        "Jeder Schritt maximal 6 Wörter.\n"
+        "Keine Einleitungen, keine 'Schritt 1', nur die 3 Zeilen.\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
