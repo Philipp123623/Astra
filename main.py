@@ -1791,49 +1791,22 @@ OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 # Cache für Antworten, damit wiederholte Tests nicht neu generieren
 AI_CACHE = {}
 AI_TTL = 6 * 3600  # 6 Stunden gültig
-AI_TIMEOUT = 8     # Sekunden Timeout pro Anfrage
-AI_MAX_OUT = 800  # oder 1000, wenn du viel Text willst
+AI_TIMEOUT = 8     # Sekunden Timeout pro Anfrage (Normalfall)
+AI_MAX_OUT = 800   # Maximale Zeichen
 
 def _sig(origin, exc_text):
     """Erstellt eine kurze Signatur aus Fehler-Infos (für Caching)."""
     h = hashlib.sha1((origin + "|" + exc_text).encode()).hexdigest()
     return h[:16]
 
-# Bot-Command zum Testen
-@bot.command(name="ollamatest")
-async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int() with base 10: 'abc'"):
-    """Testet die lokale Ollama-Anbindung mit einem Beispiel-Fehlertext."""
-    await ctx.send("⏳ Frage an Ollama…")
-
-    # Erstversuch mit langem Timeout (Modell kann beim ersten Mal lange laden)
-    try:
-        ai_tips = local_ai_tips(
-            origin="test_command.py:42 in ollama_test()",
-            code_line="int('abc')",
-            short_exc=fehler,
-            full_trace=f"Traceback (most recent call last):\n  File 'test_command.py', line 42, in ollama_test\n    {fehler}\n",
-            timeout_override=30  # <-- Neu: Erster Versuch, mehr Zeit geben
-        )
-    except TimeoutError:
-        await ctx.send("⏳ Lade Modell, das kann beim ersten Start bis zu 15 Sekunden dauern…")
-        ai_tips = None
-
-    # Wenn erster Versuch scheitert, nochmal mit normalem Timeout probieren
-    if not ai_tips:
-        ai_tips = local_ai_tips(
-            origin="test_command.py:42 in ollama_test()",
-            code_line="int('abc')",
-            short_exc=fehler,
-            full_trace=f"Traceback (most recent call last):\n  File 'test_command.py', line 42, in ollama_test\n    {fehler}\n"
-        )
-
-    if ai_tips:
-        await ctx.send(f"💡 **AI-Tipps:**\n{ai_tips}")
-    else:
-        await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
-
-
-def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str) -> str | None:
+def local_ai_tips(
+    origin: str,
+    code_line: str | None,
+    short_exc: str,
+    full_trace: str,
+    timeout_override: int | None = None
+) -> str | None:
+    """Fragt Ollama lokal nach kurzen Debug-Tipps."""
     sig = _sig(origin, short_exc.splitlines()[0])
     now = time.time()
     if (c := AI_CACHE.get(sig)) and now - c[0] < AI_TTL:
@@ -1848,7 +1821,7 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
         "- Kein unnötiger Text, keine Erklärungen\n"
         "- Direkt lösungsorientiert, kein Smalltalk\n"
         "- Nur relevante Fixes, keine Wiederholungen\n"
-        "- Kein Code außer minimalen Beispielen, nur wenn nötig\n\n"
+        "- Minimaler Code nur wenn nötig\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
@@ -1856,19 +1829,23 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
     )
 
     try:
-        r = requests.post(OLLAMA_URL, json={
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "num_predict": 50,   # Reicht für 3 Bullets
-                "temperature": 0.1,
-                "top_k": 30,
-                "top_p": 0.85,
-                "num_ctx": 512,
-                "stop": ["\n\n", "\n\n\n", "Schritt"]  # bricht ab, wenn Modell extra nummerieren will
-            }
-        }, timeout=AI_TIMEOUT)
+        r = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": 50,   # reicht für 3 Bullets
+                    "temperature": 0.1,
+                    "top_k": 30,
+                    "top_p": 0.85,
+                    "num_ctx": 512,
+                    "stop": ["\n\n", "\n\n\n", "Schritt"]
+                }
+            },
+            timeout=timeout_override if timeout_override else AI_TIMEOUT
+        )
         r.raise_for_status()
         text = (r.json().get("response") or "").strip()
         text = text[:AI_MAX_OUT]
@@ -1877,6 +1854,38 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             return text
     except Exception:
         return None
+
+# Bot-Command zum Testen
+@bot.command(name="ollamatest")
+async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int() with base 10: 'abc'"):
+    """Testet die lokale Ollama-Anbindung mit einem Beispiel-Fehlertext."""
+    await ctx.send("⏳ Frage an Ollama…")
+
+    # Erster Versuch: Langer Timeout für Modell-Start
+    ai_tips = local_ai_tips(
+        origin="test_command.py:42 in ollama_test()",
+        code_line="int('abc')",
+        short_exc=fehler,
+        full_trace=f"Traceback (most recent call last):\n  File 'test_command.py', line 42, in ollama_test\n    {fehler}\n",
+        timeout_override=30
+    )
+
+    # Falls erster Versuch fehlschlägt
+    if not ai_tips:
+        await ctx.send("⏳ Modell lädt noch… zweiter Versuch.")
+        ai_tips = local_ai_tips(
+            origin="test_command.py:42 in ollama_test()",
+            code_line="int('abc')",
+            short_exc=fehler,
+            full_trace=f"Traceback (most recent call last):\n  File 'test_command.py', line 42, in ollama_test\n    {fehler}\n"
+        )
+
+    # Ergebnis ausgeben
+    if ai_tips:
+        await ctx.send(f"💡 **AI-Tipps:**\n{ai_tips}")
+    else:
+        await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
+
 
 
 
