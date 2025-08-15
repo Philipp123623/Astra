@@ -1814,13 +1814,14 @@ def local_ai_tips(
 
     snippet = "\n".join((full_trace or "").splitlines()[-30:])[:1200]
     prompt = (
-        "Gib mir exakt 2 bis 3 Tipps im folgenden Format:\n"
+        "Schreibe genau 3 Tipps in diesem Format:\n"
         "Tipps\n"
         "• <maximal 12 Wörter>\n"
         "• <maximal 12 Wörter>\n"
         "• <maximal 12 Wörter>\n"
-        "Keine Erklärungen, keine zusätzlichen Sätze, keine Einleitung, kein Nachwort.\n"
-        "Nur diesen Block zurückgeben, sonst nichts.\n\n"
+        "Die Tipps müssen spezifisch zum Fehler passen.\n"
+        "Keine leeren Punkte. Keine Erklärungen. Keine Nummerierung.\n"
+        "Keine Einleitung, kein Nachwort, nur diesen Block.\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
