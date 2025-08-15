@@ -1643,23 +1643,6 @@ async def sync(ctx, serverid: int = None):
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
 
-
-@app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
-async def testfehler(
-    interaction: discord.Interaction,
-    art: Literal["runtime", "zero", "nested"] = "runtime",
-):
-    if art == "runtime":
-        raise RuntimeError("Absichtlich ausgelöster Testfehler (runtime).")
-    elif art == "zero":
-        1 / 0  # ZeroDivisionError
-    elif art == "nested":
-        def a():
-            def b():
-                raise ValueError("Absichtlich verschachtelt (nested).")
-            b()
-        a()
-
 app = Flask(__name__)
 
 @app.route('/status')

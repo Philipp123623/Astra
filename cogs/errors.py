@@ -1,8 +1,10 @@
+# cogs/error_handler.py
 import discord
 from discord import app_commands
 from discord.ext import commands
+from typing import Literal
+
 import traceback
-import json
 import os
 import re
 import asyncio
@@ -10,7 +12,6 @@ import aiohttp
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
-import platform
 
 PROJECT_ROOT = "/root/Astra"          # zum Filtern deiner eigenen Frames
 LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
@@ -29,115 +30,140 @@ def _shorten_path(p: str) -> str:
     except Exception:
         return p
 
-
 def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None, short_exc: str) -> list[str]:
     """
-    Erweitertes Tipp-System für viele Python-, Discord- und DB-Fehler.
-    Immer kurz & präzise.
+    Heuristiken für hilfreiche Tipps. (aus deiner main.py übernommen)
     """
-    msg = f"{type(exc).__name__}: {str(exc)}".strip()
+    msg = f"{type(exc).__name__}: {str(exc)}"
     tips: list[str] = []
 
-    # ---- Python-Standardfehler ----
+    # ---- Generische Python-Fehler ----
     if isinstance(exc, AttributeError):
         if "NoneType" in msg:
-            tips.append("Objekt ist None → if obj prüfen")
+            tips.append("Du greifst auf ein Objekt zu, das `None` ist. Prüfe vorher `if obj is not None:` oder nutze "
+                        "sichere Properties wie `user.display_avatar.url` statt `user.avatar.url`.")
         else:
-            tips.append("Attribut fehlt → Tippfehler/Typ prüfen")
+            tips.append("Attribut existiert nicht. Tippfehler? Oder falscher Objekttyp? Mit `dir(obj)` prüfen.")
     if isinstance(exc, KeyError):
         m = re.search(r"KeyError: '?(.*?)'?$", msg)
         k = f"`{m.group(1)}` " if m else ""
-        tips.append(f"Dict-Schlüssel {k}fehlt → if key in d prüfen")
+        tips.append(f"Dict-Schlüssel {k}fehlt. Vorher `if key in d:` prüfen oder `dict.get(key)` mit Default nutzen.")
     if isinstance(exc, TypeError):
-        tips.append("Falsche Argumente → Funktionssignatur prüfen")
+        tips.append("Falsche Typen/Argumente. Signatur der Funktion prüfen und Parameterreihenfolge/Default-Werte checken.")
     if isinstance(exc, ValueError):
         if "invalid literal for int()" in msg:
-            tips.append("String→int fehlgeschlagen → .isdigit() oder try/except")
+            tips.append("String → int fehlgeschlagen. Vorher mit `.isdigit()` prüfen oder `try/except` umwandeln.")
         else:
-            tips.append("Ungültiger Wert → Eingabe validieren")
+            tips.append("Ungültiger Wert. Vor Übergabe validieren; ggf. klare Fehlermeldung werfen.")
     if isinstance(exc, ZeroDivisionError):
-        tips.append("Division durch 0 → Nenner vorab prüfen")
+        tips.append("Division durch 0. Nenner vorab prüfen (`if x:`) oder `max(x, 1)`/Fehlerfälle abfangen.")
     if isinstance(exc, AssertionError):
-        tips.append("Assertion fehlgeschlagen → Bedingungen anpassen")
-    if isinstance(exc, IndexError):
-        tips.append("Index existiert nicht → len(seq) prüfen")
-    if isinstance(exc, ImportError):
-        tips.append("Modul fehlt → pip install ausführen")
-    if isinstance(exc, FileNotFoundError):
-        tips.append("Datei fehlt → Pfad prüfen/os.path.exists nutzen")
-    if isinstance(exc, PermissionError):
-        tips.append("Keine Berechtigung → chmod/chown prüfen")
-    if isinstance(exc, MemoryError):
-        tips.append("Speicher knapp → kleinere Datenmengen laden")
+        tips.append("Assertion schlug fehl. Prüfe die Annahmen in Tests/Guards oder ersetze `assert` durch sauberes Error-Handling.")
 
     # ---- Async/Netzwerk ----
     if isinstance(exc, asyncio.TimeoutError):
-        tips.append("Timeout → Timeout erhöhen oder Retry")
+        tips.append("Timeout. Timeout-Wert erhöhen oder Operation beschleunigen; ggf. Retry mit Backoff einbauen.")
     if isinstance(exc, aiohttp.ClientConnectorError):
-        tips.append("Keine Verbindung → DNS/Firewall prüfen")
+        tips.append("Konnte keine Verbindung aufbauen. DNS/Host, Firewall, Proxy und Internet-Zugang prüfen.")
     if isinstance(exc, aiohttp.ClientResponseError):
-        tips.append(f"HTTP {exc.status} → URL/Token prüfen")
+        tips.append(f"HTTP-Status {exc.status}. URL/Parameter/Token prüfen. Bei 401/403: Credentials/Rechte; bei 404: Endpoint/ID; "
+                    "bei 5xx: später erneut versuchen / Retry mit Backoff.")
 
     # ---- Discord spezifisch ----
     if isinstance(exc, discord.Forbidden):
-        tips.append("Berechtigung fehlt → Rollen/Channel-Overrides prüfen")
+        tips.append("Discord `Forbidden`: Dem Bot fehlen Berechtigungen (z. B. Nachrichten senden, Webhooks verwalten, Rollen erwähnen). "
+                    "Rollenhierarchie/Channel-Overrides prüfen.")
     if isinstance(exc, discord.NotFound):
-        tips.append("Objekt existiert nicht → ID/Caches prüfen")
+        tips.append("Discord `NotFound`: Objekt existiert nicht (gelöschte Nachricht/Kanal/Webhook?). IDs/Cache neu laden.")
     if isinstance(exc, discord.HTTPException):
         if getattr(exc, "status", None) == 429 or "429" in msg:
-            tips.append("Rate-Limit → Delay/Retry einbauen")
+            tips.append("Rate-Limit (429). Weniger häufig senden, Requests bündeln oder Backoff/Retry einbauen.")
         else:
-            tips.append("HTTP-Fehler → Payloadgröße & Rechte prüfen")
+            tips.append("Allgemeiner Discord HTTP-Fehler. Payload/Größenlimits (Embeds, Dateien) und Rechte prüfen.")
 
-    # ---- Datenbankfehler ----
+    # ---- MySQL / MariaDB (optional) ----
     try:
         import pymysql
         if isinstance(exc, (pymysql.err.IntegrityError, pymysql.err.OperationalError, pymysql.err.ProgrammingError)):
-            if "1062" in msg:
-                tips.append("Duplicate Key → vorher Existenz prüfen")
+            if "1062" in msg or "Duplicate entry" in msg:
+                tips.append("MySQL 1062 Duplicate Key: PRIMARY/UNIQUE-Key verletzt. Vorher prüfen oder "
+                            "`INSERT ... ON DUPLICATE KEY UPDATE` nutzen.")
             if "1052" in msg and "ambiguous" in msg.lower():
-                tips.append("Ambiguous Column → Spaltennamen qualifizieren")
-            if "1146" in msg:
-                tips.append("Tabelle fehlt → CREATE TABLE ausführen")
-            if "1054" in msg:
-                tips.append("Spalte fehlt → ALTER TABLE ADD COLUMN")
+                tips.append("MySQL 1052 Ambiguous Column: Spalten qualifizieren oder `VALUES()` / Aliase sauber nutzen.")
+            if "1146" in msg or "doesn't exist" in msg:
+                tips.append("Tabelle existiert nicht. Migration/CREATE TABLE ausführen und DB-User-Rechte prüfen.")
+            if "1054" in msg and "Unknown column" in msg:
+                tips.append("Spalte existiert nicht. Migration (`ALTER TABLE ... ADD COLUMN ...`) oder Code anpassen.")
             if "1045" in msg:
-                tips.append("Access denied → User/Pass/Host prüfen")
+                tips.append("MySQL 1045 Access denied: Benutzer/Passwort/Host prüfen; Rechte (GRANT) setzen.")
             if "1049" in msg:
-                tips.append("DB fehlt → CREATE DATABASE ausführen")
+                tips.append("MySQL 1049 Unknown database: DB-Name in der Config prüfen oder DB anlegen.")
     except Exception:
         pass
 
-    # ---- Zusätzliche generische Tipps ----
-    if code_line:
-        tips.append(f"Codezeile prüfen: `{code_line}`")
-    if origin and origin != "unbekannt":
-        tips.append(f"Datei: {origin}")
+    # ---- Projektspezifische Hinweise ----
+    if "Invalid client credentials" in msg:
+        tips.append("OAuth-Credentials invalid: `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` prüfen oder Secret rotieren.")
+    if "quota" in msg.lower() and "youtube" in msg.lower():
+        tips.append("YouTube-Quota erreicht. API-Schlüssel prüfen, Abfragen drosseln, ggf. RSS nutzen (`YOUTUBE_USE_RSS=True`).")
 
-    # Begrenzen auf maximal 6 Tipps
+    if code_line:
+        tips.append(f"Zeile prüfen: `{code_line}`")
+
+    if origin.endswith("notifier.py") and ("ambiguous" in msg.lower() or "Duplicate" in msg):
+        tips.append("In `notifier.py` SQL-Query prüfen: Alias/`VALUES()`-Nutzung für Kompatibilität.")
+
     if not tips:
-        tips.append("Fehler reproduzieren und Stacktrace prüfen")
-    return tips[:6]
+        tips.append("Fehler reproduzieren, `traceback.txt` checken und die Origin-Stelle untersuchen.")
+
+    return tips
 
 
 class ErrorHandler(commands.Cog):
+    """Cog mit Slash-Command + zentralem Error-Handling für App-Commands."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # Fallback, damit auch „freie“ App-Commands (falls vorhanden) über unseren Handler laufen
+        self.bot.tree.on_error = self._tree_on_error
 
-    # WICHTIG: In einer Cog nutzt man einen Event-Listener, nicht @bot.tree.error
-    @commands.Cog.listener()
-    async def on_app_command_error(
+    # --- Dein Test-Command jetzt als Cog-Methode ---
+    @app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
+    async def testfehler(
         self,
         interaction: discord.Interaction,
-        error: app_commands.AppCommandError
+        art: Literal["runtime", "zero", "nested"] = "runtime",
     ):
+        if art == "runtime":
+            raise RuntimeError("Absichtlich ausgelöster Testfehler (runtime).")
+        elif art == "zero":
+            1 / 0  # ZeroDivisionError
+        elif art == "nested":
+            def a():
+                def b():
+                    raise ValueError("Absichtlich verschachtelt (nested).")
+                b()
+            a()
+
+        # Falls aus Versehen ohne Fehler aufgerufen:
+        await interaction.response.send_message("Kein Fehler ausgelöst.", ephemeral=True)
+
+    # --- Primärer Hook für alle App-Command-Fehler aus dieser Cog ---
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        await self._handle_error(interaction, error)
+
+    # --- Fallback für Commands, die NICHT in einer Cog liegen (Safety-Net) ---
+    async def _tree_on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        await self._handle_error(interaction, error)
+
+    # --- Gemeinsame Fehlerbehandlung ---
+    async def _handle_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         embed = discord.Embed(colour=discord.Colour.red())
         try:
             embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
         except Exception:
             embed.set_author(name=str(interaction.user))
 
-        # Bekannte Fehlerfälle kurz erklären
+        # Bekannte Fehler kurz erklären
         if isinstance(error, app_commands.MissingPermissions):
             embed.title = "Fehlende Berechtigungen"
             embed.description = "❌ Du hast nicht die nötigen Berechtigungen."
@@ -169,7 +195,7 @@ class ErrorHandler(commands.Cog):
 
             exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
 
-            # Trace sammeln (robust, auch wenn __traceback__ None ist)
+            # Trace sicher zusammensetzen
             try:
                 full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
             except Exception:
@@ -189,7 +215,7 @@ class ErrorHandler(commands.Cog):
             short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
             tips = _build_smart_tips(exc, origin=origin, code_line=code_line, short_exc=short_exc)
 
-            # In Logchannel posten (falls vorhanden)
+            # In Log-Channel posten (falls vorhanden)
             log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
             if log_channel:
                 error_embed = discord.Embed(
@@ -211,7 +237,6 @@ class ErrorHandler(commands.Cog):
                 try:
                     await log_channel.send(embed=error_embed, file=discord.File(trace_tmp.name, filename="traceback.txt"))
                 except Exception:
-                    # Wenn selbst das Loggen fehlschlägt, nichts crashen lassen
                     pass
                 finally:
                     try:
@@ -228,7 +253,6 @@ class ErrorHandler(commands.Cog):
         except discord.InteractionResponded:
             pass
         except Exception:
-            # Nichts mehr tun, wenn Antworten komplett fehlschlägt
             pass
 
 
