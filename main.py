@@ -1792,7 +1792,7 @@ OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 AI_CACHE = {}
 AI_TTL = 6 * 3600  # 6 Stunden gültig
 AI_TIMEOUT = 8     # Sekunden Timeout pro Anfrage
-AI_MAX_OUT = 180   # Maximale Zeichen der Ausgabe
+AI_MAX_OUT = 800  # oder 1000, wenn du viel Text willst
 
 def _sig(origin, exc_text):
     """Erstellt eine kurze Signatur aus Fehler-Infos (für Caching)."""
