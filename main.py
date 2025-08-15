@@ -1833,26 +1833,26 @@ async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int
         await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
 
 
-def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str, timeout_override: int | None = None) -> str | None:
+def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str) -> str | None:
     sig = _sig(origin, short_exc.splitlines()[0])
     now = time.time()
     if (c := AI_CACHE.get(sig)) and now - c[0] < AI_TTL:
         return c[1]
 
-    snippet = "\n".join((full_trace or "").splitlines()[-40:])[:1500]
+    snippet = "\n".join((full_trace or "").splitlines()[-30:])[:1200]
     prompt = (
-        "Du bist ein präziser Python-Fehlerbehebungsassistent.\n"
-        "Antworte NUR mit genau 3 kurzen Text-Anweisungen.\n"
-        "Keine Code-Beispiele, keine Zahlenrechnungen.\n"
-        "Format:\n"
-        "- <kurzer Schritt>\n"
-        "- <kurzer Schritt>\n"
-        "- <kurzer Schritt>\n"
-        "Jeder Schritt maximal 6 Wörter.\n"
-        "Keine Einleitungen, keine 'Schritt 1', nur die 3 Zeilen.\n\n"
+        "Du bist ein erfahrener Python-Debugger (discord.py, aiomysql, asyncio).\n"
+        "Deine Aufgabe: Gib maximal **3 kurze Fix-Schritte** in Bulletpoints.\n"
+        "Regeln:\n"
+        "- Jeder Punkt <= 8 Wörter\n"
+        "- Kein unnötiger Text, keine Erklärungen\n"
+        "- Direkt lösungsorientiert, kein Smalltalk\n"
+        "- Nur relevante Fixes, keine Wiederholungen\n"
+        "- Kein Code außer minimalen Beispielen, nur wenn nötig\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
+        f"Trace (gekürzt):\n{snippet}\n"
     )
 
     try:
@@ -1861,14 +1861,14 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 35,
+                "num_predict": 50,   # Reicht für 3 Bullets
                 "temperature": 0.1,
-                "top_k": 20,
+                "top_k": 30,
                 "top_p": 0.85,
                 "num_ctx": 512,
-                "stop": ["\n\n", "\n\n\n"]
+                "stop": ["\n\n", "\n\n\n", "Schritt"]  # bricht ab, wenn Modell extra nummerieren will
             }
-        }, timeout=timeout_override or AI_TIMEOUT)  # hier nutzen wir den optionalen Timeout
+        }, timeout=AI_TIMEOUT)
         r.raise_for_status()
         text = (r.json().get("response") or "").strip()
         text = text[:AI_MAX_OUT]
