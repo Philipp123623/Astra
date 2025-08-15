@@ -1,23 +1,16 @@
-# cogs/error_handler.py
+# cogs/errors.py
 import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import Literal
 
-import traceback
-import os
-import re
-import asyncio
-import aiohttp
-import tempfile
+import traceback, json, os, re, asyncio, aiohttp, tempfile, sys, platform
 from pathlib import Path
 from datetime import datetime, timezone
 
-PROJECT_ROOT = "/root/Astra"          # zum Filtern deiner eigenen Frames
-LOG_CHANNEL_ID = 1141116983815962819  # ggf. anpassen
+PROJECT_ROOT = "/root/Astra"
+LOG_CHANNEL_ID = 1141116983815962819
 
-
-# ---------- kleine Hilfsfunktionen ----------
 def _safe(o):
     try:
         return str(o)
@@ -31,9 +24,6 @@ def _shorten_path(p: str) -> str:
         return p
 
 def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None, short_exc: str) -> list[str]:
-    """
-    Heuristiken für hilfreiche Tipps. (aus deiner main.py übernommen)
-    """
     msg = f"{type(exc).__name__}: {str(exc)}"
     tips: list[str] = []
 
@@ -101,7 +91,6 @@ def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None,
     except Exception:
         pass
 
-    # ---- Projektspezifische Hinweise ----
     if "Invalid client credentials" in msg:
         tips.append("OAuth-Credentials invalid: `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET` prüfen oder Secret rotieren.")
     if "quota" in msg.lower() and "youtube" in msg.lower():
@@ -115,18 +104,15 @@ def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None,
 
     if not tips:
         tips.append("Fehler reproduzieren, `traceback.txt` checken und die Origin-Stelle untersuchen.")
-
     return tips
 
 
-class ErrorHandler(commands.Cog):
-    """Cog mit Slash-Command + zentralem Error-Handling für App-Commands."""
+class ErrorCog(commands.Cog, name="errors"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Fallback, damit auch „freie“ App-Commands (falls vorhanden) über unseren Handler laufen
-        self.bot.tree.on_error = self._tree_on_error
+        # WICHTIG: KEIN self.bot.tree.on_error hier setzen → sonst Doppel-Antworten!
 
-    # --- Dein Test-Command jetzt als Cog-Methode ---
+    # Dein Test-Command IM COG
     @app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
     async def testfehler(
         self,
@@ -136,7 +122,7 @@ class ErrorHandler(commands.Cog):
         if art == "runtime":
             raise RuntimeError("Absichtlich ausgelöster Testfehler (runtime).")
         elif art == "zero":
-            1 / 0  # ZeroDivisionError
+            1 / 0
         elif art == "nested":
             def a():
                 def b():
@@ -144,117 +130,142 @@ class ErrorHandler(commands.Cog):
                 b()
             a()
 
-        # Falls aus Versehen ohne Fehler aufgerufen:
-        await interaction.response.send_message("Kein Fehler ausgelöst.", ephemeral=True)
-
-    # --- Primärer Hook für alle App-Command-Fehler aus dieser Cog ---
+    # Einziger Handler: greift für alle App-Commands dieser Cog
     async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         await self._handle_error(interaction, error)
 
-    # --- Fallback für Commands, die NICHT in einer Cog liegen (Safety-Net) ---
-    async def _tree_on_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        await self._handle_error(interaction, error)
-
-    # --- Gemeinsame Fehlerbehandlung ---
     async def _handle_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        embed = discord.Embed(colour=discord.Colour.red())
+        # User-Embed (ephemeral) – genau wie bei dir
+        user_embed = discord.Embed(
+            title="Unbekannter Fehler",
+            description="❌ Ein unerwarteter Fehler ist aufgetreten. Der Fehler wurde geloggt!",
+            colour=discord.Colour.red()
+        )
         try:
-            embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
+            user_embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
         except Exception:
-            embed.set_author(name=str(interaction.user))
+            user_embed.set_author(name=str(interaction.user))
 
-        # Bekannte Fehler kurz erklären
-        if isinstance(error, app_commands.MissingPermissions):
-            embed.title = "Fehlende Berechtigungen"
-            embed.description = "❌ Du hast nicht die nötigen Berechtigungen."
-        elif isinstance(error, app_commands.BotMissingPermissions):
-            embed.title = "Bot hat keine Berechtigung"
-            embed.description = "❌ Mir fehlen die nötigen Berechtigungen."
-        elif isinstance(error, app_commands.CommandOnCooldown):
-            embed.title = "Cooldown aktiv"
-            embed.description = f"⏳ Bitte warte {round(error.retry_after, 2)} Sekunden."
-        elif isinstance(error, app_commands.CommandNotFound):
-            embed.title = "Unbekannter Befehl"
-            embed.description = "❌ Dieser Slash-Command existiert nicht."
-        elif isinstance(error, app_commands.CheckFailure):
-            embed.title = "Zugriff verweigert"
-            embed.description = "❌ Voraussetzungen für diesen Befehl nicht erfüllt."
-        elif isinstance(error, app_commands.MissingRole):
-            embed.title = "Fehlende Rolle"
-            embed.description = "❌ Du brauchst eine bestimmte Rolle."
-        elif isinstance(error, app_commands.MissingAnyRole):
-            embed.title = "Fehlende Rollen"
-            embed.description = "❌ Du brauchst mindestens eine der Rollen."
-        elif isinstance(error, app_commands.TransformerError):
-            embed.title = "Ungültige Eingabe"
-            embed.description = "❌ Ungültige Argumente oder Umwandlung fehlgeschlagen."
-        else:
-            # Unbekannter/ungehandelter Fehler → Log mit Trace & Tipps
-            embed.title = "Unbekannter Fehler"
-            embed.description = "❌ Fehler geloggt!"
+        # Kontext sammeln
+        exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
+        try:
+            full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        except Exception:
+            full_trace = f"{type(exc).__name__}: {exc}"
 
-            exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
+        tb_list = traceback.extract_tb(getattr(exc, "__traceback__", None)) or []
+        origin = "unbekannt"; code_line = None
+        project_frames = [f for f in tb_list if str(f.filename).startswith(PROJECT_ROOT)]
+        chosen = project_frames[-1] if project_frames else (tb_list[-1] if tb_list else None)
+        if chosen:
+            origin = f"{_shorten_path(chosen.filename)}:{chosen.lineno} in {chosen.name}()"
+            code_line = (chosen.line or "").strip()
 
-            # Trace sicher zusammensetzen
+        short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+        tips = _build_smart_tips(exc, origin=origin, code_line=code_line, short_exc=short_exc)
+
+        # Optionen/Namespace → JSON für Log
+        try:
+            ns = getattr(interaction, "namespace", None)
+            options = {k: v for k, v in (getattr(ns, "__dict__", {}) or {}).items()}
+        except Exception:
+            options = {}
+
+        context = {
+            "user": {"id": getattr(interaction.user, "id", None), "name": str(interaction.user)},
+            "guild": {"id": getattr(interaction.guild, "id", None), "name": getattr(interaction.guild, "name", None)} if interaction.guild else None,
+            "channel": {"id": getattr(interaction.channel, "id", None), "name": getattr(interaction.channel, "name", None)} if interaction.channel else None,
+            "command": getattr(interaction.command, "name", None),
+            "options": options,
+            "bot": {
+                "latency": round(self.bot.latency or 0, 3),
+                "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                "discord_py": discord.__version__,
+                "os": f"{platform.system()} {platform.release()} | {platform.version()}",
+                "pid": os.getpid(),
+                "time": datetime.now(timezone.utc).isoformat()
+            }
+        }
+
+        # Log-Embed im gewünschten Format
+        log_embed = discord.Embed(
+            title="SlashCommand Error",
+            colour=discord.Colour.red(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        # User
+        log_embed.add_field(
+            name="User",
+            value=f"{context['user']['name']} ({context['user']['id']})",
+            inline=False
+        )
+        # Guild / Channel
+        g = context["guild"]; c = context["channel"]
+        log_embed.add_field(
+            name="Guild / Channel",
+            value=f"{g['name']} ({g['id']}) / # {c['name']} ({c['id']})" if g and c else "DM / unbekannt",
+            inline=False
+        )
+        # Command + Options
+        log_embed.add_field(name="Command", value=str(context["command"]), inline=False)
+        log_embed.add_field(name="Options", value=f"```json\n{json.dumps(context['options'], ensure_ascii=False, indent=2)}\n```", inline=False)
+        # Ort
+        log_embed.add_field(name="Ort", value=origin, inline=False)
+        # Fehler
+        log_embed.add_field(name="Fehler", value=f"```{short_exc}```", inline=False)
+        # Tipps
+        if tips:
+            log_embed.add_field(name="Tipps", value="\n".join(f"• {t}" for t in tips), inline=False)
+        # Kontext
+        botctx = context["bot"]
+        ctx_text = (
+            f"Bot Latency: {botctx['latency']}\n"
+            f"Python: {botctx['python']} | discord.py: {botctx['discord_py']}\n"
+            f"OS: {botctx['os']} | PID: {botctx['pid']}\n"
+            f"Zeit: {botctx['time']}"
+        )
+        log_embed.add_field(name="Kontext", value=ctx_text, inline=False)
+
+        # Dateien anhängen
+        trace_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt")
+        ctx_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".json")
+        try:
+            trace_tmp.write(full_trace); trace_tmp.close()
+            ctx_tmp.write(json.dumps(context, ensure_ascii=False, indent=2)); ctx_tmp.close()
+        except Exception:
             try:
-                full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                trace_tmp.close(); ctx_tmp.close()
             except Exception:
-                full_trace = f"{type(exc).__name__}: {exc}"
+                pass
 
-            tb_list = traceback.extract_tb(getattr(exc, "__traceback__", None)) or []
-            origin = "unbekannt"
-            code_line = None
-
-            # eigene Frames bevorzugen
-            project_frames = [f for f in tb_list if str(f.filename).startswith(PROJECT_ROOT)]
-            chosen = project_frames[-1] if project_frames else (tb_list[-1] if tb_list else None)
-            if chosen:
-                origin = f"{_shorten_path(chosen.filename)}:{chosen.lineno} in {chosen.name}()"
-                code_line = (chosen.line or "").strip()
-
-            short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
-            tips = _build_smart_tips(exc, origin=origin, code_line=code_line, short_exc=short_exc)
-
-            # In Log-Channel posten (falls vorhanden)
-            log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
-            if log_channel:
-                error_embed = discord.Embed(
-                    title="SlashCommand Error",
-                    colour=discord.Colour.red(),
-                    timestamp=datetime.now(timezone.utc)
-                )
-                error_embed.add_field(name="Ort", value=origin, inline=False)
-                error_embed.add_field(name="Fehler", value=f"```{short_exc}```", inline=False)
-                if tips:
-                    error_embed.add_field(name="Tipps", value="\n".join(f"• {t}" for t in tips), inline=False)
-
-                trace_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt")
-                try:
-                    trace_tmp.write(full_trace)
-                finally:
-                    trace_tmp.close()
-
-                try:
-                    await log_channel.send(embed=error_embed, file=discord.File(trace_tmp.name, filename="traceback.txt"))
-                except Exception:
-                    pass
-                finally:
-                    try:
-                        os.remove(trace_tmp.name)
-                    except Exception:
-                        pass
-
-        # Antwort an den User (immer ephemer)
+        # Senden
         try:
             if interaction.response.is_done():
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=user_embed, ephemeral=True)
             else:
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message(embed=user_embed, ephemeral=True)
         except discord.InteractionResponded:
             pass
-        except Exception:
-            pass
+
+        log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
+        if log_channel:
+            try:
+                await log_channel.send(
+                    embed=log_embed,
+                    files=[
+                        discord.File(trace_tmp.name, filename="traceback.txt"),
+                        discord.File(ctx_tmp.name, filename="context.json"),
+                    ],
+                )
+            except Exception:
+                pass
+        # Clean up
+        for fp in (trace_tmp.name, ctx_tmp.name):
+            try:
+                os.remove(fp)
+            except Exception:
+                pass
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ErrorHandler(bot))
+    await bot.add_cog(ErrorCog(bot))
