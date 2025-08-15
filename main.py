@@ -1785,7 +1785,7 @@ def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None,
     return tips
 
 # Ollama-Config
-OLLAMA_MODEL = "deepseek-coder:6.7b-instruct-q4_K_M"
+OLLAMA_MODEL = "deepseek-coder:1.3b-instruct-q4_K_M"
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
 # Cache für Antworten, damit wiederholte Tests nicht neu generieren
