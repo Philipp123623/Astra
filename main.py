@@ -1814,14 +1814,12 @@ def local_ai_tips(
 
     snippet = "\n".join((full_trace or "").splitlines()[-30:])[:1200]
     prompt = (
-        "Du bist ein erfahrener Python-Debugger (discord.py, aiomysql, asyncio).\n"
-        "Deine Aufgabe: Gib maximal **3 kurze Fix-Schritte** in Bulletpoints.\n"
+        "Gib GENAU 3 Bulletpoints mit Lösungen zum Fehler.\n"
         "Regeln:\n"
-        "- Jeder Punkt <= 8 Wörter\n"
-        "- Kein unnötiger Text, keine Erklärungen\n"
-        "- Direkt lösungsorientiert, kein Smalltalk\n"
-        "- Nur relevante Fixes, keine Wiederholungen\n"
-        "- Minimaler Code nur wenn nötig\n\n"
+        "- Jeder Punkt maximal 8 Wörter.\n"
+        "- Keine Erklärungen, keine zusätzlichen Sätze.\n"
+        "- Kein Einleitungstext, keine Überschrift.\n"
+        "- Nur die Bulletpoints, sonst nichts.\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
@@ -1841,7 +1839,7 @@ def local_ai_tips(
                     "top_k": 30,
                     "top_p": 0.85,
                     "num_ctx": 512,
-                    "stop": ["\n\n", "\n\n\n", "Schritt"]
+                    "stop": ["\n\n", "\n\n\n", "Fehler", "Trace"]
                 }
             },
             timeout=timeout_override if timeout_override else AI_TIMEOUT
