@@ -1858,7 +1858,7 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 256,
+                "num_predict": 512,
                 "temperature": 0.2,
                 "top_k": 30,
                 "top_p": 0.9,
