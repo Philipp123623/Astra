@@ -121,17 +121,23 @@ def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None,
 
 
 class ErrorHandler(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # WICHTIG: In einer Cog nutzt man einen Event-Listener, nicht @bot.tree.error
     @commands.Cog.listener()
-    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def on_app_command_error(
+        self,
+        interaction: discord.Interaction,
+        error: app_commands.AppCommandError
+    ):
         embed = discord.Embed(colour=discord.Colour.red())
         try:
             embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
         except Exception:
             embed.set_author(name=str(interaction.user))
 
+        # Bekannte Fehlerfälle kurz erklären
         if isinstance(error, app_commands.MissingPermissions):
             embed.title = "Fehlende Berechtigungen"
             embed.description = "❌ Du hast nicht die nötigen Berechtigungen."
@@ -153,19 +159,27 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, app_commands.MissingAnyRole):
             embed.title = "Fehlende Rollen"
             embed.description = "❌ Du brauchst mindestens eine der Rollen."
-        elif isinstance(error, app_commands.errors.TransformerError):
+        elif isinstance(error, app_commands.TransformerError):
             embed.title = "Ungültige Eingabe"
             embed.description = "❌ Ungültige Argumente oder Umwandlung fehlgeschlagen."
         else:
+            # Unbekannter/ungehandelter Fehler → Log mit Trace & Tipps
             embed.title = "Unbekannter Fehler"
             embed.description = "❌ Fehler geloggt!"
 
             exc = error.original if isinstance(error, app_commands.CommandInvokeError) and getattr(error, "original", None) else error
-            full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
 
-            tb_list = traceback.extract_tb(exc.__traceback__)
+            # Trace sammeln (robust, auch wenn __traceback__ None ist)
+            try:
+                full_trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            except Exception:
+                full_trace = f"{type(exc).__name__}: {exc}"
+
+            tb_list = traceback.extract_tb(getattr(exc, "__traceback__", None)) or []
             origin = "unbekannt"
             code_line = None
+
+            # eigene Frames bevorzugen
             project_frames = [f for f in tb_list if str(f.filename).startswith(PROJECT_ROOT)]
             chosen = project_frames[-1] if project_frames else (tb_list[-1] if tb_list else None)
             if chosen:
@@ -175,6 +189,7 @@ class ErrorHandler(commands.Cog):
             short_exc = "".join(traceback.format_exception_only(type(exc), exc)).strip()
             tips = _build_smart_tips(exc, origin=origin, code_line=code_line, short_exc=short_exc)
 
+            # In Logchannel posten (falls vorhanden)
             log_channel = self.bot.get_channel(LOG_CHANNEL_ID)
             if log_channel:
                 error_embed = discord.Embed(
@@ -188,14 +203,23 @@ class ErrorHandler(commands.Cog):
                     error_embed.add_field(name="Tipps", value="\n".join(f"• {t}" for t in tips), inline=False)
 
                 trace_tmp = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False, suffix=".txt")
-                trace_tmp.write(full_trace)
-                trace_tmp.close()
+                try:
+                    trace_tmp.write(full_trace)
+                finally:
+                    trace_tmp.close()
 
                 try:
                     await log_channel.send(embed=error_embed, file=discord.File(trace_tmp.name, filename="traceback.txt"))
+                except Exception:
+                    # Wenn selbst das Loggen fehlschlägt, nichts crashen lassen
+                    pass
                 finally:
-                    os.remove(trace_tmp.name)
+                    try:
+                        os.remove(trace_tmp.name)
+                    except Exception:
+                        pass
 
+        # Antwort an den User (immer ephemer)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(embed=embed, ephemeral=True)
@@ -203,7 +227,10 @@ class ErrorHandler(commands.Cog):
                 await interaction.response.send_message(embed=embed, ephemeral=True)
         except discord.InteractionResponded:
             pass
+        except Exception:
+            # Nichts mehr tun, wenn Antworten komplett fehlschlägt
+            pass
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(ErrorHandler(bot))
