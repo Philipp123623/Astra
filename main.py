@@ -1833,23 +1833,22 @@ async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int
         await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
 
 
-# Anpassung in local_ai_tips, um Timeout zu überschreiben:
-def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str, timeout_override: int | None = None) -> str | None:
-    """Fragt Ollama lokal nach Tipps und gibt kurze Antwort zurück."""
+def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str) -> str | None:
     sig = _sig(origin, short_exc.splitlines()[0])
     now = time.time()
     if (c := AI_CACHE.get(sig)) and now - c[0] < AI_TTL:
         return c[1]
 
-    # Stacktrace auf relevante letzten Zeilen kürzen
-    snippet = "\n".join((full_trace or "").splitlines()[-40:])[:2000]
+    snippet = "\n".join((full_trace or "").splitlines()[-40:])[:1500]
     prompt = (
         "Du bist ein präziser Python/discord.py/aiomysql-Debugger.\n"
-        "Antworte direkt mit 2–3 sehr kurzen Schritten, nummeriert.\n"
-        "Keine Einleitung, keine Begrüßung, keine Erklärtexte.\n"
-        "Jeder Schritt maximal 1 kurzer Satz.\n"
-        "Antwort MUSS vollständig enden und darf nicht abbrechen.\n"
-        "Falls Lösung unklar, gib die wahrscheinlichsten Fixes an.\n\n"
+        "Gib GENAU 3 konkrete, kurze Fix-Schritte in Bulletpoints.\n"
+        "Jeder Punkt max. 10 Wörter.\n"
+        "Kein Intro, keine Erklärungen, keine unnötigen Wörter.\n"
+        "Beispiel:\n"
+        "- Eingabe validieren vor int()\n"
+        "- try/except für ValueError\n"
+        "- Nur Ziffern akzeptieren\n\n"
         f"Fehler: {short_exc}\n"
         f"Ort: {origin}\n"
         f"Codezeile: {code_line or '—'}\n"
@@ -1862,14 +1861,14 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 120,  # ca. 35-40 Wörter
-                "temperature": 0.2,
-                "top_k": 30,
-                "top_p": 0.9,
-                "num_ctx": 1024,
-                "stop": ["\n\n", "\n\n\n"]  # bricht sauber nach letzten Punkt/Absatz ab
+                "num_predict": 60,   # reicht für 3 kurze Bullets
+                "temperature": 0.1,  # minimal kreativ
+                "top_k": 20,
+                "top_p": 0.85,
+                "num_ctx": 512,
+                "stop": ["\n\n", "\n\n\n"]  # bricht am Ende der Bulletpoints ab
             }
-        }, timeout=timeout_override or AI_TIMEOUT)
+        }, timeout=AI_TIMEOUT)
         r.raise_for_status()
         text = (r.json().get("response") or "").strip()
         text = text[:AI_MAX_OUT]
@@ -1878,6 +1877,7 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             return text
     except Exception:
         return None
+
 
 # Slash-Command Fehlerbehandlung
 @bot.tree.error
