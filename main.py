@@ -1833,7 +1833,7 @@ async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int
         await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
 
 
-def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str) -> str | None:
+def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str, timeout_override: int | None = None) -> str | None:
     sig = _sig(origin, short_exc.splitlines()[0])
     now = time.time()
     if (c := AI_CACHE.get(sig)) and now - c[0] < AI_TTL:
@@ -1861,14 +1861,14 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             "prompt": prompt,
             "stream": False,
             "options": {
-                "num_predict": 60,   # reicht für 3 kurze Bullets
-                "temperature": 0.1,  # minimal kreativ
+                "num_predict": 60,
+                "temperature": 0.1,
                 "top_k": 20,
                 "top_p": 0.85,
                 "num_ctx": 512,
-                "stop": ["\n\n", "\n\n\n"]  # bricht am Ende der Bulletpoints ab
+                "stop": ["\n\n", "\n\n\n"]
             }
-        }, timeout=AI_TIMEOUT)
+        }, timeout=timeout_override or AI_TIMEOUT)  # hier nutzen wir den optionalen Timeout
         r.raise_for_status()
         text = (r.json().get("response") or "").strip()
         text = text[:AI_MAX_OUT]
@@ -1877,6 +1877,7 @@ def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace
             return text
     except Exception:
         return None
+
 
 
 # Slash-Command Fehlerbehandlung
