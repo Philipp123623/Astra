@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.app_commands import Group
 from flask import Flask, request, jsonify
 import io
+import hashlib
 import json
 import platform
 import datetime
@@ -371,84 +372,6 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
-@bot.command()
-async def chat(ctx, *, prompt: str):
-    full_prompt = (
-        "Du bist ein hilfreicher, deutscher KI-Assistent. "
-        "Antworte klar, sachlich und prägnant. "
-        "Vermeide Ausschweifungen, halte die Antwort kompakt.\n\n"
-        f"Frage: {prompt}\nAntwort:"
-    )
-
-    antwort = ""
-    last_update = time.monotonic()
-    start_time = time.monotonic()
-
-    # Initiale Nachricht
-    message = await ctx.send("🤖 Ich denke nach...")
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(
-                "http://localhost:11434/api/generate",
-                json={"model": "mistral", "prompt": full_prompt, "stream": True, "temperature": 0.3, "num_predict": 2000}
-            ) as resp_stream:
-
-                if resp_stream.status != 200:
-                    await ctx.send(f"❌ KI-Server Fehler: Status {resp_stream.status}")
-                    return
-
-                async for raw_line in resp_stream.content:
-                    line = raw_line.decode().strip()
-                    if not line:
-                        continue
-                    if line.startswith("data: "):
-                        line = line[6:]
-                    if line == "[DONE]":
-                        break
-
-                    try:
-                        data = json.loads(line)
-                        token = data.get("response", "")
-                        antwort += token
-                    except Exception as e:
-                        logging.error(f"Fehler beim Parsen der Daten: {e}")
-                        continue
-
-                    now = time.monotonic()
-                    if now - last_update > 0.5:
-                        elapsed = now - start_time
-                        embed = discord.Embed(
-                            title="🤖 KI-Antwort (Streaming...)",
-                            description=antwort + "▌",
-                            colour=discord.Colour.blue()
-                        )
-                        embed.set_footer(text=f"Astra Bot | Powered by Ollama | Laufzeit: {elapsed:.1f}s")
-                        embed.set_author(
-                            name=ctx.author.display_name,
-                            icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
-                        )
-                        await message.edit(embed=embed)
-                        last_update = now
-
-            # Finale Embed-Nachricht
-            elapsed = time.monotonic() - start_time
-            embed = discord.Embed(
-                title="🤖 KI-Antwort",
-                description=antwort.strip(),
-                colour=discord.Colour.blue()
-            )
-            embed.set_footer(text=f"Astra Bot | Powered by Ollama | Gesamtzeit: {elapsed:.1f}s")
-            embed.set_author(
-                name=ctx.author.display_name,
-                icon_url=ctx.author.avatar.url if ctx.author.avatar else None,
-            )
-            await message.edit(embed=embed)
-
-        except Exception as e:
-            logging.error(f"Fehler im Chat-Command: {e}", exc_info=True)
-            await ctx.send(f"❌ Fehler: {e}")
 
 class VoteView(discord.ui.View):
     def __init__(self):
@@ -1718,6 +1641,8 @@ async def sync(ctx, serverid: int = None):
         if guild is None:
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
+
+
 @app_commands.command(name="testfehler", description="Wirft absichtlich einen Fehler zum Testen des Error-Handlers.")
 async def testfehler(
     interaction: discord.Interaction,
@@ -1859,6 +1784,78 @@ def _build_smart_tips(exc: BaseException, *, origin: str, code_line: str | None,
 
     return tips
 
+# Ollama-Config
+OLLAMA_MODEL = "llama3.2:1b-instruct-q4_K_M"
+OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+
+# Cache für Antworten, damit wiederholte Tests nicht neu generieren
+AI_CACHE = {}
+AI_TTL = 6 * 3600  # 6 Stunden gültig
+AI_TIMEOUT = 8     # Sekunden Timeout pro Anfrage
+AI_MAX_OUT = 180   # Maximale Zeichen der Ausgabe
+
+def _sig(origin, exc_text):
+    """Erstellt eine kurze Signatur aus Fehler-Infos (für Caching)."""
+    h = hashlib.sha1((origin + "|" + exc_text).encode()).hexdigest()
+    return h[:16]
+
+def local_ai_tips(origin: str, code_line: str | None, short_exc: str, full_trace: str) -> str | None:
+    """Fragt Ollama lokal nach Tipps und gibt kurze Antwort zurück."""
+    sig = _sig(origin, short_exc.splitlines()[0])
+    now = time.time()
+    if (c := AI_CACHE.get(sig)) and now - c[0] < AI_TTL:
+        return c[1]
+
+    # Stacktrace auf relevante letzten Zeilen kürzen
+    snippet = "\n".join((full_trace or "").splitlines()[-40:])[:2000]
+    prompt = (
+        "Du bist ein präziser Python/discord.py/aiomysql-Debugger.\n"
+        "Gib maximal 5 konkrete, kurze Schritte zur Behebung (bullet points).\n\n"
+        f"Fehler: {short_exc}\n"
+        f"Ort: {origin}\n"
+        f"Codezeile: {code_line or '—'}\n"
+        f"Trace (gekürzt):\n{snippet}\n"
+    )
+
+    try:
+        r = requests.post(OLLAMA_URL, json={
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "num_predict": 256,
+                "temperature": 0.2,
+                "top_k": 30,
+                "top_p": 0.9,
+                "num_ctx": 1024
+            }
+        }, timeout=AI_TIMEOUT)
+        r.raise_for_status()
+        text = (r.json().get("response") or "").strip()
+        text = text[:AI_MAX_OUT]
+        if text:
+            AI_CACHE[sig] = (now, text)
+            return text
+    except Exception:
+        return None
+
+# Bot-Command zum Testen
+@bot.command(name="ollamatest")
+async def ollama_test(ctx, *, fehler: str = "ValueError: invalid literal for int() with base 10: 'abc'"):
+    """Testet die lokale Ollama-Anbindung mit einem Beispiel-Fehlertext."""
+    await ctx.send("⏳ Frage an Ollama…")
+
+    ai_tips = local_ai_tips(
+        origin="test_command.py:42 in ollama_test()",
+        code_line="int('abc')",
+        short_exc=fehler,
+        full_trace=f"Traceback (most recent call last):\n  File 'test_command.py', line 42, in ollama_test\n    {fehler}\n"
+    )
+
+    if ai_tips:
+        await ctx.send(f"💡 **AI-Tipps:**\n{ai_tips}")
+    else:
+        await ctx.send("❌ Keine Antwort von Ollama (Timeout oder Fehler).")
 
 # Slash-Command Fehlerbehandlung
 @bot.tree.error
