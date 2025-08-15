@@ -114,7 +114,6 @@ class Astra(commands.Bot):
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
-            self.tree.add_command(testfehler)
             self.tree.add_command(Giveaway())
             self.tree.add_command(Reminder())
             logging.info("Astra ist online!")
