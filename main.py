@@ -606,7 +606,7 @@ async def funktion2(when: datetime):
 
                 embed = discord.Embed(
                     title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
-                    url="https://top.gg/de/bot/811733599509544962/vote",
+                    url="https://top.gg/de/bot/1113403511045107773/vote",
                     description=(
                         "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
                         "Als Belohnung erhälst du eine spezielle Rolle auf unserem [Support-Server](https://discord.gg/NH9DdSUJrE)."
