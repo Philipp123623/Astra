@@ -177,9 +177,9 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS topgg (userID BIGINT, count BIGINT)")
                 await cur.execute("ALTER TABLE topgg MODIFY userID BIGINT UNSIGNED NOT NULL;")
                 await cur.execute("ALTER TABLE topgg MODIFY count INT NOT NULL DEFAULT 0;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN IF NOT EXISTS last_reset DATETIME NULL;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN IF NOT EXISTS last_vote DATETIME NULL;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN IF NOT EXISTS last_vote_epoch BIGINT UNSIGNED NULL;")
+                await cur.execute("ALTER TABLE topgg ADD COLUMN last_reset DATETIME NULL;")
+                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote DATETIME NULL;")
+                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote_epoch BIGINT UNSIGNED NULL;")
                 await cur.execute("ALTER TABLE topgg ADD PRIMARY KEY (userID);")
 
                 await cur.execute("CREATE TABLE IF NOT EXISTS website_stats (servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
