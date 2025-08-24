@@ -140,12 +140,12 @@ FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 # -------------------------------------------
 PRETTY_TO_FILENAME = {
     "Standard": "standard",
-    "Türkis Streifen": "türkis_stripes",
-    "Halloween-Streifen": "Halloween_stripes",
-    "Christmas-Streifen": "Christmas_stripes",
-    "Easter-Streifen": "Easter_stripes",
-    "Standard Streifen – Stern links": "standard_stripes_left_star",
-    "Standard Streifen – Stern rechts": "standard_stripes_right_star",
+    "Türkis": "türkis_stripes",
+    "Halloween": "Halloween_stripes",
+    "Weihnachten": "Christmas_stripes",
+    "Ostern": "Easter_stripes",
+    "Standard mit Streifen – Stern links": "standard_stripes_left_star",
+    "Standard mit Streifen – Stern rechts": "standard_stripes_right_star",
 }
 
 PRETTY_CHOICES = tuple(PRETTY_TO_FILENAME.keys())
