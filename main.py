@@ -150,8 +150,6 @@ class Astra(commands.Bot):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Tabellen erstellen
-                await cur.execute("DROP TABLE subscriptions;")
-                await cur.execute("DROP TABLE notifier_settings;")
 
                 await cur.execute("CREATE TABLE IF NOT EXISTS clear_jobs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, channel_id BIGINT NOT NULL, amount INT NOT NULL, requested_by VARCHAR(128) NOT NULL, status ENUM('pending','processing','done') NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status_channel (status, channel_id), KEY idx_channel_created (channel_id, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
                 await cur.execute("CREATE TABLE IF NOT EXISTS subscriptions (guild_id BIGINT NOT NULL, discord_channel_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, content_id VARCHAR(255) NOT NULL, ping_role_id BIGINT NULL, last_item_id VARCHAR(255) NULL, last_sent_at DATETIME NULL, PRIMARY KEY (guild_id, discord_channel_id, platform, content_id))")
