@@ -175,12 +175,6 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS snake (userID BIGINT, highscore BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS topgg (userID BIGINT, count BIGINT)")
-                await cur.execute("ALTER TABLE topgg MODIFY userID BIGINT UNSIGNED NOT NULL;")
-                await cur.execute("ALTER TABLE topgg MODIFY count INT NOT NULL DEFAULT 0;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN last_reset DATETIME NULL;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote DATETIME NULL;")
-                await cur.execute("ALTER TABLE topgg ADD COLUMN last_vote_epoch BIGINT UNSIGNED NULL;")
-                await cur.execute("ALTER TABLE topgg ADD PRIMARY KEY (userID);")
 
                 await cur.execute("CREATE TABLE IF NOT EXISTS website_stats (servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS afk (guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
