@@ -164,8 +164,6 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS gc_users (id BIGINT PRIMARY KEY, lvl_points INT NOT NULL DEFAULT 0, team BOOLEAN NOT NULL DEFAULT FALSE, banned BOOLEAN NOT NULL DEFAULT FALSE)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS gc_servers (id INT AUTO_INCREMENT PRIMARY KEY, guildid BIGINT NOT NULL, channelid BIGINT NOT NULL, invite VARCHAR(255))")
 
-                await cur.execute("DROP TABLE reactionrole_messages;")
-                await cur.execute("DROP TABLE reactionrole_entries;")
                 await cur.execute("CREATE TABLE IF NOT EXISTS reactionrole_messages (message_id BIGINT UNSIGNED PRIMARY KEY, guild_id BIGINT UNSIGNED NOT NULL, channel_id BIGINT UNSIGNED NOT NULL, style VARCHAR(10) NOT NULL, embed_title VARCHAR(256) NOT NULL, embed_description TEXT NOT NULL, embed_color VARCHAR(6) NOT NULL, embed_image TEXT NULL, embed_thumbnail TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
                 await cur.execute("CREATE TABLE IF NOT EXISTS reactionrole_entries (id INT AUTO_INCREMENT PRIMARY KEY, message_id BIGINT UNSIGNED NOT NULL, role_id BIGINT UNSIGNED NOT NULL, label VARCHAR(100) NOT NULL, emoji VARCHAR(100), CONSTRAINT fk_rr_msg FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE, INDEX idx_rr_msg (message_id), UNIQUE KEY uq_msg_role (message_id, role_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
 
