@@ -246,34 +246,28 @@ class GiveawayButton(discord.ui.View):
                 )
                 row = await cur.fetchone()
                 if not row:
-                    # Sollte nicht passieren – Giveaway-Datensatz fehlt
-                    return
+                    return  # Datensatz fehlt
 
-                # ---- Werte normalisieren ----------------------------------------------------
+                # ---------- Normalisierung ----------
                 def _to_int_or_none(v):
                     if v is None:
                         return None
+                    if isinstance(v, bool):
+                        return int(v)
                     if isinstance(v, int):
                         return v
-                    if isinstance(v, (float,)):
+                    if isinstance(v, float):
                         return int(v)
-                    if isinstance(v, str):
-                        s = v.strip()
-                        if not s or s.lower() in {"not set", "none", "null", "nil"}:
-                            return None
-                        if s.isdigit():
-                            return int(s)
-                        try:
-                            return int(float(s))
-                        except Exception:
-                            return None
+                    s = str(v).strip()
+                    if not s or s.lower() in {"not set", "none", "null", "nil"}:
+                        return None
+                    # Versuche Ziffern herauszuziehen (z. B. " 3 " -> 3)
                     try:
-                        return int(v)
+                        return int(float(s))
                     except Exception:
                         return None
 
                 role_raw, level_raw, entrys, messageID, price, winners, time_unix, creatorID, msgs_req_raw = row
-
                 roleID = _to_int_or_none(role_raw)
                 level_req = _to_int_or_none(level_raw)
                 messages_required = _to_int_or_none(msgs_req_raw)
@@ -281,7 +275,6 @@ class GiveawayButton(discord.ui.View):
                 creator = self.bot.get_user(creatorID) or interaction.guild.get_member(creatorID)
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-                # Hilfswerte / Anforderungen bestimmen
                 guild = interaction.guild
                 has_role_req = roleID is not None
                 has_level_req = level_req is not None
@@ -289,7 +282,7 @@ class GiveawayButton(discord.ui.View):
 
                 role_obj = guild.get_role(roleID) if has_role_req else None
 
-                # Requirement-Textzeilen (für Anzeige im Embed)
+                # ---------- Anzeige-Block (öffentlicher Embed) ----------
                 req_lines = []
                 if has_role_req and role_obj:
                     req_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
@@ -301,7 +294,6 @@ class GiveawayButton(discord.ui.View):
                     req_lines.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** auf diesem Server.")
                 req_block = ("\n" + "\n".join(req_lines)) if req_lines else ""
 
-                # Kleine Helper um Embeds einheitlich zu bauen
                 def build_public_embed(current_count: int) -> discord.Embed:
                     e = discord.Embed(
                         title=" ",
@@ -361,7 +353,6 @@ class GiveawayButton(discord.ui.View):
 
                 # ====== USER WILL TEILNEHMEN ======
                 if not existing:
-                    # Anforderungen prüfen – alle Gründe sammeln
                     reasons = []
 
                     # Rolle
@@ -408,10 +399,8 @@ class GiveawayButton(discord.ui.View):
                     if role_ok and level_ok and msgs_ok:
                         # Teilnahme eintragen
                         new_count = int(entrys) + 1
-                        public_embed = build_public_embed(new_count)
-
                         msg_obj = await interaction.channel.fetch_message(messageID)
-                        await msg_obj.edit(embed=public_embed)
+                        await msg_obj.edit(embed=build_public_embed(new_count))
 
                         await cur.execute(
                             "UPDATE giveaway_active SET entrys = %s WHERE guildID = %s AND channelID = %s AND messageID = %s",
@@ -422,7 +411,6 @@ class GiveawayButton(discord.ui.View):
                             (guild.id, interaction.channel.id, interaction.user.id, interaction.message.id),
                         )
 
-                        # DM Erfolg
                         try:
                             await interaction.user.send(
                                 "**<:Astra_accept:1141303821176422460> Deine Teilnahme am Gewinnspiel war erfolgreich.**",
@@ -452,11 +440,9 @@ class GiveawayButton(discord.ui.View):
                     (new_count, interaction.channel.id, guild.id, interaction.message.id),
                 )
 
-                # Embed aktualisieren (neue Teilnehmerzahl)
                 msg_obj = await interaction.channel.fetch_message(messageID)
                 await msg_obj.edit(embed=build_public_embed(new_count))
 
-                # DM Bestätigung Abmeldung
                 leave_embed = discord.Embed(
                     title=" ",
                     description=(
@@ -478,6 +464,7 @@ class GiveawayButton(discord.ui.View):
                     )
                 except Exception:
                     pass
+
 
 
 
