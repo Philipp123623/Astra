@@ -31,14 +31,17 @@ def convert(time_str: str) -> int:
 def _to_int_or_none(v) -> Optional[int]:
     if v is None:
         return None
-    s = str(v).strip().lower()
-    if s in {"", "not set", "none", "null", "nil"}:
+    if isinstance(v, int):
+        return v if v > 0 else None
+    s = str(v).strip()
+    if s.lower() in {"", "not set", "none", "null", "nil"}:
         return None
     try:
-        iv = int(float(s))
+        iv = int(s)           # <— direkt parsen, kein float!
         return iv if iv > 0 else None
     except Exception:
         return None
+
 
 
 # ------------------------- Giveaway End-Timer -------------------------
@@ -279,11 +282,20 @@ class GiveawayButton(discord.ui.View):
                 if role_id is not None or role_name:
                     shown = role_name or str(role_id)
                     role_ok = False
+
+                    target_role = None
                     if role_id is not None:
-                        r = guild.get_role(role_id)
-                        role_ok = (r in interaction.user.roles) if r else False
+                        target_role = guild.get_role(role_id)
+                    if target_role is None and role_name:  # Fallback per Name
+                        target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
+
+                    if target_role and isinstance(interaction.user, discord.Member):
+                        role_ok = target_role in interaction.user.roles
+
                     if not role_ok:
-                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> Dir fehlt die Rolle **{shown}**, um teilnehmen zu können.")
+                        reasons_lines.append(
+                            f"<:Astra_punkt:1141303896745201696> Dir fehlt die Rolle **{shown}**, um teilnehmen zu können."
+                        )
 
                 # Level
                 if level_req is not None:
