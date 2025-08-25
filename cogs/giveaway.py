@@ -464,7 +464,7 @@ class Giveaway(app_commands.Group):
                 if msgs_req is not None:
                     msgs_val = int(msgs_req)
                     req_parts.append(
-                        f"<:Astra_punkt:1141303896745201696> Du musst mindestens **{msgs_val}** Nachrichten auf diesem Server schreiben, um teilzunehmen."
+                        f"<:Astra_punkt:1141303896745201696> Du musst mindestens **{msgs_val}** Nachrichten schreiben, um teilzunehmen."
                     )
 
                 req_block = ("\n" + "\n".join(req_parts)) if req_parts else ""
