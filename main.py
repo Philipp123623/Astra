@@ -562,7 +562,6 @@ async def on_ready():
                 activity=discord.Game('Astra V2 out now! 💙'),
                 status=discord.Status.online
             )
-            bot.add_view(gw_button())
 
 
 # Funktion, die nach 12h die Rolle entfernt und Erinnerungen per DM schickt
