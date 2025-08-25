@@ -249,26 +249,54 @@ class GiveawayButton(discord.ui.View):
                     # Sollte nicht passieren – Giveaway-Datensatz fehlt
                     return
 
-                roleID, level, entrys, messageID, price, winners, time_unix, creatorID, messages_required = row
+                # ---- Werte normalisieren ----------------------------------------------------
+                def _to_int_or_none(v):
+                    if v is None:
+                        return None
+                    if isinstance(v, int):
+                        return v
+                    if isinstance(v, (float,)):
+                        return int(v)
+                    if isinstance(v, str):
+                        s = v.strip()
+                        if not s or s.lower() in {"not set", "none", "null", "nil"}:
+                            return None
+                        if s.isdigit():
+                            return int(s)
+                        try:
+                            return int(float(s))
+                        except Exception:
+                            return None
+                    try:
+                        return int(v)
+                    except Exception:
+                        return None
+
+                role_raw, level_raw, entrys, messageID, price, winners, time_unix, creatorID, msgs_req_raw = row
+
+                roleID = _to_int_or_none(role_raw)
+                level_req = _to_int_or_none(level_raw)
+                messages_required = _to_int_or_none(msgs_req_raw)
+
                 creator = self.bot.get_user(creatorID) or interaction.guild.get_member(creatorID)
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
                 # Hilfswerte / Anforderungen bestimmen
                 guild = interaction.guild
-                role_obj = None
-                has_role_req = str(roleID).isnumeric()
-                if has_role_req:
-                    role_obj = discord.utils.get(guild.roles, id=int(roleID))
+                has_role_req = roleID is not None
+                has_level_req = level_req is not None
+                has_msg_req = (messages_required is not None) and (messages_required > 0)
 
-                has_level_req = str(level).isnumeric()
-                has_msg_req = (messages_required is not None) and (int(messages_required) > 0)
+                role_obj = guild.get_role(roleID) if has_role_req else None
 
                 # Requirement-Textzeilen (für Anzeige im Embed)
                 req_lines = []
                 if has_role_req and role_obj:
                     req_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
+                elif has_role_req and not role_obj:
+                    req_lines.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
                 if has_level_req:
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level}** sein um teilzunehmen.")
+                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level_req}** sein um teilzunehmen.")
                 if has_msg_req:
                     req_lines.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** auf diesem Server.")
                 req_block = ("\n" + "\n".join(req_lines)) if req_lines else ""
@@ -314,7 +342,7 @@ class GiveawayButton(discord.ui.View):
                     return e
 
                 def build_failure_dm(reasons: list[str]) -> discord.Embed:
-                    reasons_txt = "\n".join(reasons) if reasons else "Unbekannter Grund."
+                    reasons_txt = "\n".join(reasons) if reasons else "Unbekannte Gründe."
                     e = discord.Embed(
                         title=" ",
                         description=(
@@ -322,7 +350,7 @@ class GiveawayButton(discord.ui.View):
                             "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
                             f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) war **nicht** erfolgreich.\n"
                             f"`⏰` Das Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}.\n\n"
-                            "`🧨` __**Grund**__\n"
+                            "`🧨` __**Gründe**__\n"
                             f"{reasons_txt}"
                         ),
                         colour=discord.Colour.red(),
@@ -333,35 +361,35 @@ class GiveawayButton(discord.ui.View):
 
                 # ====== USER WILL TEILNEHMEN ======
                 if not existing:
-                    # Anforderungen prüfen
+                    # Anforderungen prüfen – alle Gründe sammeln
                     reasons = []
 
                     # Rolle
                     role_ok = True
                     if has_role_req:
-                        if role_obj is None or role_obj not in interaction.user.roles:
+                        if (role_obj is None) or (role_obj not in interaction.user.roles):
                             role_ok = False
                             if role_obj:
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
+                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}`.")
                             else:
-                                reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte Rolle existiert nicht mehr.")
+                                reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
 
                     # Level
                     level_ok = True
                     if has_level_req:
                         await cur.execute(
-                            "SELECT user_xp, user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
                             (interaction.user.id, guild.id),
                         )
                         lvl_row = await cur.fetchone()
                         if not lvl_row:
                             level_ok = False
-                            reasons.append("<:Astra_punkt:1141303896745201696> Wir haben keine Level-Daten zu dir. Schreibe erst eine Nachricht und versuche es erneut.")
+                            reasons.append("<:Astra_punkt:1141303896745201696> Keine Level-Daten gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
                         else:
-                            user_level = int(lvl_row[1])
-                            if int(level) > user_level:
+                            user_level = int(lvl_row[0])
+                            if int(level_req) > user_level:
                                 level_ok = False
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level}** sein (du bist Level {user_level}).")
+                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level_req}** sein (du bist Level {user_level}).")
 
                     # Nachrichten-Anzahl
                     msgs_ok = True
@@ -375,9 +403,7 @@ class GiveawayButton(discord.ui.View):
                         user_msg_count = int(msg_row[0]) if msg_row else 0
                         if user_msg_count < int(messages_required):
                             msgs_ok = False
-                            reasons.append(
-                                f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** (du hast {user_msg_count})."
-                            )
+                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** (du hast {user_msg_count}).")
 
                     if role_ok and level_ok and msgs_ok:
                         # Teilnahme eintragen
@@ -405,7 +431,7 @@ class GiveawayButton(discord.ui.View):
                         except Exception:
                             pass
                     else:
-                        # DM mit Gründen (alle Gründe!)
+                        # DM mit allen Gründen
                         try:
                             await interaction.user.send(
                                 "**<:Astra_x:1141303954555289600> Deine Teilnahme am Gewinnspiel war nicht erfolgreich.**",
@@ -416,7 +442,6 @@ class GiveawayButton(discord.ui.View):
                     return  # Ende "Teilnahme"
 
                 # ====== USER IST DRIN -> ABMELDEN ======
-                # Eintrag entfernen & Zähler -1
                 new_count = max(int(entrys) - 1, 0)
                 await cur.execute(
                     "DELETE FROM giveaway_entrys WHERE userID = %s AND guildID = %s AND messageID = %s",
@@ -437,7 +462,7 @@ class GiveawayButton(discord.ui.View):
                     description=(
                         f"🏆 Preis: {price}\n"
                         "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
-                        f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) war **nicht** erfolgreich.\n"
+                        f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) wurde zurückgezogen.\n"
                         f"`⏰` Das Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}.\n\n"
                         "`🧨` __**Grund**__\n"
                         "<:Astra_punkt:1141303896745201696> Du hast deine Teilnahme am Gewinnspiel zurückgezogen."
@@ -453,6 +478,7 @@ class GiveawayButton(discord.ui.View):
                     )
                 except Exception:
                     pass
+
 
 
 @app_commands.guild_only()
