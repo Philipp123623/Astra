@@ -2,7 +2,7 @@ import asyncio
 import logging
 import math
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Literal
 import time
 import discord
@@ -884,6 +884,7 @@ class MessageCounterCog(commands.Cog):
 
 async def setup(bot: commands.Bot):  # ⬅️ richtig typisiert
     bot.add_view(GiveawayButton(bot))  # persistente View
+    await bot.add_cog(MessageCounterCog(bot))
     try:
         bot.tree.remove_command("gewinnspiel", type=discord.AppCommandType.chat_input)
     except Exception:
