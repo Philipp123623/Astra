@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/giveaway.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/giveaway.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -254,7 +255,7 @@
       <workItem from="1755951681330" duration="41000" />
       <workItem from="1756039644971" duration="2441000" />
       <workItem from="1756101757295" duration="854000" />
-      <workItem from="1756127156936" duration="5399000" />
+      <workItem from="1756127156936" duration="7539000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />
