@@ -818,7 +818,7 @@ class Giveaway(app_commands.Group):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Validierung Levelsystem (wenn benötigt)
-                if (rolle or level):
+                if rolle or level:
                     if level:
                         await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
                         enabled = await cur.fetchone()
@@ -869,7 +869,7 @@ class Giveaway(app_commands.Group):
                 msg = await kanal.send("🎉 **Neues Gewinnspiel** 🎉", embed=embed, view=GiveawayButton(self.bot))
 
                 # Task zum Beenden planen (aus Teil 2)
-                asyncio.create_task(gwtimes(t2, msg.id))
+                asyncio.create_task(gwtimes(self.bot, t2, msg.id))
 
                 # Einträge für Rolle und Level
                 role_id = rolle.id if rolle else "Not Set"
