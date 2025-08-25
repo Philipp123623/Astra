@@ -614,9 +614,9 @@ async def funktion2(when: datetime):
                 )
                 try:
                     await member.send(embed=embed)
-                    print(f"DM erfolgreich an {member.id} gesendet!")
+                    logging.error(f"DM erfolgreich an {member.id} gesendet!")
                 except Exception as e:
-                    print(f"❌ DM an {member.id} fehlgeschlagen: {e}")
+                    logging.error(f"❌ DM an {member.id} fehlgeschlagen: {e}")
 
                 try:
                     if voterole in member.roles:

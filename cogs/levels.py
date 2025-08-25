@@ -450,8 +450,8 @@ class Level(app_commands.Group):
                 await cur.execute(
                     """
                     INSERT INTO levelstyle (guild_id, client_id, style)
-                    VALUES (%s, %s, %s)
-                    ON DUPLICATE KEY UPDATE style = VALUES(style)
+                        VALUES (%s, %s, %s) AS new
+                    ON DUPLICATE KEY UPDATE style = new.style
                     """,
                     (interaction.guild.id, interaction.user.id, internal_style)
                 )
