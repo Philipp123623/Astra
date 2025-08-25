@@ -209,7 +209,7 @@ class GiveawayButton(discord.ui.View):
                 )
                 existing = await cur.fetchone()
 
-                # Giveaway-Infos inkl. role_name / messages_required
+                # Giveaway-Infos inkl. Anforderungen
                 await cur.execute(
                     "SELECT role, role_name, level, entrys, messageID, prize, winners, time, creatorID, messages_required "
                     "FROM giveaway_active WHERE guildID = %s AND channelID = %s AND messageID = %s",
@@ -229,7 +229,7 @@ class GiveawayButton(discord.ui.View):
                 creator = self.bot.get_user(int(creatorID)) or guild.get_member(int(creatorID))
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-                # Öffentliche Anforderungen-Block direkt aus gespeicherten Werten
+                # Anforderungen Block (öffentlich)
                 req_parts = []
                 if role_name or role_id:
                     req_parts.append(f"<:Astra_punkt:1141303896745201696> **Rolle:** » `{role_name or role_id}`")
@@ -239,8 +239,9 @@ class GiveawayButton(discord.ui.View):
                     req_parts.append(f"<:Astra_punkt:1141303896745201696> **Nachrichten:** mind. {msgs_req}")
                 req_block = ("\n" + "\n".join(req_parts)) if req_parts else ""
 
+                # Embed-Funktionen
                 def public_embed(current_count: int) -> discord.Embed:
-                    e = discord.Embed(
+                    return discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -256,15 +257,9 @@ class GiveawayButton(discord.ui.View):
                         ),
                         colour=discord.Colour.blue(),
                     )
-                    if guild and guild.icon:
-                        e.set_thumbnail(url=guild.icon.url)
-                        e.set_footer(text="Viel Erfolg 🍀", icon_url=guild.icon.url)
-                    else:
-                        e.set_footer(text="Viel Erfolg 🍀")
-                    return e
 
                 def success_dm() -> discord.Embed:
-                    e = discord.Embed(
+                    return discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -274,29 +269,23 @@ class GiveawayButton(discord.ui.View):
                         ),
                         colour=discord.Colour.green(),
                     )
-                    if guild and guild.icon:
-                        e.set_thumbnail(url=guild.icon.url)
-                    return e
 
-                # --- Anforderungen prüfen & "Gründe" (ALLE Anforderungen mit Status in einem Block) ---
+                # --- Anforderungen prüfen & Gründe als Sätze ---
                 reasons_lines = []
+                role_ok, lvl_ok, msgs_ok = True, True, True
+                have_level, have_msgs = 0, 0
 
                 # Rolle
                 if role_id is not None or role_name:
-                    role_ok = False
                     shown = role_name or str(role_id)
+                    role_ok = False
                     if role_id is not None:
                         r = guild.get_role(role_id)
                         role_ok = (r in interaction.user.roles) if r else False
-                    # Anzeige (eine Zeile in "Gründe")
-                    if role_ok:
-                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> ✅ **Rolle benötigt:** `{shown}` — erfüllt")
-                    else:
-                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> ❌ **Rolle benötigt:** `{shown}` — fehlt")
+                    if not role_ok:
+                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> Dir fehlt die Rolle **{shown}**, um teilnehmen zu können.")
 
                 # Level
-                have_level = 0
-                lvl_ok = True
                 if level_req is not None:
                     await cur.execute(
                         "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
@@ -305,13 +294,11 @@ class GiveawayButton(discord.ui.View):
                     row_lvl = await cur.fetchone()
                     have_level = int(row_lvl[0]) if row_lvl and row_lvl[0] is not None else 0
                     lvl_ok = have_level >= level_req
-                    reasons_lines.append(
-                        f"<:Astra_punkt:1141303896745201696> {'✅' if lvl_ok else '❌'} **Mindestlevel:** {level_req} (dein Level: {have_level})"
-                    )
+                    if not lvl_ok:
+                        diff = level_req - have_level
+                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst noch **{diff} Level**, um teilnehmen zu können.")
 
                 # Nachrichten
-                have_msgs = 0
-                msgs_ok = True
                 if msgs_req is not None:
                     await cur.execute(
                         "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
@@ -320,14 +307,14 @@ class GiveawayButton(discord.ui.View):
                     row_msg = await cur.fetchone()
                     have_msgs = int(row_msg[0]) if row_msg and row_msg[0] is not None else 0
                     msgs_ok = have_msgs >= msgs_req
-                    reasons_lines.append(
-                        f"<:Astra_punkt:1141303896745201696> {'✅' if msgs_ok else '❌'} **Mindest-Nachrichten:** {msgs_req} (deine: {have_msgs})"
-                    )
+                    if not msgs_ok:
+                        diff = msgs_req - have_msgs
+                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> Dir fehlen noch **{diff} Nachrichten**, um teilnehmen zu können.")
 
-                any_failed = any(line.startswith("<:Astra_punkt:1141303896745201696> ❌") for line in reasons_lines)
+                any_failed = not (role_ok and lvl_ok and msgs_ok)
 
                 def failure_dm() -> discord.Embed:
-                    e = discord.Embed(
+                    return discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -338,18 +325,13 @@ class GiveawayButton(discord.ui.View):
                         ),
                         colour=discord.Colour.red(),
                     )
-                    if guild and guild.icon:
-                        e.set_thumbnail(url=guild.icon.url)
-                    return e
 
                 # Teilnahme eintragen / austragen
                 if not existing:
                     if not any_failed:
                         new_count = int(entrys) + 1
-                        # Public Embed aktualisieren
                         msg_obj = await interaction.channel.fetch_message(int(messageID))
                         await msg_obj.edit(embed=public_embed(new_count))
-                        # DB
                         await cur.execute(
                             "UPDATE giveaway_active SET entrys = %s WHERE guildID = %s AND channelID = %s AND messageID = %s",
                             (new_count, guild.id, interaction.channel.id, interaction.message.id),
@@ -358,7 +340,6 @@ class GiveawayButton(discord.ui.View):
                             "INSERT INTO giveaway_entrys(guildID, channelID, userID, messageID) VALUES (%s, %s, %s, %s)",
                             (guild.id, interaction.channel.id, interaction.user.id, interaction.message.id),
                         )
-                        # Erfolg-DM
                         try:
                             await interaction.user.send(
                                 "**<:Astra_accept:1141303821176422460> Deine Teilnahme am Gewinnspiel war erfolgreich.**",
@@ -367,7 +348,6 @@ class GiveawayButton(discord.ui.View):
                         except Exception:
                             pass
                     else:
-                        # DM mit Gründen (alle Anforderungen & Status in einem Block)
                         try:
                             await interaction.user.send(
                                 "**<:Astra_x:1141303954555289600> Deine Teilnahme am Gewinnspiel war nicht erfolgreich.**",
@@ -377,7 +357,7 @@ class GiveawayButton(discord.ui.View):
                             pass
                     return
 
-                # Bereits drin -> Abmelden
+                # Abmelden
                 new_count = max(int(entrys) - 1, 0)
                 await cur.execute(
                     "DELETE FROM giveaway_entrys WHERE userID = %s AND guildID = %s AND messageID = %s",
@@ -387,32 +367,14 @@ class GiveawayButton(discord.ui.View):
                     "UPDATE giveaway_active SET entrys = %s WHERE channelID = %s AND guildID = %s AND messageID = %s",
                     (new_count, interaction.channel.id, guild.id, interaction.message.id),
                 )
-
                 msg_obj = await interaction.channel.fetch_message(int(messageID))
                 await msg_obj.edit(embed=public_embed(new_count))
-
-                leave_embed = discord.Embed(
-                    title=" ",
-                    description=(
-                        f"🏆 Preis: {prize}\n"
-                        "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
-                        f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) wurde zurückgezogen.\n"
-                        f"`⏰` Das Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}.\n\n"
-                        "`🧨` __**Grund**__\n"
-                        "<:Astra_punkt:1141303896745201696> Du hast deine Teilnahme am Gewinnspiel zurückgezogen."
-                    ),
-                    colour=discord.Colour.red(),
-                )
-                if guild and guild.icon:
-                    leave_embed.set_thumbnail(url=guild.icon.url)
                 try:
                     await interaction.user.send(
-                        "**<:Astra_accept:1141303821176422460> Du hast deine Teilnahme am Gewinnspiel erfolgreich zurückgezogen.**",
-                        embed=leave_embed,
+                        "**<:Astra_accept:1141303821176422460> Du hast deine Teilnahme am Gewinnspiel erfolgreich zurückgezogen.**"
                     )
                 except Exception:
                     pass
-
 
 # ---------------------------- Slash-Gruppe ----------------------------
 @app_commands.guild_only()
