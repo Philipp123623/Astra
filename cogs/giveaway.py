@@ -895,7 +895,7 @@ class MessageCounterCog(commands.Cog):
         self._active_giveaway_cache[guild_id] = (has_active, now + self._cache_ttl)
         return has_active
 
-    @commands.Cog.listener())
+    @commands.Cog.listener()
     async def on_message(self, msg: discord.Message):
         if not msg.guild or msg.author.bot:
             return
