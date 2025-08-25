@@ -53,6 +53,8 @@ def build_requirements_text(
 ) -> str:
     """
     Öffentliche Anzeige der konfigurierten Anforderungen (ohne User-Status).
+    Nie behaupten, dass eine Rolle nicht existiert – wenn sie nicht im Cache ist,
+    zeigen wir die Rollen-Mention.
     """
     bullet = "<:Astra_punkt:1141303896745201696>"
     parts: list[str] = []
@@ -62,8 +64,7 @@ def build_requirements_text(
         if role_obj:
             parts.append(f"{bullet} **Rolle:** `{role_obj.name}`")
         else:
-            # Nur dann, wenn die Rolle WIRKLICH nicht (mehr) existiert
-            parts.append(f"{bullet} **Rolle:** (existiert nicht mehr)")
+            parts.append(f"{bullet} **Rolle:** <@&{int(role_id)}>")
 
     if level_req is not None:
         parts.append(f"{bullet} **Level:** {int(level_req)}+")
@@ -84,7 +85,7 @@ async def collect_unmet_reasons(
 ) -> list[str]:
     """
     Prüft die Anforderungen und gibt NUR die **nicht erfüllten** Bedingungen zurück.
-    Jede Zeile beginnt mit deinem blauen Punkt.
+    Jede Zeile beginnt mit deinem blauen Punkt. Keine Checkliste, keine „existiert nicht mehr“-Aussage.
     """
     bullet = "<:Astra_punkt:1141303896745201696>"
     reasons: list[str] = []
@@ -92,31 +93,30 @@ async def collect_unmet_reasons(
     if member is None:
         return [f"{bullet} Nutzer ist nicht mehr auf dem Server."]
 
-    # Rolle
+    # Rolle fehlt?
     if role_id is not None:
         role_obj = guild.get_role(int(role_id))
-        if role_obj is None:
-            # Wirklich gelöscht
-            reasons.append(f"{bullet} Die benötigte **Rolle** existiert nicht mehr.")
-        elif role_obj not in member.roles:
-            reasons.append(f"{bullet} Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
+        if role_obj:
+            if role_obj not in member.roles:
+                reasons.append(f"{bullet} Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
+        else:
+            # Kein Cache/Intent? => trotzdem sagen, dass diese Rolle benötigt wird (als Mention).
+            if all(r.id != int(role_id) for r in member.roles):
+                reasons.append(f"{bullet} Du benötigst die **Rolle** <@&{int(role_id)}> um teilzunehmen.")
 
-    # Level
+    # Level zu niedrig?
     if level_req is not None:
         await cur.execute(
             "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
             (member.id, guild.id),
         )
         row = await cur.fetchone()
-        if not row:
-            reasons.append(f"{bullet} Keine **Level-Daten** gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
-        else:
-            have = int(row[0])
-            need = int(level_req)
-            if have < need:
-                reasons.append(f"{bullet} Du musst **Level {need}** sein (du bist Level {have}).")
+        have = int(row[0]) if row else 0
+        need = int(level_req)
+        if have < need:
+            reasons.append(f"{bullet} Du musst **Level {need}** sein (du bist Level {have}).")
 
-    # Nachrichten
+    # Nachrichten zu wenig?
     if msgs_req is not None and int(msgs_req) > 0:
         await cur.execute(
             "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
@@ -524,7 +524,7 @@ class Giveaway(app_commands.Group):
 
                 asyncio.create_task(gwtimes(self.bot, t2, msg.id))
 
-                # In DB wie gehabt speichern (dein Schema nutzt 'Not Set' – wir bleiben kompatibel)
+                # In DB wie gehabt speichern (dein Schema nutzt 'Not Set' – bleiben kompatibel)
                 role_val = rolle.id if rolle else "Not Set"
                 level_val = level if level is not None else "Not Set"
 
@@ -567,11 +567,11 @@ class Giveaway(app_commands.Group):
         self,
         interaction: discord.Interaction,
         *,
-        aktion: Literal[
+        aktion: Literal(
             "Gewinnspiel beenden(Nachrichten ID angeben)",
             "Gewinnspiel neu würfeln(Nachrichten ID angeben)",
             "Gewinnspiele Anzeigen",
-        ],
+        ),
         messageid: str | None = None,
     ):
         async with self.bot.pool.acquire() as conn:
