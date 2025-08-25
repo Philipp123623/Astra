@@ -248,12 +248,10 @@ class GiveawayButton(discord.ui.View):
                 if not row:
                     return  # Datensatz fehlt
 
-                # ---------- Normalisierung ----------
+                # ---- Werte normalisieren ----------------------------------------------------
                 def _to_int_or_none(v):
                     if v is None:
                         return None
-                    if isinstance(v, bool):
-                        return int(v)
                     if isinstance(v, int):
                         return v
                     if isinstance(v, float):
@@ -261,39 +259,73 @@ class GiveawayButton(discord.ui.View):
                     s = str(v).strip()
                     if not s or s.lower() in {"not set", "none", "null", "nil"}:
                         return None
-                    # Versuche Ziffern herauszuziehen (z. B. " 3 " -> 3)
                     try:
                         return int(float(s))
                     except Exception:
                         return None
 
                 role_raw, level_raw, entrys, messageID, price, winners, time_unix, creatorID, msgs_req_raw = row
-                roleID = _to_int_or_none(role_raw)
-                level_req = _to_int_or_none(level_raw)
-                messages_required = _to_int_or_none(msgs_req_raw)
+                role_id = _to_int_or_none(role_raw)
+                lvl_req = _to_int_or_none(level_raw)
+                msg_req = _to_int_or_none(msgs_req_raw)
 
                 creator = self.bot.get_user(creatorID) or interaction.guild.get_member(creatorID)
+                guild = interaction.guild
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-                guild = interaction.guild
-                has_role_req = roleID is not None
-                has_level_req = level_req is not None
-                has_msg_req = (messages_required is not None) and (messages_required > 0)
+                # == Helper: ALLE nicht erfüllten Gründe einsammeln ==
+                async def collect_unmet_reasons() -> list[str]:
+                    reasons: list[str] = []
 
-                role_obj = guild.get_role(roleID) if has_role_req else None
+                    # Rolle
+                    if role_id is not None:
+                        role_obj = guild.get_role(role_id)
+                        if role_obj is None:
+                            reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
+                        elif role_obj not in interaction.user.roles:
+                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}`.")
 
-                # ---------- Anzeige-Block (öffentlicher Embed) ----------
+                    # Level
+                    if lvl_req is not None:
+                        await cur.execute(
+                            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+                            (interaction.user.id, guild.id),
+                        )
+                        lvl_row = await cur.fetchone()
+                        if not lvl_row:
+                            reasons.append("<:Astra_punkt:1141303896745201696> Keine **Level-Daten** gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
+                        else:
+                            user_level = int(lvl_row[0])
+                            if user_level < int(lvl_req):
+                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {lvl_req}** sein (du bist Level {user_level}).")
+
+                    # Nachrichten
+                    if (msg_req is not None) and (msg_req > 0):
+                        await cur.execute(
+                            "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
+                            (guild.id, interaction.user.id),
+                        )
+                        msg_row = await cur.fetchone()
+                        count = int(msg_row[0]) if msg_row else 0
+                        if count < int(msg_req):
+                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {msg_req} Nachrichten** (du hast {count}).")
+
+                    return reasons
+
+                # ==== Öffentliche Anforderungs-Anzeige ====
+                role_obj = guild.get_role(role_id) if role_id else None
                 req_lines = []
-                if has_role_req and role_obj:
+                if role_id and role_obj:
                     req_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
-                elif has_role_req and not role_obj:
+                elif role_id and not role_obj:
                     req_lines.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
-                if has_level_req:
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level_req}** sein um teilzunehmen.")
-                if has_msg_req:
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** auf diesem Server.")
+                if lvl_req is not None:
+                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {lvl_req}** sein um teilzunehmen.")
+                if (msg_req is not None) and (msg_req > 0):
+                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {msg_req} Nachrichten** auf diesem Server.")
                 req_block = ("\n" + "\n".join(req_lines)) if req_lines else ""
 
+                # ==== Embed-Builder ====
                 def build_public_embed(current_count: int) -> discord.Embed:
                     e = discord.Embed(
                         title=" ",
@@ -334,7 +366,6 @@ class GiveawayButton(discord.ui.View):
                     return e
 
                 def build_failure_dm(reasons: list[str]) -> discord.Embed:
-                    reasons_txt = "\n".join(reasons) if reasons else "Unbekannte Gründe."
                     e = discord.Embed(
                         title=" ",
                         description=(
@@ -342,8 +373,7 @@ class GiveawayButton(discord.ui.View):
                             "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
                             f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) war **nicht** erfolgreich.\n"
                             f"`⏰` Das Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}.\n\n"
-                            "`🧨` __**Gründe**__\n"
-                            f"{reasons_txt}"
+                            "`🧨` __**Gründe**__\n" + ("\n".join(reasons) if reasons else "Unbekannte Gründe.")
                         ),
                         colour=discord.Colour.red(),
                     )
@@ -353,50 +383,9 @@ class GiveawayButton(discord.ui.View):
 
                 # ====== USER WILL TEILNEHMEN ======
                 if not existing:
-                    reasons = []
+                    reasons = await collect_unmet_reasons()
 
-                    # Rolle
-                    role_ok = True
-                    if has_role_req:
-                        if (role_obj is None) or (role_obj not in interaction.user.roles):
-                            role_ok = False
-                            if role_obj:
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}`.")
-                            else:
-                                reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
-
-                    # Level
-                    level_ok = True
-                    if has_level_req:
-                        await cur.execute(
-                            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
-                            (interaction.user.id, guild.id),
-                        )
-                        lvl_row = await cur.fetchone()
-                        if not lvl_row:
-                            level_ok = False
-                            reasons.append("<:Astra_punkt:1141303896745201696> Keine Level-Daten gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
-                        else:
-                            user_level = int(lvl_row[0])
-                            if int(level_req) > user_level:
-                                level_ok = False
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level_req}** sein (du bist Level {user_level}).")
-
-                    # Nachrichten-Anzahl
-                    msgs_ok = True
-                    user_msg_count = 0
-                    if has_msg_req:
-                        await cur.execute(
-                            "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
-                            (guild.id, interaction.user.id),
-                        )
-                        msg_row = await cur.fetchone()
-                        user_msg_count = int(msg_row[0]) if msg_row else 0
-                        if user_msg_count < int(messages_required):
-                            msgs_ok = False
-                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** (du hast {user_msg_count}).")
-
-                    if role_ok and level_ok and msgs_ok:
+                    if not reasons:
                         # Teilnahme eintragen
                         new_count = int(entrys) + 1
                         msg_obj = await interaction.channel.fetch_message(messageID)
@@ -410,7 +399,6 @@ class GiveawayButton(discord.ui.View):
                             "INSERT INTO giveaway_entrys(guildID, channelID, userID, messageID) VALUES (%s, %s, %s, %s)",
                             (guild.id, interaction.channel.id, interaction.user.id, interaction.message.id),
                         )
-
                         try:
                             await interaction.user.send(
                                 "**<:Astra_accept:1141303821176422460> Deine Teilnahme am Gewinnspiel war erfolgreich.**",
@@ -419,7 +407,7 @@ class GiveawayButton(discord.ui.View):
                         except Exception:
                             pass
                     else:
-                        # DM mit allen Gründen
+                        # DM mit ALLEN Gründen
                         try:
                             await interaction.user.send(
                                 "**<:Astra_x:1141303954555289600> Deine Teilnahme am Gewinnspiel war nicht erfolgreich.**",
