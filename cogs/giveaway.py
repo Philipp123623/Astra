@@ -232,19 +232,19 @@ class GiveawayButton(discord.ui.View):
                 creator = self.bot.get_user(int(creatorID)) or guild.get_member(int(creatorID))
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-                # Anforderungen Block (öffentlich)
+                # Anforderungen Block (öffentlich) – schöne Sätze, korrektes level_req
                 req_parts = []
                 if role_name or role_id:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Rolle:** » `{role_name or role_id}`")
+                    req_parts.append(f"<:Astra_punkt:1141303896745201696> Du benötigt die Rolle: **{role_name}** um teilzunehmen.")
                 if level_req is not None:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Level:** {level_req}+")
+                    req_parts.append(f"<:Astra_punkt:1141303896745201696> Du musst mindestens Level: **{int(level_req)}** sein um teilzunehmen.")
                 if msgs_req is not None:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Nachrichten:** mind. {msgs_req}")
+                    req_parts.append(f"<:Astra_punkt:1141303896745201696> Du musst mindestens **{int(msgs_req)}** Nachrichten auf diesem Server schreiben um teilzunehmen.")
                 req_block = ("\n" + "\n".join(req_parts)) if req_parts else ""
 
                 # Embed-Funktionen
                 def public_embed(current_count: int) -> discord.Embed:
-                    return discord.Embed(
+                    e = discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -255,14 +255,20 @@ class GiveawayButton(discord.ui.View):
                             f"<:Astra_arrow:1141303823600717885> Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}\n"
                             f"<:Astra_arrow:1141303823600717885> **{current_count}** Teilnehmer\n\n"
                             "<:Astra_settings:1141303908778639490> » __**Anforderungen:**__\n"
-                            "<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button** um teilzunehmen."
+                            "<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button**, um teilzunehmen."
                             f"{req_block}"
                         ),
                         colour=discord.Colour.blue(),
                     )
+                    if guild and guild.icon:
+                        e.set_thumbnail(url=guild.icon.url)
+                        e.set_footer(text="Viel Erfolg 🍀", icon_url=guild.icon.url)
+                    else:
+                        e.set_footer(text="Viel Erfolg 🍀")
+                    return e
 
                 def success_dm() -> discord.Embed:
-                    return discord.Embed(
+                    e = discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -272,30 +278,30 @@ class GiveawayButton(discord.ui.View):
                         ),
                         colour=discord.Colour.green(),
                     )
+                    if guild and guild.icon:
+                        e.set_thumbnail(url=guild.icon.url)
+                    return e
 
                 # --- Anforderungen prüfen & Gründe als Sätze ---
                 reasons_lines = []
                 role_ok, lvl_ok, msgs_ok = True, True, True
                 have_level, have_msgs = 0, 0
 
+                member: Optional[discord.Member] = guild.get_member(interaction.user.id)
+
                 # Rolle
                 if role_id is not None or role_name:
                     shown = role_name or str(role_id)
                     role_ok = False
-
                     target_role = None
                     if role_id is not None:
                         target_role = guild.get_role(role_id)
-                    if target_role is None and role_name:  # Fallback per Name
+                    if target_role is None and role_name:
                         target_role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
-
-                    if target_role and isinstance(interaction.user, discord.Member):
-                        role_ok = target_role in interaction.user.roles
-
+                    if target_role and member:
+                        role_ok = target_role in member.roles
                     if not role_ok:
-                        reasons_lines.append(
-                            f"<:Astra_punkt:1141303896745201696> Dir fehlt die Rolle **{shown}**, um teilnehmen zu können."
-                        )
+                        reasons_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die Rolle **{shown}**, um teilnehmen zu können.")
 
                 # Level
                 if level_req is not None:
@@ -326,7 +332,7 @@ class GiveawayButton(discord.ui.View):
                 any_failed = not (role_ok and lvl_ok and msgs_ok)
 
                 def failure_dm() -> discord.Embed:
-                    return discord.Embed(
+                    e = discord.Embed(
                         title=" ",
                         description=(
                             f"🏆 Preis: {prize}\n"
@@ -337,6 +343,9 @@ class GiveawayButton(discord.ui.View):
                         ),
                         colour=discord.Colour.red(),
                     )
+                    if guild and guild.icon:
+                        e.set_thumbnail(url=guild.icon.url)
+                    return e
 
                 # Teilnahme eintragen / austragen
                 if not existing:
@@ -439,12 +448,25 @@ class Giveaway(app_commands.Group):
                 role_name = rolle.name if rolle else None
 
                 req_parts = []
+
                 if role_name or role_id:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Rolle:** » `{role_name or role_id}`")
+                    display_role = role_name
+                    req_parts.append(
+                        f"<:Astra_punkt:1141303896745201696> Du benötigst die Rolle **{display_role}**, um teilzunehmen."
+                    )
+
                 if level is not None:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Level:** {int(level)}+")
+                    lvl_val = int(level)
+                    req_parts.append(
+                        f"<:Astra_punkt:1141303896745201696> Mindestlevel: **{lvl_val}**."
+                    )
+
                 if msgs_req is not None:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> **Nachrichten:** mind. {int(msgs_req)}")
+                    msgs_val = int(msgs_req)
+                    req_parts.append(
+                        f"<:Astra_punkt:1141303896745201696> Mindestens **{msgs_val}** Nachrichten auf diesem Server."
+                    )
+
                 req_block = ("\n" + "\n".join(req_parts)) if req_parts else ""
 
                 embed = discord.Embed(
