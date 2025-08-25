@@ -34,6 +34,34 @@ from typing import Literal
 
 import re
 
+SCHEMA_PATH = "/root/Astra/opt/schema.sql"  # <- Pfad zu deiner Datei
+
+async def run_sql_file(pool, path: str):
+    p = Path(path)
+    if not p.exists():
+        logging.error(f"[DB] SQL-Datei nicht gefunden: {path}")
+        return
+
+    raw = p.read_text(encoding="utf-8")
+
+    # -- Kommentare entfernen (-- … und /* … */), dann an ';' splitten
+    raw = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)          # block comments
+    lines = []
+    for line in raw.splitlines():
+        # entferne Zeilenkommentare, aber nicht in Strings (einfacher Ansatz reicht hier)
+        line = re.sub(r"--.*$", "", line)
+        lines.append(line)
+    cleaned = "\n".join(lines)
+
+    statements = [s.strip() for s in cleaned.split(";") if s.strip()]
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            for stmt in statements:
+                try:
+                    await cur.execute(stmt)
+                except Exception as e:
+                    logging.error(f"[DB] Fehler in Statement:\n{stmt}\n{e}")
+
 logging.basicConfig(
     level=logging.INFO,  # oder DEBUG für mehr Details
     format="%(asctime)s - %(levelname)s - %(message)s"
@@ -147,92 +175,41 @@ class Astra(commands.Bot):
         logging.info("✅ DB-Verbindung erfolgreich")
 
     async def init_tables(self):
-        """Initialisiert Tabellen und startet Tasks"""
+        """Erstellt/Registriert Tasks und führt einen DB-Healthcheck aus."""
+        await run_sql_file(self.pool, SCHEMA_PATH)
+
+        # DB-Healthcheck
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Tabellen erstellen
+                await cur.execute("SELECT 1")
+        logging.info("✅ DB erreichbar")
 
-                await cur.execute("CREATE TABLE IF NOT EXISTS clear_jobs (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, channel_id BIGINT NOT NULL, amount INT NOT NULL, requested_by VARCHAR(128) NOT NULL, status ENUM('pending','processing','done') NOT NULL DEFAULT 'pending', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), KEY idx_status_channel (status, channel_id), KEY idx_channel_created (channel_id, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
-                await cur.execute("CREATE TABLE IF NOT EXISTS subscriptions (guild_id BIGINT NOT NULL, discord_channel_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, content_id VARCHAR(255) NOT NULL, ping_role_id BIGINT NULL, last_item_id VARCHAR(255) NULL, last_sent_at DATETIME NULL, PRIMARY KEY (guild_id, discord_channel_id, platform, content_id))")
-                await cur.execute("CREATE TABLE IF NOT EXISTS notifier_settings (guild_id BIGINT NOT NULL, platform ENUM('youtube','twitch') NOT NULL, enabled TINYINT(1) NOT NULL DEFAULT 1, PRIMARY KEY (guild_id, platform))")
+        # Aiomysql anstoßen
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
 
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelstyle (guild_id BIGINT NOT NULL, client_id BIGINT NOT NULL, style VARCHAR(128) NOT NULL, PRIMARY KEY (guild_id, client_id))")
-                await cur.execute("CREATE TABLE IF NOT EXISTS backups (code VARCHAR(32) PRIMARY KEY, guild_id BIGINT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, includes TEXT NULL, version INT NOT NULL, size_bytes INT NOT NULL, `hash` BINARY(16) NOT NULL, `data_blob` LONGBLOB NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-                await cur.execute("CREATE TABLE IF NOT EXISTS backup_jobs (job_id BIGINT PRIMARY KEY AUTO_INCREMENT, guild_id BIGINT NOT NULL, code VARCHAR(64), type ENUM('create','restore','undo') NOT NULL, status ENUM('pending','running','done','error') NOT NULL DEFAULT 'pending', step INT NOT NULL DEFAULT 0, total_steps INT NOT NULL DEFAULT 0, created_objects JSON NULL, status_channel_id BIGINT NULL, status_message_id BIGINT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, last_error TEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-                await cur.execute("CREATE TABLE IF NOT EXISTS community_goals (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, started_at BIGINT NOT NULL, ends_at BIGINT NOT NULL, reward_role_id BIGINT NULL, reward_text VARCHAR(255) NULL, active BOOLEAN DEFAULT TRUE, channel_id BIGINT NOT NULL, msg_id BIGINT NOT NULL)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS community_goal_conditions (id INT AUTO_INCREMENT PRIMARY KEY, goal_id INT NOT NULL, type VARCHAR(32) NOT NULL, target BIGINT NOT NULL, progress BIGINT NOT NULL DEFAULT 0, FOREIGN KEY (goal_id) REFERENCES community_goals(id) ON DELETE CASCADE)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS goal_bans (id INT AUTO_INCREMENT PRIMARY KEY, guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, mod_id BIGINT, time DATETIME NOT NULL)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS gc_users (id BIGINT PRIMARY KEY, lvl_points INT NOT NULL DEFAULT 0, team BOOLEAN NOT NULL DEFAULT FALSE, banned BOOLEAN NOT NULL DEFAULT FALSE)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS gc_servers (id INT AUTO_INCREMENT PRIMARY KEY, guildid BIGINT NOT NULL, channelid BIGINT NOT NULL, invite VARCHAR(255))")
-
-                await cur.execute("CREATE TABLE IF NOT EXISTS reactionrole_messages (message_id BIGINT UNSIGNED PRIMARY KEY, guild_id BIGINT UNSIGNED NOT NULL, channel_id BIGINT UNSIGNED NOT NULL, style VARCHAR(10) NOT NULL, embed_title VARCHAR(256) NOT NULL, embed_description TEXT NOT NULL, embed_color VARCHAR(6) NOT NULL, embed_image TEXT NULL, embed_thumbnail TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
-                await cur.execute("CREATE TABLE IF NOT EXISTS reactionrole_entries (id INT AUTO_INCREMENT PRIMARY KEY, message_id BIGINT UNSIGNED NOT NULL, role_id BIGINT UNSIGNED NOT NULL, label VARCHAR(100) NOT NULL, emoji VARCHAR(100), CONSTRAINT fk_rr_msg FOREIGN KEY (message_id) REFERENCES reactionrole_messages(message_id) ON DELETE CASCADE, INDEX idx_rr_msg (message_id), UNIQUE KEY uq_msg_role (message_id, role_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;")
-
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz (guildID BIGINT, channelID BIGINT, messageID BIGINT);")
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_lsg (guildID BIGINT PRIMARY KEY, lösung TEXT);")
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_quizzez (question TEXT, answer VARCHAR(255), hint TEXT);")
-                await cur.execute("CREATE TABLE IF NOT EXISTS emojiquiz_messages (guildID BIGINT, channelID BIGINT, messageID BIGINT)")
-                await cur.execute("INSERT INTO emojiquiz_quizzez (question, answer, hint) VALUES ('🎬🚗👻', 'Ghostbusters', 'Ein Film über Geisterjäger'), ('🦇👨‍👩‍👧‍👦', 'Batman', 'Ein Superheld, der Gotham City beschützt'), ('🔗🌳🛤️', 'Linkin Park', 'Eine US-Rockband mit elektronischen Elementen, bekannt durch Songs wie \"In the End\"'), ('🤠🎸🌾', 'Country', 'Ein Musikgenre mit ländlichen Themen'), ('🔴🔵🟡', 'Twister', 'Ein Spiel, bei dem man Körperteile auf Farbpunkte legt'), ('🚀👾', 'E.T.', 'Ein Außerirdischer wird von Kindern gefunden'), ('🕵️‍♂️🔍', 'Sherlock Holmes', 'Ein berühmter Detektiv mit messerscharfem Verstand'), ('🦁👑', 'Der König der Löwen', 'Ein Zeichentrickfilm über Tiere in der Savanne'), ('🧙‍♂️⚡', 'Harry Potter', 'Ein Zauberer erlebt Abenteuer in einer magischen Welt'), ('🌌🚀', 'Star Wars', 'Eine epische Weltraumsaga zwischen Gut und Böse'), ('🍫🏭', 'Charlie und die Schokoladenfabrik', 'Ein Junge gewinnt eine Tour durch eine Fabrik'), ('🎤🐠', 'Findet Nemo', 'Ein Clownfisch sucht seinen Sohn'), ('🌈🍭', 'Der Zauberer von Oz', 'Ein Mädchen sucht einen Zauberer in einer Fantasiewelt'), ('🧛‍♂️🦇', 'Dracula', 'Ein Vampir, der nachts Blut trinkt'), ('🚶‍♂️👨‍🚀', 'Der Marsianer', 'Ein Astronaut kämpft ums Überleben auf dem Mars'), ('🏹👧', 'Die Tribute von Panem', 'Ein Mädchen wird zu einem tödlichen Spiel gezwungen'), ('🚢🌊', 'Titanic', 'Ein Liebesdrama auf einem berühmten Schiff'), ('🧊⛄', 'Die Eiskönigin', 'Eine Prinzessin mit Eiskräften'), ('🧟‍♂️🧟‍♀️', 'The Walking Dead', 'Eine Serie über eine Zombieapokalypse'), ('🐶🐱', 'Haustiere', 'Tiere, die oft als Begleiter gehalten werden'), ('🍎🍌', 'Früchte', 'Gesundes, essbares Obst'), ('☀️🌈', 'Regenbogen', 'Ein farbenfrohes Wetterphänomen'), ('📚📖', 'Bücher', 'Gedruckte oder digitale Literaturwerke'), ('🍕🍔', 'Fast Food', 'Schnell zubereitetes Essen zum Mitnehmen'), ('🚗🚦', 'Verkehr', 'Transportmittel und Straßenschilder'), ('🌳🌺', 'Natur', 'Die belebte und unbelebte Umwelt'), ('👶🍼', 'Baby', 'Ein neugeborenes oder kleines Kind'), ('🌞🏖️', 'Strand', 'Ein Ort mit Sand und Wasser'), ('🎮🕹️', 'Videospiele', 'Elektronische Spiele auf Bildschirmen'), ('🌙🌠', 'Nachthimmel', 'Der Himmel mit Mond und Sternen'), ('🎨🖌️', 'Malerei', 'Künstlerische Darstellung mit Farben'), ('🍲🥗', 'Essen', 'Verschiedene Arten von Gerichten'), ('📺🎬', 'Fernsehen', 'Sendungen und Filme auf dem Bildschirm'), ('📱📞', 'Handy', 'Ein Kommunikationsgerät'), ('📆⏰', 'Zeit', 'Messung von Momenten und Abläufen'), ('👩‍🍳🍳', 'Kochen', 'Zubereitung von Mahlzeiten'), ('🚴‍♂️🚶‍♀️', 'Aktivitäten', 'Was du draußen machst, wenn dir langweilig ist'), ('🎈🥳', 'Party', 'Ein soziales Treffen zum Feiern'), ('❤️🌹', 'Liebe', 'Ein starkes Gefühl der Zuneigung'), ('🌞🌻', 'Sonnenblume', 'Eine fröhliche, helle Blume'), ('📚✏️', 'Schule', 'Ein Ort zum Lernen'), ('🐶🏠', 'Hundehütte', 'Ein Unterschlupf für Hunde'), ('📆🎂', 'Jahrestag', 'Jährliche Feier eines Ereignisses'), ('🚴‍♀️🚴', 'Fahrrad', 'Ein zweirädriges Fortbewegungsmittel'), ('🏀👟', 'Basketball', 'Ein Mannschaftssport mit zwei Teams'), ('🛒🛍️', 'Einkaufen', 'Kleidung und andere Dinge kaufen'), ('🎭🤡', 'Zirkus', 'Reisende Künstler mit Akrobatik und Clowns'), ('🌧️🌈', 'Wetter', 'Meteorologische Erscheinungen'), ('🐍⚡🏰', 'Slytherin', 'Ein Haus in Hogwarts – grün, ehrgeizig, listig'), ('🐵🪄', 'Dschungelbuch', 'Ein Junge wächst im Urwald mit Tieren auf'), ('🕸️🕷️', 'Spider-Man', 'Ein Superheld mit Spinnenkräften'), ('🍔👨‍🍳', 'Burger King', 'Ein Fast-Food-Restaurant mit königlichem Namen'), ('👓⚗️', 'Chemie', 'Eine Naturwissenschaft mit Formeln und Reaktionen'), ('🎤🎶', 'Musik', 'Etwas, das du hörst und fühlst'), ('🗺️🧭', 'Abenteuer', 'Eine spannende Reise ins Unbekannte'), ('💻⌨️', 'Computer', 'Ein digitales Gerät für alles Mögliche'), ('👽🔭', 'Außerirdischer', 'Ein Wesen nicht von dieser Welt')")
-                await cur.execute("CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS snake (userID BIGINT, highscore BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS topgg (userID BIGINT PRIMARY KEY, count INT NOT NULL DEFAULT 0, last_reset DATE NULL, last_vote DATETIME NULL, last_vote_epoch BIGINT NULL, next_vote_epoch BIGINT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-
-                await cur.execute("CREATE TABLE IF NOT EXISTS website_stats (servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS afk (guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS autoreact (guildID BIGINT, channelID BIGINT, emoji TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS blacklist (serverID BIGINT, word TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS botrole (roleID BIGINT, guildID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS joinrole (roleID BIGINT, guildID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS capslock (guildID BIGINT, percent BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS counter (guildID BIGINT, channelID BIGINT, number BIGINT, lastuserID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS leavemsg (guildID BIGINT, channelID BIGINT, msg TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS guessthenumber (guildID BIGINT, channelID BIGINT, number BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS modlog (serverID BIGINT, channelID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS tags (guildID BIGINT, tagname BIGINT, tagoutput BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS tempchannels (guild_id BIGINT, channel_id BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS welcome (guildID BIGINT, channelID BIGINT, msg TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS ticketsystem_channels (guildID BIGINT, channelID BIGINT, msgID BIGINT, opened BIGINT, claimed TEXT, closed TEXT, time TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS usertempchannels (guildID BIGINT, userID BIGINT, channelID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS ticketsystem (guildID BIGINT, channelID BIGINT, categoryID BIGINT, roleID BIGINT, thema TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS ticketlog (guildID BIGINT, channelID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS reminder (userID BIGINT, grund TEXT, time TEXT, remindID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelsystem (user_xp BIGINT, user_level BIGINT, client_id TEXT, guild_id TEXT, enabled BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelchannel (guildID BIGINT, type TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelmsg (guildID BIGINT, message TEXT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelxp (guildID BIGINT, xp BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS levelroles (guildID BIGINT, roleID BIGINT, levelreq BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS giveaway_active (guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS giveway_ids (guildID BIGINT, gwID BIGINT, messageID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS giveaway_entrys (guildID BIGINT, channelID BIGINT, messageID BIGINT, userID BIGINT)")
-
-                # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
-
-                logging.info("✅ Tables Erfolgreich geladen")
-
-
-
-                # Reminder-Tasks (gestaffelt laden)
+                # --- Reminder-Tasks (deine bestehende reminder-Tabelle) ---
                 if not self.task:
                     self.task = True
-                    await cur.execute("SELECT time FROM reminder")
+                    # Nur zukünftige Reminder laden; wenn 'time' TEXT ist, trotzdem als int vergleichbar, wenn Unix-Zeit
+                    await cur.execute(
+                        "SELECT time FROM reminder WHERE time REGEXP '^[0-9]+$' AND CAST(time AS UNSIGNED) > UNIX_TIMESTAMP()")
                     eintraege = await cur.fetchall()
 
                     async def starte_reminder_tasks():
-                        for eintrag in eintraege:
+                        for (t_str,) in eintraege:
                             try:
-                                t2 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
+                                t2 = datetime.fromtimestamp(int(t_str), timezone.utc)
                                 asyncio.create_task(funktion(t2))
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.2)
                             except Exception as e:
                                 logging.error(f"❌ Reminder-Fehler: {e}")
 
                     asyncio.create_task(starte_reminder_tasks())
 
-                # Stelle sicher: import asyncio / from datetime import datetime, timezone sind vorhanden
-
+                # --- Vote-Reminder (topgg.next_vote_epoch) ---
                 if not self.task2:
                     self.task2 = True
-                    # Nur zukünftige Reminders laden
                     await cur.execute("SELECT next_vote_epoch FROM topgg WHERE next_vote_epoch > UNIX_TIMESTAMP()")
                     eintraege2 = await cur.fetchall()
 
@@ -243,29 +220,32 @@ class Astra(commands.Bot):
                                     continue
                                 when = datetime.fromtimestamp(int(ts), timezone.utc)
                                 asyncio.create_task(funktion2(when))
-                                await asyncio.sleep(0.05)  # klein halten, kein Spam
+                                await asyncio.sleep(0.05)
                             except Exception as e:
                                 logging.error(f"❌ Reminder-Replay-Fehler (ts={ts}): {e}")
 
                     asyncio.create_task(starte_voterole_tasks())
 
+                # --- Giveaway-Tasks ---
                 if not self.task3:
                     self.task3 = True
-                    await cur.execute("SELECT time, guildID, messageID, channelID FROM giveaway_active")
+                    await cur.execute(
+                        "SELECT time, guildID, messageID, channelID FROM giveaway_active WHERE time REGEXP '^[0-9]+$' AND CAST(time AS UNSIGNED) > UNIX_TIMESTAMP()")
                     eintraege3 = await cur.fetchall()
 
                     async def starte_giveaway_tasks():
-                        for eintrag in eintraege3:
+                        for time_str, guild_id, message_id, channel_id in eintraege3:
                             try:
-                                t2 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
-                                msg_id = int(eintrag[2])
+                                t2 = datetime.fromtimestamp(int(time_str), timezone.utc)
+                                msg_id = int(message_id)
                                 asyncio.create_task(gwtimes(t2, msg_id))
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(0.2)
                             except Exception as e:
                                 logging.error(f"❌ Giveaway-Fehler: {e}")
 
                     asyncio.create_task(starte_giveaway_tasks())
-                    logging.info("✅ Tasks Registered!")
+
+        logging.info("✅ Tasks Registered!")
 
     async def load_cogs(self):
         """Lädt alle Cogs"""
