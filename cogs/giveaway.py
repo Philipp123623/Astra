@@ -27,6 +27,23 @@ def convert(time_str: str) -> int:
         return -2
     return val * time_dict[unit]
 
+# ---- robuste Rollenauflösung (kein Unknown mehr) ----
+async def resolve_role_name(guild: discord.Guild, role_id: Optional[int]) -> Optional[str]:
+    if role_id is None:
+        return None
+    rid = int(role_id)
+    role = guild.get_role(rid)
+    if role:
+        return role.name
+    # Fallback: API (bypasst Cache)
+    try:
+        for r in await guild.fetch_roles():
+            if r.id == rid:
+                return r.name
+    except Exception:
+        pass
+    return None
+
 
 def _to_int_or_none(v) -> Optional[int]:
     """Macht aus DB-Werten (None/'Not Set'/'0'/''/Zahl) -> int|None, robust."""
@@ -45,26 +62,21 @@ def _to_int_or_none(v) -> Optional[int]:
         return None
 
 
-def build_requirements_text(
+# Öffentliche Anzeige der konfigurierten Anforderungen (ohne User-Status)
+async def build_requirements_text(
     guild: discord.Guild,
     role_id: Optional[int],
     level_req: Optional[int],
     msgs_req: Optional[int],
 ) -> str:
-    """
-    Öffentliche Anzeige der konfigurierten Anforderungen (ohne User-Status).
-    Nie behaupten, dass eine Rolle nicht existiert – wenn sie nicht im Cache ist,
-    zeigen wir die Rollen-Mention.
-    """
     bullet = "<:Astra_punkt:1141303896745201696>"
     parts: list[str] = []
 
     if role_id is not None:
-        role_obj = guild.get_role(int(role_id))
-        if role_obj:
-            parts.append(f"{bullet} **Rolle:** `{role_obj.name}`")
-        else:
-            parts.append(f"{bullet} **Rolle:** <@&{int(role_id)}>")
+        name = await resolve_role_name(guild, role_id)
+        # Immer schöner Name in Backticks; wenn wirklich nicht auffindbar, zeige die ID
+        shown = f"`{name}`" if name else f"`{int(role_id)}`"
+        parts.append(f"{bullet} **Rolle:** » {shown}")
 
     if level_req is not None:
         parts.append(f"{bullet} **Level:** {int(level_req)}+")
@@ -75,6 +87,7 @@ def build_requirements_text(
     return "\n".join(parts)
 
 
+
 async def collect_unmet_reasons(
     cur,
     guild: discord.Guild,
@@ -83,10 +96,6 @@ async def collect_unmet_reasons(
     level_req: Optional[int],
     msgs_req: Optional[int],
 ) -> list[str]:
-    """
-    Prüft die Anforderungen und gibt NUR die **nicht erfüllten** Bedingungen zurück.
-    Jede Zeile beginnt mit deinem blauen Punkt. Keine Checkliste, keine „existiert nicht mehr“-Aussage.
-    """
     bullet = "<:Astra_punkt:1141303896745201696>"
     reasons: list[str] = []
 
@@ -95,14 +104,12 @@ async def collect_unmet_reasons(
 
     # Rolle fehlt?
     if role_id is not None:
-        role_obj = guild.get_role(int(role_id))
-        if role_obj:
-            if role_obj not in member.roles:
-                reasons.append(f"{bullet} Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
-        else:
-            # Kein Cache/Intent? => trotzdem sagen, dass diese Rolle benötigt wird (als Mention).
-            if all(r.id != int(role_id) for r in member.roles):
-                reasons.append(f"{bullet} Du benötigst die **Rolle** <@&{int(role_id)}> um teilzunehmen.")
+        rid = int(role_id)
+        has_role = any(r.id == rid for r in member.roles)
+        if not has_role:
+            name = await resolve_role_name(guild, rid)
+            shown = f"`{name}`" if name else f"`{rid}`"
+            reasons.append(f"{bullet} Du benötigst die **Rolle** {shown} um teilzunehmen.")
 
     # Level zu niedrig?
     if level_req is not None:
@@ -129,6 +136,7 @@ async def collect_unmet_reasons(
             reasons.append(f"{bullet} Du brauchst **mind. {need} Nachrichten** (du hast {have}).")
 
     return reasons
+
 
 
 # ------------------------- Giveaway End-Timer -------------------------
@@ -311,7 +319,7 @@ class GiveawayButton(discord.ui.View):
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
                 # Öffentliche Anforderungen im Embed
-                req_text = build_requirements_text(guild, role_id, level_req, msgs_req)
+                req_text = await build_requirements_text(guild, role_id, level_req, msgs_req)
                 req_block = f"\n{req_text}" if req_text else ""
 
                 def public_embed(current_count: int) -> discord.Embed:
@@ -490,7 +498,7 @@ class Giveaway(app_commands.Group):
 
                 msgs_req = int(nachrichten) if isinstance(nachrichten, int) and nachrichten > 0 else None
 
-                req_text = build_requirements_text(
+                req_text = await build_requirements_text(
                     interaction.guild,
                     rolle.id if rolle else None,
                     level if level is not None else None,
