@@ -866,10 +866,7 @@ class Giveaway(app_commands.Group):
                     embed.set_footer(text="Viel Erfolg 🍀", icon_url=interaction.guild.icon.url)
                 else:
                     embed.set_footer(text="Viel Erfolg 🍀")
-
-                # Button-View (aus Teil 2) – erwartet eine View-Klasse `gw_button`
-                # Falls deine View den Bot im Konstruktor erwartet, nutze gw_button(self.bot)
-                msg = await kanal.send("🎉 **Neues Gewinnspiel** 🎉", embed=embed, view=gw_button())
+                msg = await kanal.send("🎉 **Neues Gewinnspiel** 🎉", embed=embed, view=GiveawayButton(self.bot))
 
                 # Task zum Beenden planen (aus Teil 2)
                 asyncio.create_task(gwtimes(t2, msg.id))
