@@ -239,7 +239,7 @@ class GiveawayButton(discord.ui.View):
                 if level_req is not None:
                     req_parts.append(f"<:Astra_punkt:1141303896745201696> Du musst mindestens Level: **{int(level_req)}** sein, um teilzunehmen.")
                 if msgs_req is not None:
-                    req_parts.append(f"<:Astra_punkt:1141303896745201696> Du musst mindestens **{int(msgs_req)}** Nachrichten auf diesem Server schreiben, um teilzunehmen.")
+                    req_parts.append(f"<:Astra_punkt:1141303896745201696> Du musst mindestens **{int(msgs_req)}** Nachrichten schreiben, um teilzunehmen.")
                 req_block = ("\n" + "\n".join(req_parts)) if req_parts else ""
 
                 # Embed-Funktionen
