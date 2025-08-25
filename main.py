@@ -2,6 +2,7 @@ import discord
 import requests
 import json
 import random
+from waitress import serve
 import threading
 import httpx
 from discord.ext import commands, tasks
@@ -1677,11 +1678,10 @@ app = Flask(__name__)
 @app.route('/status')
 def status():
     return jsonify(online=True)
+
 def run_flask():
-    app.run(host="0.0.0.0", port=5000)
+    serve(app, host="0.0.0.0", port=5000)  # produktionsreif, keine Warning
 
 if __name__ == "__main__":
-    # Flask läuft im Hintergrund
     threading.Thread(target=run_flask, daemon=True).start()
-    # Discord-Bot läuft normal
     bot.run(TOKEN)
