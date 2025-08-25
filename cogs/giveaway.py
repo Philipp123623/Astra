@@ -3,13 +3,14 @@ import logging
 import math
 import random
 from datetime import datetime, timezone, timedelta
-from typing import Literal
-import time
+from typing import Literal, Optional
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 
+# ----------------------------- Utils -----------------------------
 def convert(time_str: str) -> int:
     """
     Konvertiert eine Zeitangabe wie '10m', '2h', '3d' in Sekunden.
@@ -27,11 +28,108 @@ def convert(time_str: str) -> int:
     return val * time_dict[unit]
 
 
+def _to_int_or_none(v) -> Optional[int]:
+    """Strapazierfähig: macht aus DB-Werten wie None/'Not Set'/'0' -> int|None."""
+    if v is None:
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    s = str(v).strip()
+    if not s or s.lower() in {"not set", "none", "null", "nil"}:
+        return None
+    try:
+        return int(float(s))
+    except Exception:
+        return None
+
+
+async def check_requirements(
+    cur,
+    guild: discord.Guild,
+    member: Optional[discord.Member],
+    role_id: Optional[int],
+    level_req: Optional[int],
+    msgs_req: Optional[int],
+) -> tuple[list[str], list[str]]:
+    """
+    Prüft ALLE Anforderungen und liefert:
+    - reasons: Liste aller NICHT erfüllten Bedingungen (für 'Gründe')
+    - checklist: Liste aller Bedingungen mit ✅/❌ (Transparenz)
+    """
+    reasons: list[str] = []
+    checklist: list[str] = []
+
+    if member is None:
+        return ["<:Astra_punkt:1141303896745201696> Nutzer ist nicht mehr auf dem Server."], ["❌ **Mitglied:** nicht auf dem Server"]
+
+    # Rolle
+    if role_id is not None:
+        role_obj = guild.get_role(role_id)
+        if role_obj is None:
+            reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
+            checklist.append("❌ **Rolle:** (existiert nicht mehr)")
+        elif role_obj in member.roles:
+            checklist.append(f"✅ **Rolle:** `{role_obj.name}`")
+        else:
+            reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}`.")
+            checklist.append(f"❌ **Rolle:** `{role_obj.name}`")
+
+    # Level
+    if level_req is not None:
+        await cur.execute(
+            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
+            (member.id, guild.id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            reasons.append("<:Astra_punkt:1141303896745201696> Keine **Level-Daten** gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
+            checklist.append(f"❌ **Level:** {level_req}+ (keine Daten)")
+        else:
+            have = int(row[0])
+            if have >= int(level_req):
+                checklist.append(f"✅ **Level:** {have}/{level_req}")
+            else:
+                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {level_req}** sein (du bist Level {have}).")
+                checklist.append(f"❌ **Level:** {have}/{level_req}")
+
+    # Nachrichten
+    if msgs_req is not None and msgs_req > 0:
+        await cur.execute(
+            "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
+            (guild.id, member.id),
+        )
+        row = await cur.fetchone()
+        have = int(row[0]) if row else 0
+        if have >= int(msgs_req):
+            checklist.append(f"✅ **Nachrichten:** {have}/{msgs_req}")
+        else:
+            reasons.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {msgs_req} Nachrichten** (du hast {have}).")
+            checklist.append(f"❌ **Nachrichten:** {have}/{msgs_req}")
+
+    return reasons, checklist
+
+
+def build_requirements_text(guild: discord.Guild, role_id: Optional[int], level_req: Optional[int], msgs_req: Optional[int]) -> str:
+    """Öffentliche Anzeige der konfigurierten Anforderungen (ohne User-Status)."""
+    lines = []
+    if role_id is not None:
+        role_obj = guild.get_role(role_id)
+        if role_obj:
+            lines.append(f"<:Astra_punkt:1141303896745201696> **Rolle:** `{role_obj.name}`")
+        else:
+            lines.append("<:Astra_punkt:1141303896745201696> **Rolle:** (existiert nicht mehr)")
+    if level_req is not None:
+        lines.append(f"<:Astra_punkt:1141303896745201696> **Level:** {level_req}+")
+    if msgs_req is not None and msgs_req > 0:
+        lines.append(f"<:Astra_punkt:1141303896745201696> **Nachrichten:** mind. {msgs_req}")
+    return "\n".join(lines)
+
+
+# ------------------------- Giveaway End-Timer -------------------------
 async def gwtimes(bot: commands.Bot, when: datetime, messageid: int):
-    """
-    Wartet bis 'when' und beendet dann das Giveaway mit der Message-ID 'messageid'.
-    1:1 deine Logik – nur mit explizitem 'bot' Parameter, damit das in einer Cog sauber ist.
-    """
+    """Wartet bis 'when' und beendet dann das Giveaway (messageid)."""
     await bot.wait_until_ready()
     await discord.utils.sleep_until(when=when)
 
@@ -52,15 +150,8 @@ async def gwtimes(bot: commands.Bot, when: datetime, messageid: int):
             if not result3:
                 return
 
-            ended = result3[0]
-            price = result3[1]
-            winners = result3[2]
-            entrys = result3[3]
-            time_unix = result3[4]
-            guildID = result3[5]
-            channelID = result3[6]
+            ended, price, winners, entrys, time_unix, guildID, channelID = result3
 
-            # == SICHERHEITSCHECKS für Guild & Channel ==
             guild = bot.get_guild(int(guildID))
             if guild is None:
                 logging.error(f"Guild {guildID} not found for giveaway {messageid}!")
@@ -74,18 +165,64 @@ async def gwtimes(bot: commands.Bot, when: datetime, messageid: int):
             try:
                 msg = await channel.fetch_message(messageid)
             except Exception as e:
-                logging.error(
-                    f"Giveaway message {messageid} not found in channel {channelID} in guild {guildID}: {e}"
-                )
+                logging.error(f"Giveaway message {messageid} not found in channel {channelID} in guild {guildID}: {e}")
                 return
 
             time2 = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-            # Niemand hat teilgenommen
+            if int(ended) == 1:
+                return
+
             if not result:
-                if int(ended) == 1:
-                    return
-                if int(ended) == 0:
+                # Niemand hat teilgenommen
+                embed = discord.Embed(
+                    title=" ",
+                    description=(
+                        f"🏆 Preis: {price}\n"
+                        "`🤖` [Astra Einladen]"
+                        "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
+                        "<:Astra_gw_open2:1141303850125504533> » __**Wer hat das Gewinnspiel gewonnen?**__\n"
+                        "<:Astra_arrow:1141303823600717885> Niemand hat das Gewinnspiel gewonnen.\n"
+                        f"<:Astra_arrow:1141303823600717885> Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}\n"
+                        "<:Astra_arrow:1141303823600717885> Es gab **0** Teilnehmer."
+                    ),
+                    colour=discord.Colour.red(),
+                )
+                await msg.edit(content="`❌` Giveaway Ended `❌`", embed=embed, view=None)
+                await msg.reply("<:Astra_x:1141303954555289600> **Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen.**")
+            else:
+                # Es gibt Teilnehmer
+                participants = [row[2] for row in result]
+                to_pick = min(len(participants), int(winners)) if participants else 0
+                chosen_winners = random.sample(participants, k=to_pick) if to_pick > 0 else []
+
+                users = []
+                for uid in chosen_winners:
+                    u = bot.get_user(uid)
+                    if not u:
+                        continue
+                    winembed = discord.Embed(
+                        title=" ",
+                        description=(
+                            f"🏆 Preis: {price}\n"
+                            "`🤖` [Astra Einladen]"
+                            "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
+                            f"`🎉` Du hast ein Gewinnspiel auf [{guild.name}]"
+                            f"(https://discord.com/channels/{guild.id}/{channel.id}/{msg.id}) gewonnen.\n"
+                            f"`⏰` Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}"
+                        ),
+                        colour=discord.Colour.yellow(),
+                    )
+                    if guild.icon:
+                        winembed.set_thumbnail(url=guild.icon.url)
+                    try:
+                        await u.send("<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**", embed=winembed)
+                    except Exception:
+                        pass
+                    users.append(u)
+
+                mentions = ", ".join(user.mention for user in users if user)
+                if entrys < 1 or not users:
                     embed = discord.Embed(
                         title=" ",
                         description=(
@@ -100,122 +237,34 @@ async def gwtimes(bot: commands.Bot, when: datetime, messageid: int):
                         colour=discord.Colour.red(),
                     )
                     await msg.edit(content="`❌` Giveaway Ended `❌`", embed=embed, view=None)
-                    await msg.reply(
-                        "<:Astra_x:1141303954555289600> **Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen.**"
+                    await msg.reply("<:Astra_x:1141303954555289600> Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen.")
+                else:
+                    embed = discord.Embed(
+                        title=" ",
+                        description=(
+                            f"🏆 Preis: {price}\n"
+                            "`🤖` [Astra Einladen]"
+                            "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
+                            "<:Astra_gw_open2:1141303850125504533> » __**Wer hat das Gewinnspiel gewonnen?**__\n"
+                            f"<:Astra_arrow:1141303823600717885> {mentions} hat das Gewinnspiel gewonnen.\n"
+                            f"<:Astra_arrow:1141303823600717885> Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}\n"
+                            f"<:Astra_arrow:1141303823600717885> Es gab **{entrys}** Teilnehmer."
+                        ),
+                        colour=discord.Colour.red(),
                     )
-                    await cur.execute(
-                        "UPDATE giveaway_active SET ended = %s WHERE guildID = %s AND channelID = %s and messageID = %s",
-                        (1, guild.id, channel.id, messageid),
-                    )
-                    await cur.execute("DELETE FROM giveway_ids WHERE messageID = %s", (messageid,))
+                    await msg.edit(content="`❌` Giveaway Ended `❌`", embed=embed, view=None)
+                    await msg.reply(f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen! Herzlichen Glückwunsch.")
 
-            # Es gibt Teilnehmer
-            if result:
-                guildID = result[0][0]
-                channelID = result[0][1]
-                await cur.execute(
-                    "SELECT ended, prize, winners, entrys, time "
-                    "FROM giveaway_active WHERE guildID = %s AND channelID = %s AND messageID = %s",
-                    (guildID, channelID, messageid),
-                )
-                result2 = await cur.fetchone()
-                ended = result2[0]
-                if int(ended) == 1:
-                    return
-                if int(ended) == 0:
-                    price = result2[1]
-                    winners_amount = int(result2[2])
-                    entrys = result2[3]
-                    time_unix = result2[4]
-                    time2 = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
-                    participants = [row[2] for row in result]
-
-                    # Gewinner bestimmen (Anzahl nie höher als Teilnehmer)
-                    chosen_winners = []
-                    if len(participants) > 0:
-                        to_pick = min(len(participants), winners_amount)
-                        chosen_winners = random.sample(participants, k=to_pick)
-
-                    users = []
-                    for uid in chosen_winners:
-                        idwinners = bot.get_user(uid)
-                        winembed = discord.Embed(
-                            title=" ",
-                            description=(
-                                f"🏆 Preis: {price}\n"
-                                "`🤖` [Astra Einladen]"
-                                "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
-                                f"`🎉` Du hast ein Gewinnspiel auf [{guild.name}]"
-                                f"(https://discord.com/channels/{guild.id}/{channel.id}/{msg.id}) gewonnen.\n"
-                                f"`⏰` Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}"
-                            ),
-                            colour=discord.Colour.yellow(),
-                        )
-                        if guild.icon:
-                            winembed.set_thumbnail(url=guild.icon.url)
-                        try:
-                            await idwinners.send(
-                                "<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**",
-                                embed=winembed,
-                            )
-                        except Exception:
-                            pass
-                        users.append(idwinners)
-
-                    mentions = ", ".join(user.mention for user in users if user)
-                    if entrys < 1 or not users:
-                        embed = discord.Embed(
-                            title=" ",
-                            description=(
-                                f"🏆 Preis: {price}\n"
-                                "`🤖` [Astra Einladen]"
-                                "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
-                                "<:Astra_gw_open2:1141303850125504533> » __**Wer hat das Gewinnspiel gewonnen?**__\n"
-                                "<:Astra_arrow:1141303823600717885> Niemand hat das Gewinnspiel gewonnen.\n"
-                                f"<:Astra_arrow:1141303823600717885> Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}\n"
-                                "<:Astra_arrow:1141303823600717885> Es gab **0** Teilnehmer."
-                            ),
-                            colour=discord.Colour.red(),
-                        )
-                        await msg.edit(content="`❌` Giveaway Ended `❌`", embed=embed, view=None)
-                        await msg.reply(
-                            "<:Astra_x:1141303954555289600> Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen."
-                        )
-                        await cur.execute(
-                            "UPDATE giveaway_active SET ended = %s WHERE guildID = %s AND channelID = %s and messageID = %s",
-                            (1, guildID, channelID, messageid),
-                        )
-                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = %s", (messageid,))
-                    else:
-                        embed = discord.Embed(
-                            title=" ",
-                            description=(
-                                f"🏆 Preis: {price}\n"
-                                "`🤖` [Astra Einladen]"
-                                "(https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
-                                "<:Astra_gw_open2:1141303850125504533> » __**Wer hat das Gewinnspiel gewonnen?**__\n"
-                                f"<:Astra_arrow:1141303823600717885> {mentions} hat das Gewinnspiel gewonnen.\n"
-                                f"<:Astra_arrow:1141303823600717885> Das Gewinnspiel endete {discord.utils.format_dt(time2, 'R')}\n"
-                                f"<:Astra_arrow:1141303823600717885> Es gab **{entrys}** Teilnehmer."
-                            ),
-                            colour=discord.Colour.red(),
-                        )
-                        await msg.edit(content="`❌` Giveaway Ended `❌`", embed=embed, view=None)
-                        await msg.reply(
-                            f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen! Herzlichen Glückwunsch."
-                        )
-                        await cur.execute(
-                            "UPDATE giveaway_active SET ended = %s WHERE guildID = %s AND channelID = %s and messageID = %s",
-                            (1, guildID, channelID, messageid),
-                        )
-                        await cur.execute("DELETE FROM giveway_ids WHERE messageID = %s", (messageid,))
+            await cur.execute(
+                "UPDATE giveaway_active SET ended = %s WHERE guildID = %s AND channelID = %s and messageID = %s",
+                (1, guild.id, channel.id, messageid),
+            )
+            await cur.execute("DELETE FROM giveway_ids WHERE messageID = %s", (messageid,))
 
 
+# --------------------------- Button View ---------------------------
 class GiveawayButton(discord.ui.View):
-    """
-    Persistente View für das Giveaway mit Teilnahme-/Abmelde-Button.
-    Nutzt self.bot statt globalem bot.
-    """
+    """Persistente View mit Teilnahme-/Abmelde-Button."""
     def __init__(self, bot: commands.Bot):
         super().__init__(timeout=None)
         self.bot = bot
@@ -231,14 +280,14 @@ class GiveawayButton(discord.ui.View):
             async with conn.cursor() as cur:
                 await interaction.response.defer(ephemeral=True)
 
-                # Ist der User bereits eingetragen?
+                # Bereits eingetragen?
                 await cur.execute(
                     "SELECT userID FROM giveaway_entrys WHERE userID = %s AND guildID = %s AND channelID = %s AND messageID = %s",
                     (interaction.user.id, interaction.guild.id, interaction.channel.id, interaction.message.id),
                 )
                 existing = await cur.fetchone()
 
-                # Giveaway-Infos inkl. messages_required holen
+                # Giveaway-Infos (inkl. messages_required)
                 await cur.execute(
                     "SELECT role, level, entrys, messageID, prize, winners, time, creatorID, messages_required "
                     "FROM giveaway_active WHERE guildID = %s AND channelID = %s AND messageID = %s",
@@ -246,86 +295,21 @@ class GiveawayButton(discord.ui.View):
                 )
                 row = await cur.fetchone()
                 if not row:
-                    return  # Datensatz fehlt
-
-                # ---- Werte normalisieren ----------------------------------------------------
-                def _to_int_or_none(v):
-                    if v is None:
-                        return None
-                    if isinstance(v, int):
-                        return v
-                    if isinstance(v, float):
-                        return int(v)
-                    s = str(v).strip()
-                    if not s or s.lower() in {"not set", "none", "null", "nil"}:
-                        return None
-                    try:
-                        return int(float(s))
-                    except Exception:
-                        return None
+                    return
 
                 role_raw, level_raw, entrys, messageID, price, winners, time_unix, creatorID, msgs_req_raw = row
                 role_id = _to_int_or_none(role_raw)
                 lvl_req = _to_int_or_none(level_raw)
                 msg_req = _to_int_or_none(msgs_req_raw)
 
-                creator = self.bot.get_user(creatorID) or interaction.guild.get_member(creatorID)
                 guild = interaction.guild
+                creator = self.bot.get_user(creatorID) or guild.get_member(creatorID)
                 t_end = datetime.fromtimestamp(int(time_unix), tz=timezone.utc)
 
-                # == Helper: ALLE nicht erfüllten Gründe einsammeln ==
-                async def collect_unmet_reasons() -> list[str]:
-                    reasons: list[str] = []
+                # Öffentliche Anforderungen (Embed-Text)
+                req_text = build_requirements_text(guild, role_id, lvl_req, msg_req)
+                req_block = f"\n{req_text}" if req_text else ""
 
-                    # Rolle
-                    if role_id is not None:
-                        role_obj = guild.get_role(role_id)
-                        if role_obj is None:
-                            reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
-                        elif role_obj not in interaction.user.roles:
-                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}`.")
-
-                    # Level
-                    if lvl_req is not None:
-                        await cur.execute(
-                            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
-                            (interaction.user.id, guild.id),
-                        )
-                        lvl_row = await cur.fetchone()
-                        if not lvl_row:
-                            reasons.append("<:Astra_punkt:1141303896745201696> Keine **Level-Daten** gefunden. Schreibe erst eine Nachricht und versuche es erneut.")
-                        else:
-                            user_level = int(lvl_row[0])
-                            if user_level < int(lvl_req):
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {lvl_req}** sein (du bist Level {user_level}).")
-
-                    # Nachrichten
-                    if (msg_req is not None) and (msg_req > 0):
-                        await cur.execute(
-                            "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
-                            (guild.id, interaction.user.id),
-                        )
-                        msg_row = await cur.fetchone()
-                        count = int(msg_row[0]) if msg_row else 0
-                        if count < int(msg_req):
-                            reasons.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {msg_req} Nachrichten** (du hast {count}).")
-
-                    return reasons
-
-                # ==== Öffentliche Anforderungs-Anzeige ====
-                role_obj = guild.get_role(role_id) if role_id else None
-                req_lines = []
-                if role_id and role_obj:
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{role_obj.name}` um teilzunehmen.")
-                elif role_id and not role_obj:
-                    req_lines.append("<:Astra_punkt:1141303896745201696> Die benötigte **Rolle** existiert nicht mehr.")
-                if lvl_req is not None:
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du musst **Level {lvl_req}** sein um teilzunehmen.")
-                if (msg_req is not None) and (msg_req > 0):
-                    req_lines.append(f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {msg_req} Nachrichten** auf diesem Server.")
-                req_block = ("\n" + "\n".join(req_lines)) if req_lines else ""
-
-                # ==== Embed-Builder ====
                 def build_public_embed(current_count: int) -> discord.Embed:
                     e = discord.Embed(
                         title=" ",
@@ -338,7 +322,7 @@ class GiveawayButton(discord.ui.View):
                             f"<:Astra_arrow:1141303823600717885> Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}\n"
                             f"<:Astra_arrow:1141303823600717885> **{current_count}** Teilnehmer\n\n"
                             "<:Astra_settings:1141303908778639490> » __**Anforderungen:**__\n"
-                            "<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button** um am Gewinnspiel teilzunehmen."
+                            "<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button** um teilzunehmen."
                             f"{req_block}"
                         ),
                         colour=discord.Colour.blue(),
@@ -365,7 +349,9 @@ class GiveawayButton(discord.ui.View):
                         e.set_thumbnail(url=guild.icon.url)
                     return e
 
-                def build_failure_dm(reasons: list[str]) -> discord.Embed:
+                def build_failure_dm(reasons: list[str], checklist: list[str]) -> discord.Embed:
+                    reasons_txt = "\n".join(reasons) if reasons else "Unbekannte Gründe."
+                    checklist_txt = "\n".join(checklist) if checklist else "Keine Anforderungen definiert."
                     e = discord.Embed(
                         title=" ",
                         description=(
@@ -373,7 +359,10 @@ class GiveawayButton(discord.ui.View):
                             "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
                             f"`🎉` Deine Teilnahme auf [{guild.name}](https://discord.com/channels/{guild.id}/{interaction.channel.id}/{messageID}) war **nicht** erfolgreich.\n"
                             f"`⏰` Das Gewinnspiel endet {discord.utils.format_dt(t_end, 'R')}.\n\n"
-                            "`🧨` __**Gründe**__\n" + ("\n".join(reasons) if reasons else "Unbekannte Gründe.")
+                            "`🧨` __**Gründe**__\n"
+                            f"{reasons_txt}\n\n"
+                            "<:Astra_settings:1141303908778639490> » __**Anforderungen (Status)**__\n"
+                            f"{checklist_txt}"
                         ),
                         colour=discord.Colour.red(),
                     )
@@ -381,16 +370,17 @@ class GiveawayButton(discord.ui.View):
                         e.set_thumbnail(url=guild.icon.url)
                     return e
 
-                # ====== USER WILL TEILNEHMEN ======
+                # Teilnahme versuchen
                 if not existing:
-                    reasons = await collect_unmet_reasons()
-
+                    reasons, checklist = await check_requirements(cur, guild, interaction.user, role_id, lvl_req, msg_req)
                     if not reasons:
-                        # Teilnahme eintragen
                         new_count = int(entrys) + 1
+
+                        # Public Embed aktualisieren
                         msg_obj = await interaction.channel.fetch_message(messageID)
                         await msg_obj.edit(embed=build_public_embed(new_count))
 
+                        # DB updaten
                         await cur.execute(
                             "UPDATE giveaway_active SET entrys = %s WHERE guildID = %s AND channelID = %s AND messageID = %s",
                             (new_count, guild.id, interaction.channel.id, interaction.message.id),
@@ -399,6 +389,7 @@ class GiveawayButton(discord.ui.View):
                             "INSERT INTO giveaway_entrys(guildID, channelID, userID, messageID) VALUES (%s, %s, %s, %s)",
                             (guild.id, interaction.channel.id, interaction.user.id, interaction.message.id),
                         )
+                        # DM Erfolg
                         try:
                             await interaction.user.send(
                                 "**<:Astra_accept:1141303821176422460> Deine Teilnahme am Gewinnspiel war erfolgreich.**",
@@ -407,17 +398,17 @@ class GiveawayButton(discord.ui.View):
                         except Exception:
                             pass
                     else:
-                        # DM mit ALLEN Gründen
+                        # DM mit allen Gründen + Checkliste
                         try:
                             await interaction.user.send(
                                 "**<:Astra_x:1141303954555289600> Deine Teilnahme am Gewinnspiel war nicht erfolgreich.**",
-                                embed=build_failure_dm(reasons),
+                                embed=build_failure_dm(reasons, checklist),
                             )
                         except Exception:
                             pass
-                    return  # Ende "Teilnahme"
+                    return
 
-                # ====== USER IST DRIN -> ABMELDEN ======
+                # Bereits drin -> Abmelden
                 new_count = max(int(entrys) - 1, 0)
                 await cur.execute(
                     "DELETE FROM giveaway_entrys WHERE userID = %s AND guildID = %s AND messageID = %s",
@@ -454,16 +445,12 @@ class GiveawayButton(discord.ui.View):
                     pass
 
 
-
-
+# ---------------------------- Slash-Gruppe ----------------------------
 @app_commands.guild_only()
 class Giveaway(app_commands.Group):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
-        super().__init__(
-            name="gewinnspiel",
-            description="Alles rund um Gewinnspiele."
-        )
+        super().__init__(name="gewinnspiel", description="Alles rund um Gewinnspiele.")
 
     @app_commands.command(name="starten", description="Startet ein Gewinnspiel.")
     @app_commands.describe(preis="Der Preis des Gewinnspiels.")
@@ -474,78 +461,96 @@ class Giveaway(app_commands.Group):
     @app_commands.describe(level="Optional: Mindestlevel für Teilnahme.")
     @app_commands.describe(nachrichten="Optional: Mindestanzahl an Nachrichten (serverweit) für Teilnahme.")
     @app_commands.checks.has_permissions(manage_events=True)
-    async def gw_start(self, interaction: discord.Interaction, *, preis: str, kanal: discord.TextChannel, gewinner: int,
-                       zeit: str, rolle: discord.Role = None, level: int = None, nachrichten: int | None = None):
-        """Startet ein Gewinnspiel."""
+    async def gw_start(
+        self,
+        interaction: discord.Interaction,
+        *,
+        preis: str,
+        kanal: discord.TextChannel,
+        gewinner: int,
+        zeit: str,
+        rolle: discord.Role | None = None,
+        level: int | None = None,
+        nachrichten: int | None = None
+    ):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                if rolle or level:
-                    if level:
-                        await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s",
-                                          (interaction.guild.id,))
-                        enabled = await cur.fetchone()
-                        if not enabled or enabled[0] == 0:
-                            await interaction.response.send_message(
-                                "<:Astra_x:1141303954555289600> Das Levelsystem ist auf diesem Server deaktiviert.",
-                                ephemeral=True)
-                            return
+                if level:
+                    await cur.execute("SELECT enabled FROM levelsystem WHERE guild_id = %s", (interaction.guild.id,))
+                    enabled = await cur.fetchone()
+                    if not enabled or enabled[0] == 0:
+                        await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> Das Levelsystem ist auf diesem Server deaktiviert.",
+                            ephemeral=True
+                        )
+                        return
 
                 time1 = convert(zeit)
                 t1 = math.floor(discord.utils.utcnow().timestamp() + time1)
                 t2 = datetime.fromtimestamp(t1, tz=timezone.utc)
-                messages_required = None
 
-                if nachrichten is not None and isinstance(nachrichten, int) and nachrichten > 0:
+                messages_required = None
+                if isinstance(nachrichten, int) and nachrichten > 0:
                     messages_required = nachrichten
 
-                req_lines = []
+                req_text = build_requirements_text(
+                    interaction.guild,
+                    rolle.id if rolle else None,
+                    level if level else None,
+                    messages_required
+                )
+                req_block = f"\n{req_text}" if req_text else ""
 
-                if rolle:
-                    req_lines.append(
-                        f"<:Astra_punkt:1141303896745201696> Du benötigst die **Rolle** `{rolle.name}` um teilzunehmen.")
-
-                if level:
-                    req_lines.append(
-                        f"<:Astra_punkt:1141303896745201696> Du musst **Level {level}** sein um teilzunehmen.")
-
-                if messages_required:
-                    req_lines.append(
-                        f"<:Astra_punkt:1141303896745201696> Du brauchst **mind. {messages_required} Nachrichten** auf diesem Server.")
-
-                req_text = "\n".join(req_lines) if req_lines else ""
-
-                if req_text:
-                    req_text = f"\n{req_text}"
-
-                embed = discord.Embed(title=" ", description=(
-                    f"🏆 Preis: {preis}\n`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n<:Astra_info:1141303860556738620> » __**Informationen:**__\n<:Astra_arrow:1141303823600717885> Erstellt von {interaction.user.mention}\n<:Astra_arrow:1141303823600717885> **{gewinner}** Gewinner\n<:Astra_arrow:1141303823600717885> Gewinnspiel endet {discord.utils.format_dt(t2, 'R')}\n<:Astra_arrow:1141303823600717885> **0** Teilnehmer\n\n<:Astra_settings:1141303908778639490> » __**Anforderungen:**__\n<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button** um am Gewinnspiel teilzunehmen." f"{req_text}"),
-                                      colour=discord.Colour.blue())
+                embed = discord.Embed(
+                    title=" ",
+                    description=(
+                        f"🏆 Preis: {preis}\n"
+                        "`🤖` [Astra Einladen](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n\n"
+                        "<:Astra_info:1141303860556738620> » __**Informationen:**__\n"
+                        f"<:Astra_arrow:1141303823600717885> Erstellt von {interaction.user.mention}\n"
+                        f"<:Astra_arrow:1141303823600717885> **{gewinner}** Gewinner\n"
+                        f"<:Astra_arrow:1141303823600717885> Gewinnspiel endet {discord.utils.format_dt(t2, 'R')}\n"
+                        f"<:Astra_arrow:1141303823600717885> **0** Teilnehmer\n\n"
+                        "<:Astra_settings:1141303908778639490> » __**Anforderungen:**__\n"
+                        "<:Astra_arrow:1141303823600717885> **Klicke** unten auf den **Button** um am Gewinnspiel teilzunehmen."
+                        f"{req_block}"
+                    ),
+                    colour=discord.Colour.blue()
+                )
 
                 if interaction.guild and interaction.guild.icon:
                     embed.set_thumbnail(url=interaction.guild.icon.url)
                     embed.set_footer(text="Viel Erfolg 🍀", icon_url=interaction.guild.icon.url)
-
                 else:
                     embed.set_footer(text="Viel Erfolg 🍀")
+
                 msg = await kanal.send("🎉 **Neues Gewinnspiel** 🎉", embed=embed, view=GiveawayButton(self.bot))
 
                 asyncio.create_task(gwtimes(self.bot, t2, msg.id))
-                role_id = rolle.id if rolle else "Not Set"
-                level_val = level if level else "Not Set"
+
+                # In DB konsistent speichern: lieber echte Werte oder None statt "Not Set"
+                role_id_val = rolle.id if rolle else None
+                level_val = level if level else None
 
                 await cur.execute(
-                    "INSERT INTO giveaway_active (guildID, creatorID, channelID, entrys, messageID, prize, winners, time, role, level, messages_required, ended) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    (interaction.guild.id, interaction.user.id, kanal.id, 0, msg.id, preis, gewinner, t1, role_id,
-                     level_val, messages_required, 0))
-                await cur.execute("SELECT gwID FROM giveway_ids WHERE guildID = %s", (interaction.guild.id,))
+                    "INSERT INTO giveaway_active (guildID, creatorID, channelID, entrys, messageID, prize, winners, time, role, level, messages_required, ended) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        interaction.guild.id, interaction.user.id, kanal.id, 0, msg.id, preis, gewinner, t1,
+                        role_id_val if role_id_val is not None else "Not Set",
+                        level_val if level_val is not None else "Not Set",
+                        messages_required, 0
+                    )
+                )
 
+                await cur.execute("SELECT gwID FROM giveway_ids WHERE guildID = %s", (interaction.guild.id,))
                 gwid_result = await cur.fetchall()
                 new_gw_id = (len(gwid_result) + 1) if gwid_result else 1
-
                 await cur.execute("INSERT INTO giveway_ids (guildID, gwID, messageID) VALUES (%s, %s, %s)",
                                   (interaction.guild.id, new_gw_id, msg.id))
                 await interaction.response.send_message(
-                    f"**<:Astra_accept:1141303821176422460> Das Gewinnspiel wird in {kanal.mention} stattfinden.**")
+                    f"**<:Astra_accept:1141303821176422460> Das Gewinnspiel wird in {kanal.mention} stattfinden.**"
+                )
 
     @app_commands.command(name="verwalten", description="Verwalte ein Gewinnspiel.")
     @app_commands.describe(aktion="Aktion, die durchgeführt werden soll.")
@@ -560,85 +565,13 @@ class Giveaway(app_commands.Group):
             'Gewinnspiel neu würfeln(Nachrichten ID angeben)',
             'Gewinnspiele Anzeigen'
         ],
-        messageid: str = None
+        messageid: str | None = None
     ):
-        """Verwalte ein Gewinnspiel (unter Beachtung von Rolle/Level/Nachrichten)."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
 
-                # -------- Hilfsfunktionen ----------------------------------------------------
-                async def reasons_for_member(member: discord.Member | None,
-                                             guild: discord.Guild,
-                                             user_id: int,
-                                             role_id: str | int | None,
-                                             level_req: str | int | None,
-                                             msgs_req: int | None) -> list[str]:
-                    """Gibt alle nicht erfüllten Bedingungen (als Liste von Text-Zeilen) zurück."""
-                    reasons: list[str] = []
-
-                    # Mitglied prüfen
-                    if member is None:
-                        reasons.append("<:Astra_punkt:1141303896745201696> Nutzer ist nicht mehr auf dem Server.")
-                        return reasons
-
-                    # Rolle
-                    if str(role_id).isnumeric():
-                        role_obj = guild.get_role(int(role_id))
-                        if role_obj is None:
-                            reasons.append("<:Astra_punkt:1141303896745201696> Die benötigte Rolle existiert nicht mehr.")
-                        elif role_obj not in member.roles:
-                            reasons.append(f"<:Astra_punkt:1141303896745201696> Benötigt **Rolle** `{role_obj.name}`.")
-
-                    # Level
-                    if str(level_req).isnumeric():
-                        await cur.execute(
-                            "SELECT user_level FROM levelsystem WHERE client_id = %s AND guild_id = %s",
-                            (user_id, guild.id),
-                        )
-                        lvl_row = await cur.fetchone()
-                        if not lvl_row:
-                            reasons.append("<:Astra_punkt:1141303896745201696> Keine Level-Daten vorhanden.")
-                        else:
-                            have = int(lvl_row[0])
-                            need = int(level_req)
-                            if have < need:
-                                reasons.append(f"<:Astra_punkt:1141303896745201696> Benötigt **Level {need}** (hat {have}).")
-
-                    # Nachrichten
-                    if msgs_req is not None and int(msgs_req) > 0:
-                        await cur.execute(
-                            "SELECT count FROM user_message_counts WHERE guildID = %s AND userID = %s",
-                            (guild.id, user_id),
-                        )
-                        msg_row = await cur.fetchone()
-                        have = int(msg_row[0]) if msg_row else 0
-                        need = int(msgs_req)
-                        if have < need:
-                            reasons.append(f"<:Astra_punkt:1141303896745201696> Benötigt **{need} Nachrichten** (hat {have}).")
-
-                    return reasons
-
-                def build_requirements_block(guild: discord.Guild, role_id, level_req, msgs_req) -> str:
-                    lines = []
-                    if str(role_id).isnumeric():
-                        role_obj = guild.get_role(int(role_id))
-                        if role_obj:
-                            lines.append(f"<:Astra_punkt:1141303896745201696> **Rolle:** `{role_obj.name}`")
-                        else:
-                            lines.append("<:Astra_punkt:1141303896745201696> **Rolle:** (existiert nicht mehr)")
-                    if str(level_req).isnumeric():
-                        lines.append(f"<:Astra_punkt:1141303896745201696> **Level:** {level_req}+")
-                    if msgs_req is not None and int(msgs_req) > 0:
-                        lines.append(f"<:Astra_punkt:1141303896745201696> **Nachrichten:** mind. {msgs_req}")
-                    return "\n".join(lines)
-
-                # -----------------------------------------------------------------------------
-
                 if aktion == "Gewinnspiele Anzeigen":
-                    await cur.execute(
-                        "SELECT gwID, messageID FROM giveway_ids WHERE guildID = %s",
-                        (interaction.guild.id,)
-                    )
+                    await cur.execute("SELECT gwID, messageID FROM giveway_ids WHERE guildID = %s", (interaction.guild.id,))
                     result = await cur.fetchall()
                     if not result:
                         await interaction.response.send_message(
@@ -659,10 +592,8 @@ class Giveaway(app_commands.Group):
                         embed.set_author(name=str(interaction.user))
 
                     for gwid, mid in result:
-                        await cur.execute(
-                            "SELECT time FROM giveaway_active WHERE guildID = %s AND messageID = %s",
-                            (interaction.guild.id, mid)
-                        )
+                        await cur.execute("SELECT time FROM giveaway_active WHERE guildID = %s AND messageID = %s",
+                                          (interaction.guild.id, mid))
                         time_result = await cur.fetchone()
                         if time_result:
                             unix_time = int(time_result[0])
@@ -682,12 +613,9 @@ class Giveaway(app_commands.Group):
                     )
                     return
 
-                # ----------------------- Gewinnspiel beenden ---------------------------------
+                # Gewinnspiel beenden
                 if aktion == "Gewinnspiel beenden(Nachrichten ID angeben)":
-                    await cur.execute(
-                        "SELECT guildID, channelID, userID FROM giveaway_entrys WHERE messageID = %s",
-                        (messageid,)
-                    )
+                    await cur.execute("SELECT guildID, channelID, userID FROM giveaway_entrys WHERE messageID = %s", (messageid,))
                     entrys_result = await cur.fetchall()
                     await cur.execute(
                         "SELECT prize, winners, entrys, time, guildID, channelID, ended, role, level, messages_required "
@@ -702,43 +630,33 @@ class Giveaway(app_commands.Group):
                         )
                         return
 
-                    preis, winners, entrys, end_time, guildID, channelID, ended, role_id, level_req, msgs_req = gw
+                    preis, winners, entrys, end_time, guildID, channelID, ended, role_raw, level_raw, msgs_req_raw = gw
+                    role_id = _to_int_or_none(role_raw)
+                    level_req = _to_int_or_none(level_raw)
+                    msgs_req = _to_int_or_none(msgs_req_raw)
 
                     guild = self.bot.get_guild(guildID)
                     if guild is None:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Guild nicht gefunden.**",
-                            ephemeral=True
-                        )
+                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Guild nicht gefunden.**", ephemeral=True)
                         return
 
                     channel = guild.get_channel(channelID)
                     if channel is None:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Channel nicht gefunden.**",
-                            ephemeral=True
-                        )
+                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Channel nicht gefunden.**", ephemeral=True)
                         return
 
                     try:
                         msg = await channel.fetch_message(int(messageid))
                     except Exception:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Nachricht nicht gefunden.**",
-                            ephemeral=True
-                        )
+                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Nachricht nicht gefunden.**", ephemeral=True)
                         return
 
                     time2 = datetime.fromtimestamp(int(end_time), tz=timezone.utc)
 
                     if ended:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Das Gewinnspiel ist bereits beendet!**",
-                            ephemeral=True
-                        )
+                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Das Gewinnspiel ist bereits beendet!**", ephemeral=True)
                         return
 
-                    # Keine Einträge?
                     if not entrys_result:
                         embed = discord.Embed(
                             title=" ",
@@ -753,24 +671,18 @@ class Giveaway(app_commands.Group):
                             colour=discord.Colour.red()
                         )
                         await msg.edit(content="`❌` Gewinnspiel Vorbei `❌`", embed=embed, view=None)
-                        await msg.reply(
-                            "<:Astra_x:1141303954555289600> **Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen.**"
-                        )
+                        await msg.reply("<:Astra_x:1141303954555289600> **Es gab nicht genügend Teilnehmer. Niemand hat das Gewinnspiel gewonnen.**")
                     else:
-                        # Teilnehmer anhand der Bedingungen filtern
                         raw_user_ids = [row[2] for row in entrys_result]
                         valid_ids: list[int] = []
                         for uid in raw_user_ids:
                             member = guild.get_member(uid)
-                            reasons = await reasons_for_member(member, guild, uid, role_id, level_req, msgs_req)
-                            if reasons:
-                                # Optional: pro Person könnte man DM schicken – hier bewusst still
-                                pass
-                            else:
+                            reasons, _check = await check_requirements(cur, guild, member, role_id, level_req, msgs_req)
+                            if not reasons:
                                 valid_ids.append(uid)
 
                         if not valid_ids:
-                            req_block = build_requirements_block(guild, role_id, level_req, msgs_req)
+                            req_block = build_requirements_text(guild, role_id, level_req, msgs_req)
                             embed = discord.Embed(
                                 title=" ",
                                 description=(
@@ -791,7 +703,6 @@ class Giveaway(app_commands.Group):
                             users = [self.bot.get_user(uid) for uid in gewinner_ids]
                             mentions = ", ".join(user.mention for user in users if user)
 
-                            # Gewinnenachricht an die User schicken
                             for user in users:
                                 if user:
                                     winembed = discord.Embed(
@@ -807,12 +718,9 @@ class Giveaway(app_commands.Group):
                                     if guild.icon:
                                         winembed.set_thumbnail(url=guild.icon.url)
                                     try:
-                                        await user.send(
-                                            "<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**",
-                                            embed=winembed
-                                        )
+                                        await user.send("<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**", embed=winembed)
                                     except Exception:
-                                        pass  # User hat DMs geschlossen
+                                        pass
 
                             embed = discord.Embed(
                                 title=" ",
@@ -827,11 +735,8 @@ class Giveaway(app_commands.Group):
                                 colour=discord.Colour.red()
                             )
                             await msg.edit(content="`❌` Gewinnspiel Vorbei `❌`", embed=embed, view=None)
-                            await msg.reply(
-                                f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen. Herzlichen Glückwunsch."
-                            )
+                            await msg.reply(f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen. Herzlichen Glückwunsch.")
 
-                    # Giveaway als beendet markieren und ID entfernen
                     await cur.execute(
                         "UPDATE giveaway_active SET ended = %s WHERE guildID = %s AND channelID = %s AND messageID = %s",
                         (1, guildID, channelID, messageid)
@@ -843,7 +748,7 @@ class Giveaway(app_commands.Group):
                     )
                     return
 
-                # ----------------------- Gewinnspiel neu würfeln ------------------------------
+                # Gewinnspiel neu würfeln
                 if aktion == "Gewinnspiel neu würfeln(Nachrichten ID angeben)":
                     await cur.execute(
                         "SELECT channelID, prize, winners, entrys, time, ended, role, level, messages_required "
@@ -858,12 +763,13 @@ class Giveaway(app_commands.Group):
                         )
                         return
 
-                    channelID, preis, winners, entrys, end_time, ended, role_id, level_req, msgs_req = gw
+                    channelID, preis, winners, entrys, end_time, ended, role_raw, level_raw, msgs_req_raw = gw
+                    role_id = _to_int_or_none(role_raw)
+                    level_req = _to_int_or_none(level_raw)
+                    msgs_req = _to_int_or_none(msgs_req_raw)
+
                     if not ended:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Das Gewinnspiel läuft noch!**",
-                            ephemeral=True
-                        )
+                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Das Gewinnspiel läuft noch!**", ephemeral=True)
                         return
 
                     channel = interaction.guild.get_channel(channelID)
@@ -876,18 +782,16 @@ class Giveaway(app_commands.Group):
                     result2 = await cur.fetchall()
 
                     raw_user_ids = [row[0] for row in result2]
-
-                    # filtere nach Anforderungen
                     valid_ids: list[int] = []
                     for uid in raw_user_ids:
                         member = interaction.guild.get_member(uid)
-                        reasons = await reasons_for_member(member, interaction.guild, uid, role_id, level_req, msgs_req)
+                        reasons, _check = await check_requirements(cur, interaction.guild, member, role_id, level_req, msgs_req)
                         if not reasons:
                             valid_ids.append(uid)
 
                     winners_count = min(len(valid_ids), int(winners))
                     if winners_count < 1:
-                        req_block = build_requirements_block(interaction.guild, role_id, level_req, msgs_req)
+                        req_block = build_requirements_text(interaction.guild, role_id, level_req, msgs_req)
                         await interaction.response.send_message(
                             "<:Astra_x:1141303954555289600> **Das Gewinnspiel konnte nicht neu ausgelost werden, da es keine gültigen Teilnehmer gab.**\n"
                             f"__Anforderungen:__\n{req_block if req_block else 'Keine'}",
@@ -900,7 +804,6 @@ class Giveaway(app_commands.Group):
                     mentions = ", ".join(user.mention for user in users if user)
 
                     time2 = datetime.fromtimestamp(int(end_time), tz=timezone.utc)
-                    # Gewinne-Embed verschicken
                     for user in users:
                         if user:
                             winembed = discord.Embed(
@@ -916,10 +819,7 @@ class Giveaway(app_commands.Group):
                             if interaction.guild.icon:
                                 winembed.set_thumbnail(url=interaction.guild.icon.url)
                             try:
-                                await user.send(
-                                    "<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**",
-                                    embed=winembed
-                                )
+                                await user.send("<:Astra_herz:1141303857855594527> **Du hast ein Gewinnspiel gewonnen! Herzlichen Glückwunsch.**", embed=winembed)
                             except Exception:
                                 pass
 
@@ -936,9 +836,7 @@ class Giveaway(app_commands.Group):
                         colour=discord.Colour.red()
                     )
                     await msg.edit(content="`❌` Gewinnspiel Vorbei `❌`", embed=embed, view=None)
-                    await msg.reply(
-                        f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen. Herzlichen Glückwunsch."
-                    )
+                    await msg.reply(f"<:Astra_gw1:1141303852889550928> {mentions} hat das Gewinnspiel gewonnen. Herzlichen Glückwunsch.")
 
                     await interaction.response.send_message(
                         f"<:Astra_accept:1141303821176422460> **Ich habe das Gewinnspiel neu ausgelost, die neuen Gewinner sind {mentions}.**",
@@ -946,12 +844,14 @@ class Giveaway(app_commands.Group):
                     )
 
 
+# --------------------------- Message Counter ---------------------------
 class MessageCounterCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # guild_id -> (has_active, expires_at_datetime)
         self._active_giveaway_cache: dict[int, tuple[bool, datetime]] = {}
-        self._cache_ttl = timedelta(seconds=60)  # Cache-Lebenszeit
+        # Hinweis: TTL ist nur für DB-Entlastung; Zählen funktioniert dauerhaft.
+        self._cache_ttl = timedelta(seconds=60)
 
     async def _has_active_giveaway(self, cur, guild_id: int) -> bool:
         now = datetime.now(timezone.utc)
@@ -959,11 +859,7 @@ class MessageCounterCog(commands.Cog):
         if cached and cached[1] > now:
             return cached[0]
 
-        # Prüfe auf mindestens ein aktives Giveaway (ended=0)
-        await cur.execute(
-            "SELECT 1 FROM giveaway_active WHERE guildID = %s AND ended = 0 LIMIT 1",
-            (guild_id,)
-        )
+        await cur.execute("SELECT 1 FROM giveaway_active WHERE guildID = %s AND ended = 0 LIMIT 1", (guild_id,))
         row = await cur.fetchone()
         has_active = bool(row)
         self._active_giveaway_cache[guild_id] = (has_active, now + self._cache_ttl)
@@ -971,18 +867,13 @@ class MessageCounterCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, msg: discord.Message):
-        # Bots / DMs ignorieren
         if not msg.guild or msg.author.bot:
             return
-
         try:
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    # 1) Erst prüfen, ob in diesem Server ein aktives Giveaway existiert
                     if not await self._has_active_giveaway(cur, msg.guild.id):
                         return
-
-                    # 2) Nur dann hochzählen
                     await cur.execute(
                         "INSERT INTO user_message_counts (guildID, userID, count) "
                         "VALUES (%s, %s, 1) "
@@ -994,7 +885,8 @@ class MessageCounterCog(commands.Cog):
             pass
 
 
-async def setup(bot: commands.Bot):  # ⬅️ richtig typisiert
+# ------------------------------ Setup ------------------------------
+async def setup(bot: commands.Bot):
     bot.add_view(GiveawayButton(bot))  # persistente View
     await bot.add_cog(MessageCounterCog(bot))
     try:
