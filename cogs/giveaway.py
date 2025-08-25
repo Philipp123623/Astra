@@ -564,15 +564,15 @@ class Giveaway(app_commands.Group):
     @app_commands.describe(messageid="Nachrichten-ID des Gewinnspiels (falls benötigt).")
     @app_commands.checks.has_permissions(manage_events=True)
     async def gw_verwalten(
-        self,
-        interaction: discord.Interaction,
-        *,
-        aktion: Literal(
-            "Gewinnspiel beenden(Nachrichten ID angeben)",
-            "Gewinnspiel neu würfeln(Nachrichten ID angeben)",
-            "Gewinnspiele Anzeigen",
-        ),
-        messageid: str | None = None,
+            self,
+            interaction: discord.Interaction,
+            *,
+            aktion: Literal[
+                "Gewinnspiel beenden(Nachrichten ID angeben)",
+                "Gewinnspiel neu würfeln(Nachrichten ID angeben)",
+                "Gewinnspiele Anzeigen",
+            ],
+            messageid: str | None = None,
     ):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:

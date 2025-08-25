@@ -761,26 +761,6 @@ class Reminder(app_commands.Group):
                     await interaction.response.send_message(embed=embed2)
 
 
-
-@bot.command(aliases=["servers", ])
-@commands.is_owner()
-async def serverlist(ctx):
-    global chunk
-    activeservers = bot.guilds
-    i = 1
-    test = "\n".join(
-        f"`{i + 1}` {guild.name}({guild.member_count}) — {guild.id}" for i, guild in enumerate(activeservers))
-    try:
-        for chunk in [test[i: i + 2000] for i in range(0, len(test), 2000)]:
-            embed = discord.Embed(title="Liste in denen der Bot ist", description=chunk, color=0x3498db)
-            embed.set_author(name=ctx.author, icon_url=ctx.me.avatar)
-            await ctx.send("`Number` **Guildname(Guildmembercount) — Guildid**", embed=embed)
-    except discord.HTTPException:
-        embed = discord.Embed(title="List of servers the bot is in", description=chunk, color=0x3498db)
-        embed.set_author(name=ctx.author, icon_url=ctx.me.avatar)
-        await ctx.send(embed=embed)
-
-
 @bot.command()
 @commands.guild_only()
 @commands.is_owner()
