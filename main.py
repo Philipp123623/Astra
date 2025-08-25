@@ -174,7 +174,10 @@ class Astra(commands.Bot):
                 await cur.execute("INSERT INTO emojiquiz_quizzez (question, answer, hint) VALUES ('🎬🚗👻', 'Ghostbusters', 'Ein Film über Geisterjäger'), ('🦇👨‍👩‍👧‍👦', 'Batman', 'Ein Superheld, der Gotham City beschützt'), ('🔗🌳🛤️', 'Linkin Park', 'Eine US-Rockband mit elektronischen Elementen, bekannt durch Songs wie \"In the End\"'), ('🤠🎸🌾', 'Country', 'Ein Musikgenre mit ländlichen Themen'), ('🔴🔵🟡', 'Twister', 'Ein Spiel, bei dem man Körperteile auf Farbpunkte legt'), ('🚀👾', 'E.T.', 'Ein Außerirdischer wird von Kindern gefunden'), ('🕵️‍♂️🔍', 'Sherlock Holmes', 'Ein berühmter Detektiv mit messerscharfem Verstand'), ('🦁👑', 'Der König der Löwen', 'Ein Zeichentrickfilm über Tiere in der Savanne'), ('🧙‍♂️⚡', 'Harry Potter', 'Ein Zauberer erlebt Abenteuer in einer magischen Welt'), ('🌌🚀', 'Star Wars', 'Eine epische Weltraumsaga zwischen Gut und Böse'), ('🍫🏭', 'Charlie und die Schokoladenfabrik', 'Ein Junge gewinnt eine Tour durch eine Fabrik'), ('🎤🐠', 'Findet Nemo', 'Ein Clownfisch sucht seinen Sohn'), ('🌈🍭', 'Der Zauberer von Oz', 'Ein Mädchen sucht einen Zauberer in einer Fantasiewelt'), ('🧛‍♂️🦇', 'Dracula', 'Ein Vampir, der nachts Blut trinkt'), ('🚶‍♂️👨‍🚀', 'Der Marsianer', 'Ein Astronaut kämpft ums Überleben auf dem Mars'), ('🏹👧', 'Die Tribute von Panem', 'Ein Mädchen wird zu einem tödlichen Spiel gezwungen'), ('🚢🌊', 'Titanic', 'Ein Liebesdrama auf einem berühmten Schiff'), ('🧊⛄', 'Die Eiskönigin', 'Eine Prinzessin mit Eiskräften'), ('🧟‍♂️🧟‍♀️', 'The Walking Dead', 'Eine Serie über eine Zombieapokalypse'), ('🐶🐱', 'Haustiere', 'Tiere, die oft als Begleiter gehalten werden'), ('🍎🍌', 'Früchte', 'Gesundes, essbares Obst'), ('☀️🌈', 'Regenbogen', 'Ein farbenfrohes Wetterphänomen'), ('📚📖', 'Bücher', 'Gedruckte oder digitale Literaturwerke'), ('🍕🍔', 'Fast Food', 'Schnell zubereitetes Essen zum Mitnehmen'), ('🚗🚦', 'Verkehr', 'Transportmittel und Straßenschilder'), ('🌳🌺', 'Natur', 'Die belebte und unbelebte Umwelt'), ('👶🍼', 'Baby', 'Ein neugeborenes oder kleines Kind'), ('🌞🏖️', 'Strand', 'Ein Ort mit Sand und Wasser'), ('🎮🕹️', 'Videospiele', 'Elektronische Spiele auf Bildschirmen'), ('🌙🌠', 'Nachthimmel', 'Der Himmel mit Mond und Sternen'), ('🎨🖌️', 'Malerei', 'Künstlerische Darstellung mit Farben'), ('🍲🥗', 'Essen', 'Verschiedene Arten von Gerichten'), ('📺🎬', 'Fernsehen', 'Sendungen und Filme auf dem Bildschirm'), ('📱📞', 'Handy', 'Ein Kommunikationsgerät'), ('📆⏰', 'Zeit', 'Messung von Momenten und Abläufen'), ('👩‍🍳🍳', 'Kochen', 'Zubereitung von Mahlzeiten'), ('🚴‍♂️🚶‍♀️', 'Aktivitäten', 'Was du draußen machst, wenn dir langweilig ist'), ('🎈🥳', 'Party', 'Ein soziales Treffen zum Feiern'), ('❤️🌹', 'Liebe', 'Ein starkes Gefühl der Zuneigung'), ('🌞🌻', 'Sonnenblume', 'Eine fröhliche, helle Blume'), ('📚✏️', 'Schule', 'Ein Ort zum Lernen'), ('🐶🏠', 'Hundehütte', 'Ein Unterschlupf für Hunde'), ('📆🎂', 'Jahrestag', 'Jährliche Feier eines Ereignisses'), ('🚴‍♀️🚴', 'Fahrrad', 'Ein zweirädriges Fortbewegungsmittel'), ('🏀👟', 'Basketball', 'Ein Mannschaftssport mit zwei Teams'), ('🛒🛍️', 'Einkaufen', 'Kleidung und andere Dinge kaufen'), ('🎭🤡', 'Zirkus', 'Reisende Künstler mit Akrobatik und Clowns'), ('🌧️🌈', 'Wetter', 'Meteorologische Erscheinungen'), ('🐍⚡🏰', 'Slytherin', 'Ein Haus in Hogwarts – grün, ehrgeizig, listig'), ('🐵🪄', 'Dschungelbuch', 'Ein Junge wächst im Urwald mit Tieren auf'), ('🕸️🕷️', 'Spider-Man', 'Ein Superheld mit Spinnenkräften'), ('🍔👨‍🍳', 'Burger King', 'Ein Fast-Food-Restaurant mit königlichem Namen'), ('👓⚗️', 'Chemie', 'Eine Naturwissenschaft mit Formeln und Reaktionen'), ('🎤🎶', 'Musik', 'Etwas, das du hörst und fühlst'), ('🗺️🧭', 'Abenteuer', 'Eine spannende Reise ins Unbekannte'), ('💻⌨️', 'Computer', 'Ein digitales Gerät für alles Mögliche'), ('👽🔭', 'Außerirdischer', 'Ein Wesen nicht von dieser Welt')")
                 await cur.execute("CREATE TABLE IF NOT EXISTS economy_users (user_id BIGINT PRIMARY KEY, wallet INT DEFAULT 0, bank INT DEFAULT 0, job VARCHAR(100), hours_worked INT DEFAULT 0, last_work DATETIME)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS snake (userID BIGINT, highscore BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS topgg (userID BIGINT, count BIGINT)")
+                await cur.execute("DROP TABLE IF EXISTS voterole")
+                await cur.execute("DROP TABLE IF EXISTS topgg")
+                await cur.execute(
+                    "CREATE TABLE topgg (userID BIGINT PRIMARY KEY, count INT NOT NULL DEFAULT 0, last_reset DATE NULL, last_vote DATETIME NULL, last_vote_epoch BIGINT NULL, next_vote_epoch BIGINT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 
                 await cur.execute("CREATE TABLE IF NOT EXISTS website_stats (servers BIGINT, users BIGINT, channels BIGINT, commands BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS afk (guildID BIGINT, userID BIGINT, reason TEXT, prevName TEXT, time TEXT)")
@@ -203,7 +206,6 @@ class Astra(commands.Bot):
                 await cur.execute("CREATE TABLE IF NOT EXISTS giveaway_active (guildID BIGINT, creatorID BIGINT, channelID BIGINT, messageID BIGINT, entrys BIGINT, prize TEXT, winners TEXT, time TEXT, role TEXT, level TEXT, ended BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS giveway_ids (guildID BIGINT, gwID BIGINT, messageID BIGINT)")
                 await cur.execute("CREATE TABLE IF NOT EXISTS giveaway_entrys (guildID BIGINT, channelID BIGINT, messageID BIGINT, userID BIGINT)")
-                await cur.execute("CREATE TABLE IF NOT EXISTS voterole (userID BIGINT, time TEXT)")
 
                 # ... alle weiteren CREATE TABLEs (dein Code bleibt unverändert hier)
 
@@ -228,21 +230,24 @@ class Astra(commands.Bot):
 
                     asyncio.create_task(starte_reminder_tasks())
 
-                from datetime import datetime, timezone
+                # Stelle sicher: import asyncio / from datetime import datetime, timezone sind vorhanden
 
                 if not self.task2:
                     self.task2 = True
-                    await cur.execute("SELECT time FROM voterole")
+                    # Nur zukünftige Reminders laden
+                    await cur.execute("SELECT next_vote_epoch FROM topgg WHERE next_vote_epoch > UNIX_TIMESTAMP()")
                     eintraege2 = await cur.fetchall()
 
                     async def starte_voterole_tasks():
-                        for eintrag in eintraege2:
+                        for (ts,) in eintraege2:
                             try:
-                                t4 = datetime.fromtimestamp(int(eintrag[0]), timezone.utc)
-                                asyncio.create_task(funktion2(t4))
-                                await asyncio.sleep(0.5)
+                                if ts is None:
+                                    continue
+                                when = datetime.fromtimestamp(int(ts), timezone.utc)
+                                asyncio.create_task(funktion2(when))
+                                await asyncio.sleep(0.05)  # klein halten, kein Spam
                             except Exception as e:
-                                logging.error(f"❌ Voterole-Fehler: {e}")
+                                logging.error(f"❌ Reminder-Replay-Fehler (ts={ts}): {e}")
 
                     asyncio.create_task(starte_voterole_tasks())
 
@@ -389,19 +394,20 @@ class VoteView(discord.ui.View):
 
 @bot.event
 async def on_dbl_vote(data):
-    logging.info(f"on_dbl_vote ausgelöst für User: {data['user']}")
-
+    logging.info(f"on_dbl_vote ausgelöst für User: {data.get('user')}")
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            if data["type"] == "test":
+            # Test-Hook früh raus
+            if data.get("type") == "test":
                 return bot.dispatch('dbl_test', data)
 
+            # --- User/Guild/Objekte ---
             user_id = int(data["user"])
             user = bot.get_user(user_id)
             if user is None:
                 try:
                     user = await bot.fetch_user(user_id)
-                except:
+                except Exception:
                     logging.error(f"User {user_id} nicht gefunden")
                     return
 
@@ -413,90 +419,90 @@ async def on_dbl_vote(data):
             voterole = guild.get_role(1141116981756575875)
             channel = guild.get_channel(1361006871753789532)
 
-            today = datetime.now(timezone.utc).date()
-            this_month = today.replace(day=1)
-            vote_increase = 2 if today.weekday() in [4, 5, 6] else 1  # Fr, Sa, So: 2, sonst 1
+            # --- Zeit/Vote-Logik ---
+            now_utc = datetime.now(timezone.utc)
+            now_ts = int(now_utc.timestamp())
+            next_vote_ts = now_ts + 12 * 3600
+            this_month = now_utc.date().replace(day=1)
+            vote_increase = 2 if now_utc.weekday() in [4, 5, 6] else 1  # Fr/Sa/So doppelt
 
-            await cur.execute("SELECT count, last_reset FROM topgg WHERE userID = %s", (user_id,))
-            result = await cur.fetchone()
-            if not result:
+            # --- DB: topgg lesen/aktualisieren (nur diese Tabelle) ---
+            await cur.execute("SELECT count, last_reset FROM topgg WHERE userID=%s", (user_id,))
+            row = await cur.fetchone()
+
+            if not row:
                 member_votes = vote_increase
                 await cur.execute(
-                    "INSERT INTO topgg (userID, count, last_reset) VALUES (%s, %s, %s)",
-                    (user_id, member_votes, this_month)
+                    "INSERT INTO topgg (userID, count, last_reset, last_vote, last_vote_epoch, next_vote_epoch) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (user_id, member_votes, this_month, now_utc, now_ts, next_vote_ts)
                 )
             else:
-                votes_member, last_reset = result
+                count, last_reset = row
                 if not last_reset or last_reset < this_month:
-                    votes_member = 0
-                    await cur.execute(
-                        "UPDATE topgg SET count = %s, last_reset = %s WHERE userID = %s",
-                        (votes_member, this_month, user_id)
-                    )
-                member_votes = votes_member + vote_increase
+                    count = 0
+                member_votes = count + vote_increase
                 await cur.execute(
-                    "UPDATE topgg SET count = %s WHERE userID = %s",
-                    (member_votes, user_id)
+                    "UPDATE topgg SET count=%s, last_reset=%s, last_vote=%s, last_vote_epoch=%s, next_vote_epoch=%s "
+                    "WHERE userID=%s",
+                    (member_votes, this_month, now_utc, now_ts, next_vote_ts, user_id)
                 )
 
-            votedata = await bot.topggpy.get_bot_info()
-            total_votes = int(votedata.get("monthly_points", 0))
+    # --- (Optional) aktuelle Monatsvotes von top.gg ---
+    total_votes = 0
+    try:
+        votedata = await bot.topggpy.get_bot_info()
+        total_votes = int(votedata.get("monthly_points", 0))
+    except Exception:
+        pass
 
-            # ✅ NUTZE UTC-aware datetime
-            now_utc = datetime.now(timezone.utc)
-            next_vote_time = int(now_utc.timestamp()) + 12 * 3600
-            next_vote_dt = datetime.fromtimestamp(next_vote_time, timezone.utc)
+    # --- Channel-Embed für den Vote ---
+    embed = discord.Embed(
+        title="Danke fürs Voten von Astra",
+        description=(
+            f"<:Astra_boost:1141303827107164270> `{user}({user.id})` hat für **Astra** gevotet.\n"
+            f"Wir haben nun `{total_votes}` in diesem Monat.\n"
+            f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
+            "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/1113403511045107773/vote)** voten."
+        ),
+        colour=discord.Colour.blue(),
+        timestamp=now_utc
+    )
+    embed.set_thumbnail(
+        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+    )
+    embed.set_footer(
+        text="Danke für deinen Support",
+        icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+    )
 
-            logging.info(f"[DEBUG] UTC now: {now_utc}, next vote at: {next_vote_dt} (ts={next_vote_time})")
+    # --- Rolle vergeben (beim Vote) ---
+    member = guild.get_member(user_id)
+    if not member:
+        try:
+            member = await guild.fetch_member(user_id)
+        except Exception:
+            logging.error(f"Member {user_id} nicht gefunden")
+            member = None
 
-            await cur.execute(
-                """
-                INSERT INTO voterole (userID, `time`)
-                    VALUES (%s, %s) AS v
-                ON DUPLICATE KEY UPDATE `time` = v.`time`
-                """,
-                (user_id, next_vote_time),
-            )
+    if member and voterole:
+        try:
+            await member.add_roles(voterole, reason="Voterole vergeben (Vote erkannt)")
+        except Exception as e:
+            logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
 
-            asyncio.create_task(funktion2(next_vote_dt))
+    # --- Channel-Post mit Button ---
+    try:
+        if channel:
+            await channel.send(embed=embed, view=VoteView())
+    except Exception as e:
+        logging.error(f"Fehler beim Senden im Channel: {e}")
 
-            embed = discord.Embed(
-                title="Danke fürs Voten von Astra",
-                description=(
-                    f"<:Astra_boost:1141303827107164270> `{user}({user.id})` hat für **Astra** gevotet.\n"
-                    f"Wir haben nun `{total_votes}` diesen Monat.\n"
-                    f"Du hast diesen Monat bereits **{member_votes}** Mal gevotet.\n\n"
-                    "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten."
-                ),
-                colour=discord.Colour.blue(),
-                timestamp=now_utc
-            )
-            embed.set_thumbnail(
-                url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-            )
-            embed.set_footer(
-                text="Danke für deinen Support",
-                icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
-            )
+    # --- Reminder (DM) für 12h terminieren ---
+    when = datetime.fromtimestamp(next_vote_ts, timezone.utc)
+    logging.info(f"[VoteReminder] scheduled DM for {user_id} at {when.isoformat()} (ts={next_vote_ts})")
+    asyncio.create_task(funktion2(when))
 
-            member = guild.get_member(user_id)
-            if not member:
-                try:
-                    member = await guild.fetch_member(user_id)
-                except:
-                    logging.error(f"Member {user_id} nicht gefunden")
-                    member = None
-
-            if member and voterole:
-                try:
-                    await member.add_roles(voterole, reason="Voterole vergeben")
-                except Exception as e:
-                    logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
-
-            if channel:
-                await channel.send(embed=embed, view=VoteView())
-
-            return None
 
 
 
@@ -581,52 +587,80 @@ async def on_ready():
             bot.add_view(gw_button())
 
 
-# Funktion, die nach 12h die Rolle entfernt und Erinnerungen schickt
+# Funktion, die nach 12h die Rolle entfernt und Erinnerungen per DM schickt
 async def funktion2(when: datetime):
     await bot.wait_until_ready()
-    await discord.utils.sleep_until(when=when)
+
+    # TZ-sicher: immer UTC-aware
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+
+    await discord.utils.sleep_until(when)
+
+    cutoff = int(when.timestamp())
+    logging.info(f"[VoteReminder] firing at {datetime.now(timezone.utc).isoformat()} (cutoff={cutoff})")
+
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT userID FROM voterole WHERE time <= %s", (int(when.timestamp()),))
+            # Alle fälligen User direkt aus 'topgg'
+            await cur.execute(
+                "SELECT userID FROM topgg WHERE next_vote_epoch IS NOT NULL AND next_vote_epoch <= %s",
+                (cutoff,)
+            )
             results = await cur.fetchall()
             if not results:
+                logging.info("[VoteReminder] no due users")
                 return
 
+            # Für Rollen-Entfernung (DM ist unabhängig von Guild)
             guild = bot.get_guild(1141116981697859736)
-            voterole = guild.get_role(1141116981756575875)
+            voterole = guild.get_role(1141116981756575875) if guild else None
 
             for (user_id,) in results:
-                member = guild.get_member(user_id)
-                if not member:
+                # --- DM senden (unabhängig von Guild) ---
+                try:
+                    user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                    embed = discord.Embed(
+                        title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
+                        url="https://top.gg/de/bot/1113403511045107773/vote",
+                        description=(
+                            "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
+                            "Als Belohnung erhältst du eine spezielle Rolle auf unserem Support-Server."
+                        ),
+                        colour=discord.Colour.blue()
+                    )
+                    await user.send(embed=embed)
+                    logging.info(f"[VoteReminder] DM erfolgreich an {user_id} gesendet")
+                except Exception as e:
+                    logging.warning(f"[VoteReminder] ❌ DM an {user_id} fehlgeschlagen: {e}")
+
+                # --- Rolle entfernen (falls vorhanden) ---
+                if guild and voterole:
                     try:
-                        member = await guild.fetch_member(user_id)
-                    except:
-                        continue
+                        member = guild.get_member(user_id) or await guild.fetch_member(user_id)
+                    except Exception:
+                        member = None
+                    if member and voterole in getattr(member, "roles", []):
+                        try:
+                            await member.remove_roles(voterole, reason="Voterole Cooldown abgelaufen")
+                            logging.info(f"[VoteReminder] Rolle entfernt bei {user_id}")
+                        except Exception as e:
+                            logging.warning(f"[VoteReminder] Rolle entfernen fehlgeschlagen ({user_id}): {e}")
 
-                embed = discord.Embed(
-                    title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
-                    url="https://top.gg/de/bot/1113403511045107773/vote",
-                    description=(
-                        "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
-                        "Als Belohnung erhälst du eine spezielle Rolle auf unserem [Support-Server](https://discord.gg/NH9DdSUJrE)."
-                    ),
-                    colour=discord.Colour.blue()
-                )
+                # --- Reminder „verbrauchen“ ---
                 try:
-                    await member.send(embed=embed)
-                    logging.error(f"DM erfolgreich an {member.id} gesendet!")
+                    await cur.execute("UPDATE topgg SET next_vote_epoch=NULL WHERE userID=%s", (user_id,))
                 except Exception as e:
-                    logging.error(f"❌ DM an {member.id} fehlgeschlagen: {e}")
+                    logging.error(f"[VoteReminder] DB-Update next_vote_epoch=NULL fehlgeschlagen ({user_id}): {e}")
 
-                try:
-                    if voterole in member.roles:
-                        await member.remove_roles(voterole, reason="Voterole Cooldown abgelaufen")
-                except Exception as e:
-                    logging.error(f"Fehler beim Entfernen der Rolle von {user_id}: {e}")
-
-                # Entferne den Eintrag aus der Tabelle
-                await cur.execute("DELETE FROM voterole WHERE userID = %s", (user_id,))
+        # falls dein Pool nicht autocommit nutzt – schadet nicht:
+        try:
             await conn.commit()
+        except Exception:
+            pass
+
+    logging.info("[VoteReminder] finished")
+
 
 async def gwtimes(when: datetime, messageid: int):
     await bot.wait_until_ready()
