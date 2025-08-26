@@ -210,17 +210,28 @@ class Astra(commands.Bot):
                 # --- Vote-Reminder (topgg.next_vote_epoch) ---
                 if not self.task2:
                     self.task2 = True
-                    await cur.execute(
-                        "SELECT userID, next_vote_epoch FROM topgg WHERE next_vote_epoch > UNIX_TIMESTAMP()")
+
+                    await cur.execute("""
+                                      SELECT userID, next_vote_epoch
+                                      FROM topgg
+                                      WHERE next_vote_epoch IS NOT NULL
+                                      ORDER BY next_vote_epoch ASC
+                                      """)
                     eintraege2 = await cur.fetchall()
+                    logging.info(f"[Resume] {len(eintraege2)} offene Vote-Reminder aus DB geladen")
 
                     async def starte_voterole_tasks():
-                        for (user_id, ts) in eintraege2:
+                        now = datetime.now(timezone.utc)
+                        for user_id, ts in eintraege2:
                             try:
-                                if ts is None:
+                                if not ts:
                                     continue
                                 when = datetime.fromtimestamp(int(ts), timezone.utc)
-                                logging.info(f"[Resume] Reminder neu geplant für {user_id} um {when.isoformat()}")
+                                if when <= now:
+                                    logging.info(f"[Resume] Reminder für {user_id} überfällig – feuere sofort")
+                                    when = now
+                                else:
+                                    logging.info(f"[Resume] Reminder neu geplant für {user_id} um {when.isoformat()}")
                                 asyncio.create_task(funktion2(user_id, when))
                                 await asyncio.sleep(0.05)
                             except Exception as e:
@@ -568,22 +579,37 @@ async def on_ready():
 async def funktion2(user_id: int, when: datetime):
     await bot.wait_until_ready()
 
-    # immer UTC-aware
+    # UTC-sicher
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
 
+    logging.info(f"[VoteReminder] task scheduled for {user_id} -> {when.isoformat()}")
     await discord.utils.sleep_until(when)
-    logging.info(f"[VoteReminder] firing for {user_id} at {datetime.now(timezone.utc).isoformat()}")
+    now = datetime.now(timezone.utc)
+    logging.info(f"[VoteReminder] task woke up for {user_id} at {now.isoformat()}")
 
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            # Guild/Role vorbereiten
-            guild = bot.get_guild(1141116981697859736)
-            voterole = guild.get_role(1141116981756575875) if guild else None
+            # --- Schutz: ist der Reminder noch gültig? ---
+            # Falls der User inzwischen erneut gevotet hat und ein NEUER next_vote_epoch gesetzt wurde,
+            # ist dieser Task veraltet und wird übersprungen.
+            try:
+                await cur.execute("SELECT next_vote_epoch FROM topgg WHERE userID=%s", (user_id,))
+                row = await cur.fetchone()
+                current_ts = row[0] if row else None
+                if current_ts is None:
+                    logging.info(f"[VoteReminder] skip {user_id} – next_vote_epoch bereits verbraucht")
+                    return
+                if current_ts > int(when.timestamp()):
+                    logging.info(f"[VoteReminder] skip {user_id} – neuerer Reminder existiert (ts={current_ts})")
+                    return
+            except Exception as e:
+                logging.warning(f"[VoteReminder] Vorab-Check fehlgeschlagen ({user_id}): {e}")
 
             # --- DM senden ---
             try:
                 user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                logging.info(f"[VoteReminder] Versuche DM an {user_id} zu senden...")
                 embed = discord.Embed(
                     title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
                     url="https://top.gg/de/bot/1113403511045107773/vote",
@@ -598,7 +624,9 @@ async def funktion2(user_id: int, when: datetime):
             except Exception as e:
                 logging.warning(f"[VoteReminder] ❌ DM an {user_id} fehlgeschlagen: {e}")
 
-            # --- Rolle entfernen ---
+            # --- Rolle entfernen (optional) ---
+            guild = bot.get_guild(1141116981697859736)
+            voterole = guild.get_role(1141116981756575875) if guild else None
             if guild and voterole:
                 try:
                     member = guild.get_member(user_id) or await guild.fetch_member(user_id)
@@ -611,9 +639,13 @@ async def funktion2(user_id: int, when: datetime):
                     except Exception as e:
                         logging.warning(f"[VoteReminder] Rolle entfernen fehlgeschlagen ({user_id}): {e}")
 
-            # --- Reminder verbrauchen ---
+            # --- Reminder verbrauchen (nur wenn noch derselbe fällig ist) ---
             try:
-                await cur.execute("UPDATE topgg SET next_vote_epoch=NULL WHERE userID=%s", (user_id,))
+                await cur.execute(
+                    "UPDATE topgg SET next_vote_epoch=NULL "
+                    "WHERE userID=%s AND next_vote_epoch <= %s",
+                    (user_id, int(when.timestamp()))
+                )
             except Exception as e:
                 logging.error(f"[VoteReminder] DB-Update fehlgeschlagen ({user_id}): {e}")
 
@@ -623,7 +655,6 @@ async def funktion2(user_id: int, when: datetime):
             pass
 
     logging.info("[VoteReminder] finished")
-
 
 
 
