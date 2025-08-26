@@ -210,19 +210,21 @@ class Astra(commands.Bot):
                 # --- Vote-Reminder (topgg.next_vote_epoch) ---
                 if not self.task2:
                     self.task2 = True
-                    await cur.execute("SELECT next_vote_epoch FROM topgg WHERE next_vote_epoch > UNIX_TIMESTAMP()")
+                    await cur.execute(
+                        "SELECT userID, next_vote_epoch FROM topgg WHERE next_vote_epoch > UNIX_TIMESTAMP()")
                     eintraege2 = await cur.fetchall()
 
                     async def starte_voterole_tasks():
-                        for (ts,) in eintraege2:
+                        for (user_id, ts) in eintraege2:
                             try:
                                 if ts is None:
                                     continue
                                 when = datetime.fromtimestamp(int(ts), timezone.utc)
-                                asyncio.create_task(funktion2(when))
+                                logging.info(f"[Resume] Reminder neu geplant für {user_id} um {when.isoformat()}")
+                                asyncio.create_task(funktion2(user_id, when))
                                 await asyncio.sleep(0.05)
                             except Exception as e:
-                                logging.error(f"❌ Reminder-Replay-Fehler (ts={ts}): {e}")
+                                logging.error(f"❌ Reminder-Replay-Fehler (user={user_id}, ts={ts}): {e}")
 
                     asyncio.create_task(starte_voterole_tasks())
 
