@@ -442,11 +442,13 @@ class TempChannelCog(commands.Cog):
                     interface = await interaction.guild.create_text_channel(
                         "interface", category=category, overwrites=ovw, reason="Voicesetup"
                     )
-                    embed = discord.Embed(
-                        title="Interface",
-                        description="> Stelle deinen Tempchannel mit den Buttons unten ein.",
-                        colour=discord.Colour.blue()
-                    )
+                    embed = discord.Embed(title="Interface",
+                                          description="> Stelle deinen Tempchannel mit den Buttons unten ein.",
+                                          colour=discord.Colour.blue())
+                    embed.set_image(
+                        url="https://cdn.discordapp.com/attachments/1141116983358804117/1410009910011363512/Banner_deutsch.png?")
+                    embed.set_footer(icon_url=interaction.guild.icon.url,
+                                     text=f"Du kannst deinen Tempchannel mit den Buttons einstellen.")
                     await interface.send(embed=embed, view=TempChannelView())
                     return category, joinhub, interface
 
