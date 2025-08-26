@@ -563,79 +563,65 @@ async def on_ready():
             )
 
 
-# Funktion, die nach 12h die Rolle entfernt und Erinnerungen per DM schickt
 async def funktion2(user_id: int, when: datetime):
     await bot.wait_until_ready()
 
-    # TZ-sicher: immer UTC-aware
+    # immer UTC-aware
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
 
     await discord.utils.sleep_until(when)
-
-    cutoff = int(when.timestamp())
-    logging.info(f"[VoteReminder] firing at {datetime.now(timezone.utc).isoformat()} (cutoff={cutoff})")
+    logging.info(f"[VoteReminder] firing for {user_id} at {datetime.now(timezone.utc).isoformat()}")
 
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
-            # Alle fälligen User direkt aus 'topgg'
-            await cur.execute(
-                "SELECT userID FROM topgg WHERE next_vote_epoch IS NOT NULL AND next_vote_epoch <= %s",
-                (cutoff,)
-            )
-            results = await cur.fetchall()
-            if not results:
-                logging.info("[VoteReminder] no due users")
-                return
-
-            # Für Rollen-Entfernung (DM ist unabhängig von Guild)
+            # Guild/Role vorbereiten
             guild = bot.get_guild(1141116981697859736)
             voterole = guild.get_role(1141116981756575875) if guild else None
 
-            for (user_id,) in results:
-                # --- DM senden (unabhängig von Guild) ---
-                try:
-                    user = bot.get_user(user_id) or await bot.fetch_user(user_id)
-                    embed = discord.Embed(
-                        title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
-                        url="https://top.gg/de/bot/1113403511045107773/vote",
-                        description=(
-                            "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
-                            "Als Belohnung erhältst du eine spezielle Rolle auf unserem Support-Server."
-                        ),
-                        colour=discord.Colour.blue()
-                    )
-                    await user.send(embed=embed)
-                    logging.info(f"[VoteReminder] DM erfolgreich an {user_id} gesendet")
-                except Exception as e:
-                    logging.warning(f"[VoteReminder] ❌ DM an {user_id} fehlgeschlagen: {e}")
+            # --- DM senden ---
+            try:
+                user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+                embed = discord.Embed(
+                    title="<:Astra_time:1141303932061233202> Du kannst wieder voten!",
+                    url="https://top.gg/de/bot/1113403511045107773/vote",
+                    description=(
+                        "Der Cooldown von 12h ist vorbei. Es wäre schön, wenn du wieder votest.\n"
+                        "Als Belohnung erhältst du eine spezielle Rolle auf unserem Support-Server."
+                    ),
+                    colour=discord.Colour.blue()
+                )
+                await user.send(embed=embed)
+                logging.info(f"[VoteReminder] DM erfolgreich an {user_id} gesendet")
+            except Exception as e:
+                logging.warning(f"[VoteReminder] ❌ DM an {user_id} fehlgeschlagen: {e}")
 
-                # --- Rolle entfernen (falls vorhanden) ---
-                if guild and voterole:
+            # --- Rolle entfernen ---
+            if guild and voterole:
+                try:
+                    member = guild.get_member(user_id) or await guild.fetch_member(user_id)
+                except Exception:
+                    member = None
+                if member and voterole in getattr(member, "roles", []):
                     try:
-                        member = guild.get_member(user_id) or await guild.fetch_member(user_id)
-                    except Exception:
-                        member = None
-                    if member and voterole in getattr(member, "roles", []):
-                        try:
-                            await member.remove_roles(voterole, reason="Voterole Cooldown abgelaufen")
-                            logging.info(f"[VoteReminder] Rolle entfernt bei {user_id}")
-                        except Exception as e:
-                            logging.warning(f"[VoteReminder] Rolle entfernen fehlgeschlagen ({user_id}): {e}")
+                        await member.remove_roles(voterole, reason="Voterole Cooldown abgelaufen")
+                        logging.info(f"[VoteReminder] Rolle entfernt bei {user_id}")
+                    except Exception as e:
+                        logging.warning(f"[VoteReminder] Rolle entfernen fehlgeschlagen ({user_id}): {e}")
 
-                # --- Reminder „verbrauchen“ ---
-                try:
-                    await cur.execute("UPDATE topgg SET next_vote_epoch=NULL WHERE userID=%s", (user_id,))
-                except Exception as e:
-                    logging.error(f"[VoteReminder] DB-Update next_vote_epoch=NULL fehlgeschlagen ({user_id}): {e}")
+            # --- Reminder verbrauchen ---
+            try:
+                await cur.execute("UPDATE topgg SET next_vote_epoch=NULL WHERE userID=%s", (user_id,))
+            except Exception as e:
+                logging.error(f"[VoteReminder] DB-Update fehlgeschlagen ({user_id}): {e}")
 
-        # falls dein Pool nicht autocommit nutzt – schadet nicht:
         try:
             await conn.commit()
         except Exception:
             pass
 
     logging.info("[VoteReminder] finished")
+
 
 
 
