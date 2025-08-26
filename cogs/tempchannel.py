@@ -37,10 +37,9 @@ async def isJoinHub(bot: commands.Bot, channel: discord.VoiceChannel) -> bool:
 
 
 def build_threshold_overwrites(guild: discord.Guild, base_role: discord.Role, *, allow_connect: bool = True):
-    """Overwrites: nur base_role und höher sehen/verbinden"""
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
-        guild.me: discord.PermissionOverwrite(view_channel=True, connect=True, manage_channels=True)
+        guild.me: discord.PermissionOverwrite(view_channel=True, connect=True, manage_channels=True),
     }
     for r in guild.roles:
         if r.position >= base_role.position:
@@ -352,7 +351,7 @@ class TempChannelCog(commands.Cog):
 
     @app_commands.command(
         name="voicesetup",
-        description="Erstellt, aktualisiert oder entfernt das Voice-Autoerstellungs-Setup."
+        description="Erstellt/aktualisiert oder entfernt das Voice-Autoerstellungs-Setup."
     )
     @app_commands.describe(
         aktion="Was soll passieren?",
@@ -360,12 +359,12 @@ class TempChannelCog(commands.Cog):
         rolle="Nur nötig, wenn sichtbarkeit='rolle'"
     )
     @app_commands.guild_only()
-    @commands.has_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)  # <- für App Commands korrekt
     async def voicesetup(
             self,
             interaction: discord.Interaction,
             aktion: Literal["erstellen", "entfernen"],
-            sichtbarkeit: Literal["jeder", "rolle", "privat"] = None,
+            sichtbarkeit: Literal["jeder", "rolle", "privat"] | None = None,
             rolle: discord.Role | None = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -381,24 +380,25 @@ class TempChannelCog(commands.Cog):
                     if not row:
                         return await interaction.followup.send("❌ Kein Setup gefunden.", ephemeral=True)
 
-                    joinhub = interaction.guild.get_channel(int(row[0]))
-                    category = joinhub.category if joinhub else None
+                    old_joinhub = interaction.guild.get_channel(int(row[0]))
+                    old_category = old_joinhub.category if old_joinhub else None
 
-                    if joinhub:
-                        try:
-                            await joinhub.delete(reason="Voicesetup entfernt")
-                        except Exception:
-                            pass
-                    if category:
-                        try:
-                            for ch in category.channels:
+                    # Alles bestmöglich löschen (robust gegen schon-gelöscht)
+                    try:
+                        if old_joinhub:
+                            await old_joinhub.delete(reason="Voicesetup entfernt")
+                    except Exception:
+                        pass
+                    try:
+                        if old_category:
+                            for ch in list(old_category.channels):
                                 try:
                                     await ch.delete(reason="Voicesetup entfernt")
                                 except Exception:
                                     pass
-                            await category.delete(reason="Voicesetup entfernt")
-                        except Exception:
-                            pass
+                            await old_category.delete(reason="Voicesetup entfernt")
+                    except Exception:
+                        pass
 
                     await cur.execute("DELETE FROM tempchannels WHERE guild_id = %s", (interaction.guild.id,))
                     await cur.execute("DELETE FROM usertempchannels WHERE guildID = %s", (interaction.guild.id,))
@@ -407,11 +407,9 @@ class TempChannelCog(commands.Cog):
 
                 # ---------------- Erstellen/Aktualisieren ----------------
                 if sichtbarkeit is None:
-                    return await interaction.followup.send(
-                        "❌ Bitte `sichtbarkeit` angeben, wenn du erstellen willst.", ephemeral=True
-                    )
+                    return await interaction.followup.send("❌ Bitte `sichtbarkeit` angeben.", ephemeral=True)
 
-                # Overwrites wählen
+                # Overwrites bestimmen
                 if sichtbarkeit == "jeder":
                     ovw = {
                         interaction.guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=True),
@@ -424,18 +422,17 @@ class TempChannelCog(commands.Cog):
                         interaction.guild.me: discord.PermissionOverwrite(view_channel=True, connect=True,
                                                                           manage_channels=True),
                     }
-                elif sichtbarkeit == "rolle":
+                else:  # "rolle"
                     if rolle is None:
-                        return await interaction.followup.send("❌ Du musst eine Rolle angeben, wenn du `rolle` wählst.",
+                        return await interaction.followup.send("❌ Bitte eine Rolle angeben bei `sichtbarkeit=rolle`.",
                                                                ephemeral=True)
                     ovw = build_threshold_overwrites(interaction.guild, rolle, allow_connect=True)
 
-                # DB abfragen
+                # DB prüfen
                 await cur.execute("SELECT channel_id FROM tempchannels WHERE guild_id = %s", (interaction.guild.id,))
                 row = await cur.fetchone()
 
-                if row is None:
-                    # neu erstellen
+                async def create_fresh_setup():
                     category = await interaction.guild.create_category(
                         "Private Sprachkanäle", overwrites=ovw, reason="Voicesetup"
                     )
@@ -451,37 +448,66 @@ class TempChannelCog(commands.Cog):
                         colour=discord.Colour.blue()
                     )
                     await interface.send(embed=embed, view=TempChannelView())
+                    return category, joinhub, interface
 
+                if row is None:
+                    # kein Eintrag -> neu erstellen
+                    category, joinhub, _interface = await create_fresh_setup()
                     await cur.execute(
                         "INSERT INTO tempchannels (guild_id, channel_id) VALUES (%s, %s)",
                         (interaction.guild.id, joinhub.id)
                     )
                     await conn.commit()
-
                     return await interaction.followup.send(
-                        f"✅ Voicesetup erstellt (Sichtbarkeit: **{sichtbarkeit}**"
-                        + (f" ab {rolle.mention}" if sichtbarkeit == "rolle" else "") + ")",
+                        "✅ Voicesetup erstellt"
+                        + (f" (ab Rolle {rolle.mention})" if sichtbarkeit == "rolle" else f" ({sichtbarkeit})"),
                         ephemeral=True
                     )
+
+                # Eintrag existiert -> prüfen, ob Channel/Kategorie noch existieren
+                joinhub_id = int(row[0])
+                joinhub = interaction.guild.get_channel(joinhub_id)
+                category = joinhub.category if joinhub else None
+
+                if not joinhub or not category:
+                    # STALE: DB zeigt auf nicht existierende Objekte -> hart neu erstellen & DB reparieren
+                    category, joinhub, _interface = await create_fresh_setup()
+                    await cur.execute(
+                        "UPDATE tempchannels SET channel_id = %s WHERE guild_id = %s",
+                        (joinhub.id, interaction.guild.id)
+                    )
+                    await conn.commit()
+                    return await interaction.followup.send(
+                        "🛠️ Altes Setup war defekt – neu erstellt."
+                        + (f" (ab Rolle {rolle.mention})" if sichtbarkeit == "rolle" else f" ({sichtbarkeit})"),
+                        ephemeral=True
+                    )
+
+                # reguläres Update bestehender Objekte
+                await category.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
+                interface = discord.utils.get(category.text_channels, name="interface")
+                if interface:
+                    await interface.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
                 else:
-                    # aktualisieren
-                    joinhub_id = int(row[0])
-                    joinhub = interaction.guild.get_channel(joinhub_id)
-                    category = joinhub.category if joinhub else None
-
-                    if category:
-                        await category.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
-                        interface = discord.utils.get(category.text_channels, name="interface")
-                        if interface:
-                            await interface.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
-                    if joinhub:
-                        await joinhub.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
-
-                    return await interaction.followup.send(
-                        f"🔁 Voicesetup aktualisiert (Sichtbarkeit: **{sichtbarkeit}**"
-                        + (f" ab {rolle.mention}" if sichtbarkeit == "rolle" else "") + ")",
-                        ephemeral=True
+                    # falls fehlte, neu anlegen
+                    interface = await interaction.guild.create_text_channel(
+                        "interface", category=category, overwrites=ovw, reason="Voicesetup"
                     )
+                    await interface.send(
+                        embed=discord.Embed(
+                            title="Interface",
+                            description="> Stelle deinen Tempchannel mit den Buttons unten ein.",
+                            colour=discord.Colour.blue()
+                        ),
+                        view=TempChannelView()
+                    )
+                await joinhub.edit(overwrites=ovw, reason="Voicesetup aktualisiert")
+
+                return await interaction.followup.send(
+                    "🔁 Voicesetup aktualisiert"
+                    + (f" (ab Rolle {rolle.mention})" if sichtbarkeit == "rolle" else f" ({sichtbarkeit})"),
+                    ephemeral=True
+                )
 
     # ---------- Voice Event ----------
 
