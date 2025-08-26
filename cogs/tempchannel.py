@@ -366,7 +366,7 @@ class tempchannel(commands.Cog):
                                                                           reason="Benutze Voicesetup Command.")
                         channel = await interaction.guild.create_text_channel(name="interface", category=category1)
                         embed5 = discord.Embed(title="Interface",
-                                               description="> In diesem Interface kannst du mit den Buttons deinen Temochannel bearbeiten. Du kannst einige dinge einstellen, probiers doch mal aus.",
+                                               description="> In diesem Interface kannst du mit den Buttons deinen Tempchannel bearbeiten. Du kannst einige dinge einstellen, probiers doch mal aus.",
                                                colour=discord.Colour.blue())
                         embed5.set_image(
                             url="https://cdn.discordapp.com/attachments/842039934142513152/1061417801362985000/Banner.png")
