@@ -479,9 +479,8 @@ async def on_dbl_vote(data):
     # --- Reminder (DM) für 12h terminieren ---
     when = datetime.fromtimestamp(next_vote_ts, timezone.utc)
     logging.info(f"[VoteReminder] scheduled DM for {user_id} at {when.isoformat()} (ts={next_vote_ts})")
-    asyncio.create_task(funktion2(when))
-
-
+    asyncio.create_task(funktion2(user_id, when))
+    return None
 
 
 @bot.event
@@ -565,7 +564,7 @@ async def on_ready():
 
 
 # Funktion, die nach 12h die Rolle entfernt und Erinnerungen per DM schickt
-async def funktion2(when: datetime):
+async def funktion2(user_id: int, when: datetime):
     await bot.wait_until_ready()
 
     # TZ-sicher: immer UTC-aware
