@@ -58,12 +58,14 @@ SPIN_FRAMES = 5
 FRAME_DELAY = 0.35
 
 def spin_reels():
-    board = [[None]*3 for _ in range(3)]
-    for c, strip in enumerate(REEL_STRIPS):
-        start = random.randint(0, len(strip)-1)
-        for r in range(3):
-            board[r][c] = strip[(start+r) % len(strip)]
-    return board
+    """Pro Spalte einen Startindex wählen und ein 3er-Fenster lesen (echtes Reel-Feeling)."""
+    cols = []
+    for strip in REEL_STRIPS:
+        start = random.randint(0, len(strip) - 1)
+        window = [strip[(start + i) % len(strip)] for i in range(3)]
+        cols.append(window)  # Spalte
+    # Spalten → Zeilen transponieren: board[row][col]
+    return [list(row) for row in zip(*cols)]
 
 def nudge_for_scatter(board):
     # Wenn genau 2 Scatter sichtbar, 35% Chance eine Spalte zu nudgen, um 3. Scatter zu treffen
@@ -89,32 +91,26 @@ def nudge_for_scatter(board):
 
 def render_board(board, winline_idxs=None, freespins_left=0):
     """
-    Zeichnet ein 3×3-Board mit stabiler Breite.
-    Tipp: Figure Space (U+2007) polstert Emojis in Monospace-Blöcken.
+    3×3-Board mit stabilen Zellenbreiten.
+    Figure Space (U+2007) verhindert „wandernde“ Kanten bei Emojis.
     """
     winline_idxs = set(winline_idxs or [])
-    FIG = "\u2007"              # Figure Space (monospace-breite Zahlbreite)
-    PAD = FIG * 2               # zwei Spaces als Puffer je Zelle
+    FIG = "\u2007"
+    PAD = FIG * 2  # Emoji + 2x Puffer → gleich breit
 
-    def cell(r, c):
-        return f"{board[r][c]}{PAD}"
+    def cell(r, c): return f"{board[r][c]}{PAD}"
+    def row_str(r): return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
 
-    # Row-Strings mit Innen-Trennern (│)
-    def row_str(r):
-        return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
-
-    # Pfeile an Rand für Reihen-Gewinne
-    left = [" "," "," "]
-    right = [" "," "," "]
+    # Reihenpfeile (links/rechts)
+    left = [" "," "," "]; right = [" "," "," "]
     if 0 in winline_idxs: left[0]=right[0]="▶"
     if 1 in winline_idxs: left[1]=right[1]="▶"
     if 2 in winline_idxs: left[2]=right[2]="▶"
 
-    # Länge der Horizontal-Linie an Row 0 einmalig bestimmen
-    horiz_len = len(row_str(0))
-    top    = "┌" + "─" * horiz_len + "┐"
-    midsep = "├" + "─" * horiz_len + "┤"
-    bot    = "└" + "─" * horiz_len + "┘"
+    width = len(row_str(0))
+    top    = "┌" + "─"*width + "┐"
+    midsep = "├" + "─"*width + "┤"
+    bot    = "└" + "─"*width + "┘"
 
     lines = [
         top,
@@ -128,22 +124,18 @@ def render_board(board, winline_idxs=None, freespins_left=0):
 
     txt = "```\n" + "\n".join(lines) + "\n```"
 
-    # Zusatzlabels für Spalten/Diagonalen/Mittellinie
     extras = []
+    # Spalten/Diagonalen/Mittellinie benennen
     if 3 in winline_idxs: extras.append("Linke Spalte")
     if 4 in winline_idxs: extras.append("Mittlere Spalte")
     if 5 in winline_idxs: extras.append("Rechte Spalte")
     if 6 in winline_idxs: extras.append("↘ Diagonale")
-    if 7 in winline_idxs: extras.append("↗ Diagonale"
-    )
+    if 7 in winline_idxs: extras.append("↗ Diagonale")
     if 8 in winline_idxs: extras.append("Mittellinie (Bonus)")
-    if extras:
-        txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
-
-    if freespins_left > 0:
-        txt += f"Freespins verbleibend: **{freespins_left}**\n"
-
+    if extras: txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
+    if freespins_left > 0: txt += f"Freespins verbleibend: **{freespins_left}**\n"
     return txt
+
 
 
 def line_payout(coords, board, bet):
