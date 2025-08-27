@@ -72,10 +72,10 @@ intents.message_content = True
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-host = os.getenv('host')
-benutzer = os.getenv('benutzer')
-password_db = os.getenv('password_db')
-db_name = os.getenv('db_name')
+host = os.getenv('DB_HOST')
+benutzer = os.getenv('DB_USER')
+password_db = os.getenv('DB_PASS')
+db_name = os.getenv('DB_NAME')
 
 def convert(time):
     pos = ["s", "m", "h", "d", "w"]
