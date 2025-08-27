@@ -561,17 +561,25 @@ class EconomyClass(app_commands.Group):
 
         # ---------- Animation vorbereiten ----------
         # ein paar „laufende“ Frames (zufällig), dann Spalten nacheinander auf final
+        # Frames vorbereiten (läuft)
         frames = []
-        tmp = spin_reels()
         for _ in range(SPIN_FRAMES):
-            tmp = spin_reels()
-            frames.append(tmp)
+            frames.append(spin_reels())
+
+        # finales Board
         final = spin_reels()
-        # Spalten stopp-Sequenz
-        step = [[final[r][c] if c <= col else frames[-1][r][c] for c in range(3)] for r in range(3)]
-        frames.append(step)
-        step = [[final[r][c] if c <= 1 else frames[-1][r][c] for c in range(3)] for r in range(3)]
-        frames.append(step)
+
+        # Spalten nacheinander stoppen (0 -> 1 -> 2)
+        last = frames[-1]  # der letzte "laufende" Frame als Ausgang
+        for col in range(3):
+            step = [
+                [final[r][c] if c <= col else last[r][c] for c in range(3)]
+                for r in range(3)
+            ]
+            frames.append(step)
+            last = step  # nächster Schritt baut auf diesem auf
+
+        # (Optional) zur Sicherheit noch den finalen Voll-Frame anhängen
         frames.append(final)
 
         # ---------- Start-Embed ----------
