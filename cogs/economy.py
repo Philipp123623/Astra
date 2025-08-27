@@ -15,10 +15,11 @@ WILD = "⭐"
 SCAT = "🔔"
 
 REEL_STRIPS = [
-    ["🍒","🍇","🍋","🍊","🍓",WILD,"🍉","🍒","🍋","🍍","🍇","🍋","🍓","🍊","🍒","🍋","🍉",SCAT,"🍇","🍋"],
-    ["🍋","🍉","🍇","🍊",WILD,"🍓","🍍","🍋","🍇","🍒","🍋",SCAT,"🍉","🍊","🍇","🍋","🍓","🍒","🍋","🍊"],
-    ["🍇","🍋","🍓","🍊","🍒","🍍","🍉",WILD,"🍇","🍋","🍒","🍊","🍓",SCAT,"🍋","🍇","🍉","🍋","🍒","🍊"],
+    ["🍒","🍋","🍊","🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔"],
+    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔","🍒","🍋","🍊"],
+    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔","🍒","🍋","🍊"],
 ]
+
 
 # 9 Gewinnlinien (3 Reihen, 3 Spalten, 2 Diagonalen, Mittellinie doppelt)
 PAYLINES = [
@@ -33,11 +34,24 @@ PAYLINES = [
     ([(1,0),(1,1),(1,2)], "Mittellinie (Bonus)"),
 ]
 
-PAYTABLE = {  # 3 in line, multiplikativ auf Einsatz
-    "🍒": 5, "🍋": 6, "🍇": 8, "🍊": 10, "🍓": 12, "🍉": 16, "🍍": 22, WILD: 30
+PAYTABLE = {
+    "🍒": 2,   # sehr oft → klein
+    "🍋": 3,
+    "🍊": 4,
+    "🍇": 6,   # mittel
+    "🍓": 8,
+    "🍉": 10,
+    "🍍": 15,  # selten → groß
+    "⭐": 25,  # Jackpot (3 Wilds)
 }
-SCATTER_PAYS = {3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0}  # Scatter gibt hier nur Freespins
-FREESPINS_FOR_3_SCAT = 8
+
+SCATTER_PAYS = {
+    3: 2,   # 2× Einsatz
+    4: 5,   # 5× Einsatz
+    5: 10   # 10× Einsatz
+}
+FREESPINS_FOR_3_SCAT = 5   # man bekommt 5 Gratis-Spins
+
 NUDGE_SCATTER_CHANCE = 0.35
 
 SPIN_FRAMES = 5
@@ -74,37 +88,63 @@ def nudge_for_scatter(board):
     return board
 
 def render_board(board, winline_idxs=None, freespins_left=0):
+    """
+    Zeichnet ein 3×3-Board mit stabiler Breite.
+    Tipp: Figure Space (U+2007) polstert Emojis in Monospace-Blöcken.
+    """
     winline_idxs = set(winline_idxs or [])
-    S = "  "
-    def row_str(r): return f"{board[r][0]}{S}{board[r][1]}{S}{board[r][2]}"
+    FIG = "\u2007"              # Figure Space (monospace-breite Zahlbreite)
+    PAD = FIG * 2               # zwei Spaces als Puffer je Zelle
+
+    def cell(r, c):
+        return f"{board[r][c]}{PAD}"
+
+    # Row-Strings mit Innen-Trennern (│)
+    def row_str(r):
+        return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
+
+    # Pfeile an Rand für Reihen-Gewinne
     left = [" "," "," "]
     right = [" "," "," "]
-    # markiere Reihen
     if 0 in winline_idxs: left[0]=right[0]="▶"
     if 1 in winline_idxs: left[1]=right[1]="▶"
     if 2 in winline_idxs: left[2]=right[2]="▶"
-    # Baue Board
+
+    # Länge der Horizontal-Linie an Row 0 einmalig bestimmen
+    horiz_len = len(row_str(0))
+    top    = "┌" + "─" * horiz_len + "┐"
+    midsep = "├" + "─" * horiz_len + "┤"
+    bot    = "└" + "─" * horiz_len + "┘"
+
     lines = [
-        "┏━━━━━━━━━━━━━━━┓",
-        f"┃ {row_str(0)} ┃ {left[0]}",
-        f"┃ {row_str(1)} ┃ {left[1]}",
-        f"┃ {row_str(2)} ┃ {left[2]}",
-        "┗━━━━━━━━━━━━━━━┛",
+        top,
+        f"│ {row_str(0)} │ {left[0]}",
+        midsep,
+        f"│ {row_str(1)} │ {left[1]}",
+        midsep,
+        f"│ {row_str(2)} │ {left[2]}",
+        bot
     ]
+
     txt = "```\n" + "\n".join(lines) + "\n```"
-    # Hinweise für Spalten/Diagonalen unter dem Feld
+
+    # Zusatzlabels für Spalten/Diagonalen/Mittellinie
     extras = []
     if 3 in winline_idxs: extras.append("Linke Spalte")
     if 4 in winline_idxs: extras.append("Mittlere Spalte")
     if 5 in winline_idxs: extras.append("Rechte Spalte")
     if 6 in winline_idxs: extras.append("↘ Diagonale")
-    if 7 in winline_idxs: extras.append("↗ Diagonale")
+    if 7 in winline_idxs: extras.append("↗ Diagonale"
+    )
     if 8 in winline_idxs: extras.append("Mittellinie (Bonus)")
     if extras:
         txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
+
     if freespins_left > 0:
         txt += f"Freespins verbleibend: **{freespins_left}**\n"
+
     return txt
+
 
 def line_payout(coords, board, bet):
     syms = [board[r][c] for r,c in coords]
