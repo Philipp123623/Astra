@@ -97,7 +97,6 @@ class Astra(commands.Bot):
         self.topggpy = None
         self.task = False
         self.task2 = False
-        self.task3 = False
         self.pool = None  # Pool-Objekt hier zentral gespeichert
         self.initial_extensions = [
             "cogs.giveaway",
@@ -238,25 +237,6 @@ class Astra(commands.Bot):
                                 logging.error(f"❌ Reminder-Replay-Fehler (user={user_id}, ts={ts}): {e}")
 
                     asyncio.create_task(starte_voterole_tasks())
-
-                # --- Giveaway-Tasks ---
-                if not self.task3:
-                    self.task3 = True
-                    await cur.execute(
-                        "SELECT time, guildID, messageID, channelID FROM giveaway_active WHERE time REGEXP '^[0-9]+$' AND CAST(time AS UNSIGNED) > UNIX_TIMESTAMP()")
-                    eintraege3 = await cur.fetchall()
-
-                    async def starte_giveaway_tasks():
-                        for time_str, guild_id, message_id, channel_id in eintraege3:
-                            try:
-                                t2 = datetime.fromtimestamp(int(time_str), timezone.utc)
-                                msg_id = int(message_id)
-                                asyncio.create_task(gwtimes(t2, msg_id))
-                                await asyncio.sleep(0.2)
-                            except Exception as e:
-                                logging.error(f"❌ Giveaway-Fehler: {e}")
-
-                    asyncio.create_task(starte_giveaway_tasks())
 
         logging.info("✅ Tasks Registered!")
 
