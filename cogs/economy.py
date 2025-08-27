@@ -423,72 +423,158 @@ class EconomyClass(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(einsatz="Wie viele Coins willst du setzen?")
     async def slot(self, interaction: discord.Interaction, einsatz: int):
-        """Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren."""
         user_id = interaction.user.id
-        user_data = await self.get_user(user_id)  # Holen der Benutzerdaten aus der Datenbank
+        user_data = await self.get_user(user_id)
+        wallet = user_data[1]
 
-        # Überprüfen ob der Einsatz gültig ist
-        if einsatz <= 0 or einsatz > user_data[1]:
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Einsatz.", ephemeral=True)
+        if einsatz <= 0 or einsatz > wallet:
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Ungültiger Einsatz.", ephemeral=True
+            )
             return
 
-        # Die möglichen Obst-Emojis für den Slot
-        emojis = ["🍇", "🍋", "🍒", "🍓", "🍊"]
+        # sofort Einsatz abziehen (wie bei Blackjack)
+        await self.update_balance(user_id, wallet_change=-einsatz)
 
-        # Das animierte Spin-Emoji, das während der Drehung angezeigt wird
-        spin_emoji = "<a:spin:1141384584437702717>"
+        fruits = ["🍒", "🍋", "🍇", "🍓", "🍊", "🍉", "🍍"]
+        SPIN_FRAMES = 4  # wie lange animieren
+        FRAME_DELAY = 0.6  # Sekunden
 
-        # Resultat der Slot-Maschine
-        result = [random.choice(emojis) for _ in range(3)]  # Zufällige Auswahl der Symbole für das Slot-Spiel
-        win = False
-        gewinn = 0
+        # finaler 3x3-Treffer
+        final = [[random.choice(fruits) for _ in range(3)] for _ in range(3)]
 
-        # Wenn alle 3 Symbole gleich sind, gibt es einen großen Gewinn
-        if result.count(result[0]) == 3:
-            win = True
-            gewinn = einsatz * 5  # Für 3 gleiche Symbole gibt es 5x den Einsatz als Gewinn
-        # Wenn 2 Symbole gleich sind, bekommt der Benutzer seinen Einsatz zurück (oder keinen Verlust)
-        elif result.count(result[0]) == 2 or result.count(result[1]) == 2:
-            gewinn = 0  # Keine Änderung, der Einsatz wird nicht verloren
+        def render(board, highlight=None):
+            """
+            board: 3x3 Liste an Emojis
+            highlight: Liste von Koordinaten [(r,c), ...] die fett markiert werden
+            """
+            hset = set(highlight or [])
+
+            def cell(r, c):
+                v = board[r][c]
+                return f"**{v}**" if (r, c) in hset else v
+
+            lines = [
+                f"┌───────────────┐",
+                f"│ {cell(0, 0)}  {cell(0, 1)}  {cell(0, 2)} │",
+                f"│ {cell(1, 0)}  {cell(1, 1)}  {cell(1, 2)} │",
+                f"│ {cell(2, 0)}  {cell(2, 1)}  {cell(2, 2)} │",
+                f"└───────────────┘",
+            ]
+            return "```\n```"  # (kleiner Hack damit Discord Monospace erlaubt)
+            # Tipp: Discord rendert Box-Drawing schöner ohne Codeblock.
+            # Wenn du Monospace willst, nimm stattdessen:
+            # return "```\n" + "\n".join(lines) + "\n```"
+
+        # einfache Reel-Animation: jede Spalte „läuft“ und stoppt nacheinander
+        frames = []
+        temp = [[random.choice(fruits) for _ in range(3)] for _ in range(3)]
+        for i in range(SPIN_FRAMES):
+            # alle Spalten „laufen“
+            for col in range(3):
+                for row in range(3):
+                    temp[row][col] = random.choice(fruits)
+            frames.append([row[:] for row in temp])
+
+        # Spalten 0..2 nacheinander auf final setzen (Stopp-Effekt)
+        for col in range(3):
+            for row in range(3):
+                temp[row][col] = final[row][col]
+            frames.append([row[:] for row in temp])
+
+        # Gewinnlinien berechnen
+        paylines = [
+            [(0, 0), (0, 1), (0, 2)],
+            [(1, 0), (1, 1), (1, 2)],
+            [(2, 0), (2, 1), (2, 2)],
+            [(0, 0), (1, 1), (2, 2)],
+            [(2, 0), (1, 1), (0, 2)],
+        ]
+
+        def evaluate(board):
+            win_coords = []
+            payout = 0
+
+            # 3 in einer Linie?
+            for line in paylines:
+                a, b, c = line
+                v1 = board[a[0]][a[1]]
+                v2 = board[b[0]][b[1]]
+                v3 = board[c[0]][c[1]]
+                if v1 == v2 == v3:
+                    payout += einsatz * 5
+                    win_coords.extend(line)
+
+            # kleiner Trostpreis: 2 gleiche auf der Mittellinie
+            mid = [(1, 0), (1, 1), (1, 2)]
+            mvals = [board[r][c] for r, c in mid]
+            if payout == 0:
+                if mvals.count(mvals[0]) == 2 or mvals.count(mvals[1]) == 2:
+                    payout = einsatz * 2
+                    # markiere die Mittellinie
+                    win_coords.extend(mid)
+
+            if payout == 0:
+                payout = -einsatz
+
+            return payout, list(dict.fromkeys(win_coords))  # uniq
+
+        # erstes Embed (Start)
+        embed = discord.Embed(
+            colour=discord.Colour.blurple(),
+            title="🎰 Slots",
+            description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>\n"
+                        f"Viel Glück, {interaction.user.mention}!"
+        )
+        view_text = render(frames[0])
+        embed.add_field(name="Walzen", value=view_text, inline=False)
+        embed.set_author(name=str(interaction.user),
+                         icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
+
+        await interaction.response.send_message(embed=embed)
+        msg = await interaction.original_response()
+
+        # Animation abspielen
+        for board in frames[1:]:
+            await asyncio.sleep(FRAME_DELAY)
+            em = discord.Embed(
+                colour=discord.Colour.blurple(),
+                title="🎰 Slots",
+                description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>"
+            )
+            em.add_field(name="Walzen", value=render(board), inline=False)
+            em.set_author(name=str(interaction.user),
+                          icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
+            await msg.edit(embed=em)
+
+        # Ergebnis + Auszahlung
+        auszahlung, wins = evaluate(final)
+        if auszahlung > 0:
+            result_text = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{auszahlung}** <:Coin:1359178077011181811>"
+        elif auszahlung == 0:
+            result_text = f"Unentschieden."
         else:
-            gewinn = -einsatz  # Bei keinem Gewinn verliert der Benutzer seinen Einsatz
+            result_text = f"<:Astra_x:1141303954555289600> Verloren **{einsatz}** <:Coin:1359178077011181811>"
 
-        # Benutzer-Balance aktualisieren
-        await self.update_balance(user_id, wallet_change=gewinn)
+        # Gewinne hervorheben
+        board_field = render(final, highlight=wins)
 
-        # Erstellen von Embeds für die Animation
-        embed1 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der Einsatz wird getätigt")
-        embed1.add_field(name="Slots:", value=f"[{spin_emoji} {spin_emoji} {spin_emoji}]", inline=False)
-        embed1.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
-        embed1.set_author(name=interaction.user, icon_url=interaction.user.avatar)
+        # Balance gutschreiben (nur bei Gewinn/Unentschieden relevant – Einsatz wurde vorab abgezogen)
+        if auszahlung > 0:
+            await self.update_balance(user_id, wallet_change=auszahlung)
+        elif auszahlung == 0:
+            await self.update_balance(user_id, wallet_change=einsatz)  # Einsatz zurück
 
-        # Embed für den ersten Spin
-        embed2 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der erste Spin")
-        embed2.add_field(name="Slots:", value=f"[{result[0]} {spin_emoji} {spin_emoji}]", inline=False)
-        embed2.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
-        embed2.set_author(name=interaction.user, icon_url=interaction.user.avatar)
+        end = discord.Embed(
+            colour=discord.Colour.blue(),
+            title="🎰 Slots – Endergebnis"
+        )
+        end.add_field(name="Walzen", value=board_field, inline=False)
+        end.add_field(name="Ergebnis", value=result_text, inline=False)
+        end.set_author(name=str(interaction.user),
+                       icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
 
-        # Embed für den zweiten Spin
-        embed3 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_ticket:1141833836204937347> Slots - Der zweite Spin")
-        embed3.add_field(name="Slots:", value=f"[{result[0]} {result[1]} {spin_emoji}]", inline=False)
-        embed3.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811> ", inline=False)
-        embed3.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-
-        # Finales Embed mit den Ergebnissen
-        embed4 = discord.Embed(colour=discord.Colour.blurple(), description="<:Astra_gw1:1141303852889550928> Slots - Endergebnis")
-        embed4.add_field(name="Slots:", value=f"[{result[0]} {result[1]} {result[2]}]", inline=False)
-        embed4.add_field(name="Ergebnis", value=f"{'Gewonnen' if win else 'Verloren'} {gewinn} <:Coin:1359178077011181811> !", inline=False)
-        embed4.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-
-        # Senden der Embeds mit Animation
-        await interaction.response.send_message(embed=embed1)
-        message = await interaction.original_response()
-        await asyncio.sleep(1.5)
-        await message.edit(embed=embed2)
-        await asyncio.sleep(1.5)
-        await message.edit(embed=embed3)
-        await asyncio.sleep(1.5)
-        await message.edit(embed=embed4)
+        await msg.edit(embed=end)
 
     @app_commands.command(name="rps", description="Spiele Schere, Stein, Papier gegen den Bot.")
     @app_commands.guild_only()
