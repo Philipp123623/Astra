@@ -9,26 +9,6 @@ from typing import Literal
 import random
 from datetime import datetime, timedelta
 
-def render(board, highlight=None):
-    """
-    board: 3x3 Liste an Emojis
-    highlight: Liste von Koordinaten [(r,c), ...] die fett markiert werden
-    """
-    hset = set(highlight or [])
-
-    def cell(r, c):
-        v = board[r][c]
-        return f"**{v}**" if (r, c) in hset else v
-
-    lines = [
-        f"┌───────────────┐",
-        f"│ {cell(0,0)}  {cell(0,1)}  {cell(0,2)} │",
-        f"│ {cell(1,0)}  {cell(1,1)}  {cell(1,2)} │",
-        f"│ {cell(2,0)}  {cell(2,1)}  {cell(2,2)} │",
-        f"└───────────────┘",
-    ]
-    # Damit Discord das hübsch im Monospace rendert
-    return "```\n" + "\n".join(lines) + "\n```"
 
 JOBS = [{"name": "Küchenhilfe", "req": 0,
          "desc": "\nVerdiene zwischen 20 und 30 <:Coin:1359178077011181811>  pro Stunde.\nDu musst mindestens **0** Stunden gearbeitet haben, um diesen Job freizuschalten.",
@@ -482,10 +462,8 @@ class EconomyClass(app_commands.Group):
                 f"│ {cell(2, 0)}  {cell(2, 1)}  {cell(2, 2)} │",
                 f"└───────────────┘",
             ]
-            return "```\n```"  # (kleiner Hack damit Discord Monospace erlaubt)
-            # Tipp: Discord rendert Box-Drawing schöner ohne Codeblock.
-            # Wenn du Monospace willst, nimm stattdessen:
-            # return "```\n" + "\n".join(lines) + "\n```"
+            # Damit Discord das hübsch im Monospace rendert
+            return "```\n" + "\n".join(lines) + "\n```"
 
         # einfache Reel-Animation: jede Spalte „läuft“ und stoppt nacheinander
         frames = []
