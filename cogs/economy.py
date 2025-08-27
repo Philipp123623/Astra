@@ -11,17 +11,24 @@ from datetime import datetime, timedelta
 from discord import ui
 
 # ---------- Slot-Config ----------
+# ---------- Slot-Config (balanciert) ----------
 WILD = "⭐"
 SCAT = "🔔"
 
+# Mehr Low-Symbole (höhere Hit-Rate), etwas Cluster, 2–3 Scatter pro Strip
 REEL_STRIPS = [
-    ["🍒","🍋","🍊","🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔"],
-    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔","🍒","🍋","🍊"],
-    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍","⭐","🔔","🍒","🍋","🍊"],
+    # Reel 1
+    ["🍒","🍒","🍋","🍊","🍒","🍋","🍊","🍇","🍓","🍉",
+     "🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍", WILD, SCAT],
+    # Reel 2
+    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇",
+     "🍓","🍒","🍋","🍊","🍍", WILD, SCAT, "🍒","🍋","🍊"],
+    # Reel 3 (etwas mehr Scatter für Freespins)
+    ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇",
+     "🍓","🍒","🍋","🍊","🍍", WILD, SCAT, "🍒","🍋", SCAT],
 ]
 
-
-# 9 Gewinnlinien (3 Reihen, 3 Spalten, 2 Diagonalen, Mittellinie doppelt)
+# 9 Linien wie gehabt:
 PAYLINES = [
     ([(0,0),(0,1),(0,2)], "Obere Reihe"),
     ([(1,0),(1,1),(1,2)], "Mittlere Reihe"),
@@ -34,25 +41,25 @@ PAYLINES = [
     ([(1,0),(1,1),(1,2)], "Mittellinie (Bonus)"),
 ]
 
+# Kleinere Multis bei häufigen Symbolen, etwas sattere Highs
 PAYTABLE = {
-    "🍒": 2,   # sehr oft → klein
+    "🍒": 2,
     "🍋": 3,
     "🍊": 4,
-    "🍇": 6,   # mittel
+    "🍇": 6,
     "🍓": 8,
-    "🍉": 10,
-    "🍍": 15,  # selten → groß
-    "⭐": 25,  # Jackpot (3 Wilds)
+    "🍉": 12,
+    "🍍": 18,
+    WILD: 30,  # 3x Wild
 }
 
-SCATTER_PAYS = {
-    3: 2,   # 2× Einsatz
-    4: 5,   # 5× Einsatz
-    5: 10   # 10× Einsatz
-}
-FREESPINS_FOR_3_SCAT = 5   # man bekommt 5 Gratis-Spins
+# Scatter etwas häufiger, dafür Payout capped/niedriger
+SCATTER_PAYS = {3: 3, 4: 6, 5: 12}
+FREESPINS_FOR_3_SCAT = 4
 
-NUDGE_SCATTER_CHANCE = 0.35
+# Nudge-Chancen
+NUDGE_SCATTER_CHANCE = 0.45     # hilft öfter zu 3x Scatter
+NUDGE_LINE_CHANCE    = 0.18     # schiebt manchmal eine 2/3-Linie zu 3/3
 
 SPIN_FRAMES = 5
 FRAME_DELAY = 0.35
@@ -90,52 +97,95 @@ def nudge_for_scatter(board):
     return board
 
 def render_board(board, winline_idxs=None, freespins_left=0):
-    """
-    3×3-Board mit stabilen Zellenbreiten.
-    Figure Space (U+2007) verhindert „wandernde“ Kanten bei Emojis.
-    """
     winline_idxs = set(winline_idxs or [])
-    FIG = "\u2007"
-    PAD = FIG * 2  # Emoji + 2x Puffer → gleich breit
 
-    def cell(r, c): return f"{board[r][c]}{PAD}"
-    def row_str(r): return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
+    FIG = "\u2007"        # Figure Space (monospace-fest)
+    CELL_PAD = FIG * 2
 
-    # Reihenpfeile (links/rechts)
-    left = [" "," "," "]; right = [" "," "," "]
-    if 0 in winline_idxs: left[0]=right[0]="▶"
-    if 1 in winline_idxs: left[1]=right[1]="▶"
-    if 2 in winline_idxs: left[2]=right[2]="▶"
+    def cell(r, c):  return f"{board[r][c]}{CELL_PAD}"
+    def row_line(r): return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
 
-    width = len(row_str(0))
-    top    = "┌" + "─"*width + "┐"
-    midsep = "├" + "─"*width + "┤"
-    bot    = "└" + "─"*width + "┘"
+    inner_width = len(row_line(0))
+    top    = "╔" + "═" * inner_width + "╗"
+    midsep = "╠" + "═" * inner_width + "╣"
+    bot    = "╚" + "═" * inner_width + "╝"
+
+    left  = [" "," "," "]; right = [" "," "," "]
+    if 0 in winline_idxs: left[0] = right[0] = "▶"
+    if 1 in winline_idxs: left[1] = right[1] = "▶"
+    if 2 in winline_idxs: left[2] = right[2] = "▶"
 
     lines = [
         top,
-        f"│ {row_str(0)} │ {left[0]}",
+        f"║ {row_line(0)} ║ {left[0]}",
         midsep,
-        f"│ {row_str(1)} │ {left[1]}",
+        f"║ {row_line(1)} ║ {left[1]}",
         midsep,
-        f"│ {row_str(2)} │ {left[2]}",
-        bot
+        f"║ {row_line(2)} ║ {left[2]}",
+        bot,
     ]
-
     txt = "```\n" + "\n".join(lines) + "\n```"
 
     extras = []
-    # Spalten/Diagonalen/Mittellinie benennen
     if 3 in winline_idxs: extras.append("Linke Spalte")
     if 4 in winline_idxs: extras.append("Mittlere Spalte")
     if 5 in winline_idxs: extras.append("Rechte Spalte")
     if 6 in winline_idxs: extras.append("↘ Diagonale")
     if 7 in winline_idxs: extras.append("↗ Diagonale")
     if 8 in winline_idxs: extras.append("Mittellinie (Bonus)")
-    if extras: txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
-    if freespins_left > 0: txt += f"Freespins verbleibend: **{freespins_left}**\n"
+    if extras:
+        txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
+    if freespins_left > 0:
+        txt += f"Freespins verbleibend: **{freespins_left}**\n"
     return txt
 
+
+def build_spin_frames(final_board, spin_frames=5):
+    frames = [spin_reels() for _ in range(max(1, spin_frames))]
+    last = [row[:] for row in frames[-1]]
+    for col in range(3):
+        step = [[final_board[r][c] if c <= col else last[r][c] for c in range(3)] for r in range(3)]
+        frames.append(step)
+        last = step
+    frames.append(final_board)
+    return frames
+
+def nudge_for_line(board):
+    """Mit kleiner Chance (NUDGE_LINE_CHANCE) wird eine 2/3-Linie zu 3/3 geschoben,
+       falls das mit einem 1-Step-Shift in der betreffenden Spalte geht."""
+    import random
+    if random.random() > NUDGE_LINE_CHANCE:
+        return board
+
+    for idx, (coords, _name) in enumerate(PAYLINES):
+        # nur horizontale/vertikale/diagonale Dreier; suche 2 gleiche + 1 abweichend
+        syms = [board[r][c] for (r,c) in coords]
+        if SCAT in syms:  # Scatter zählt nicht
+            continue
+        base = next((s for s in syms if s != WILD), WILD)
+        match = sum(1 for s in syms if s == base or s == WILD)
+        if match != 2:
+            continue
+
+        # finde die "falsche" Zelle
+        for k, (r,c) in enumerate(coords):
+            if not (board[r][c] == base or board[r][c] == WILD):
+                # versuche Spalte c um 1 zu verschieben
+                strip = REEL_STRIPS[c]
+                top = board[0][c]
+                i = strip.index(top)
+                for step in (+1, -1):  # up/down
+                    i2 = (i + step) % len(strip)
+                    new_col = [strip[(i2 + d) % len(strip)] for d in range(3)]
+                    candidate = [row[:] for row in board]
+                    for rr in range(3):
+                        candidate[rr][c] = new_col[rr]
+                    # erfüllt Linie jetzt 3/3?
+                    vals = [candidate[rr][cc] for (rr,cc) in coords]
+                    ok = all(v == base or v == WILD for v in vals)
+                    if ok:
+                        return candidate
+    return board
 
 
 def line_payout(coords, board, bet):
@@ -194,20 +244,23 @@ class SlotView(ui.View):
             await self.cog.update_balance(self.user_id, wallet_change=-self.bet)
 
         # Animation
-        frames = [spin_reels() for _ in range(SPIN_FRAMES)]
+        # Finale bestimmen + Nudge, dann Frames erzeugen
         final = spin_reels()
-        # Nudge-Logik für Scatter
         final = nudge_for_scatter(final)
+        frames = build_spin_frames(final, SPIN_FRAMES)
 
-        # Zeige animierte Frames
-        for idx, b in enumerate(frames):
+        # Animation abspielen
+        for b in frames[:-1]:  # bis kurz vor final
             await asyncio.sleep(FRAME_DELAY)
-            em = discord.Embed(colour=discord.Colour.blurple(), title="🎰 Slots",
-                               description=f"Einsatz: **{self.bet}** <:Coin:1359178077011181811>{' (Freespin)' if self.freespins>0 else ''}")
+            em = discord.Embed(
+                colour=discord.Colour.blurple(),
+                title="🎰 Slots",
+                description=f"Einsatz: **{self.bet}** <:Coin:1359178077011181811>{' (Freespin)' if self.freespins > 0 else ''}"
+            )
             em.add_field(name="Walzen", value=render_board(b, freespins_left=self.freespins), inline=False)
             await self.msg.edit(embed=em)
 
-        # Ergebnis
+        # Ergebnis mit finalem Board berechnen/anzeigen
         payout, winlines, freespins_got, breakdown = evaluate(final, self.bet)
         if freespins_got:
             self.freespins += freespins_got
