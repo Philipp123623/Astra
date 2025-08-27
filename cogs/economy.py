@@ -100,75 +100,94 @@ def nudge_for_scatter(board):
             return new_board
     return board
 
-# hübsches, stabil ausgerichtetes Slot-Feld
+# ========= zuverlässige Breitenmessung =========
+try:
+    from wcwidth import wcswidth  # pip install wcwidth
+except ImportError:
+    import unicodedata
+    def wcswidth(s: str) -> int:
+        w = 0
+        for ch in s:
+            if unicodedata.combining(ch):
+                continue
+            ea = unicodedata.east_asian_width(ch)
+            if ea in ("W", "F") or ord(ch) >= 0x1F300:  # Emojis ~2
+                w += 2
+            else:
+                w += 1
+        return w
+
+# ========= Board-Renderer =========
+CELL_W = 7   # Breite jeder Zelle
+VERT   = "│"
+HOR    = "─"
+
+def _pad_center(s: str, width: int) -> str:
+    w = max(0, wcswidth(s))
+    if w >= width:
+        return s
+    left = (width - w) // 2
+    right = width - w - left
+    return " " * left + s + " " * right
+
 def render_board(board, winline_idxs=None, freespins_left=0):
     """
-    Zeichnet ein sauberes 3×3-Spielfeld mit Markierung der Gewinnlinien.
-    - Gewinnfelder werden mit eckigen Klammern „〔 〕“ hervorgehoben
-    - Links/Rechts erscheinen Pfeile für horizontale Gewinne
-    - Unter dem Feld folgt eine kompakte Legende
+    Stabiles 3×3 Board (monospace), Emojis zentriert.
+    Gewinnfelder werden mit 〔 〕 markiert.
     """
     winline_idxs = set(winline_idxs or [])
 
-    idx_to_coords = {i: coords for i, (coords, _name) in enumerate(PAYLINES)}
-    highlight_cells = set()
+    # Highlight-Zellen bestimmen
+    idx_to_coords = {i: coords for i,(coords,_name) in enumerate(PAYLINES)}
+    highlight = [[False]*3 for _ in range(3)]
     for i in winline_idxs:
-        for rc in idx_to_coords.get(i, []):
-            highlight_cells.add(rc)
-
-    FIG = "\u2007"  # Figure space
-    PAD = FIG
+        for (r,c) in idx_to_coords.get(i, []):
+            highlight[r][c] = True
 
     def fmt_cell(r, c):
         s = board[r][c]
-        if (r, c) in highlight_cells:
-            return f"〔{s}〕"
-        else:
-            return f" {s} {PAD}"
+        if highlight[r][c]:
+            s = f"〔{s}〕"
+        return _pad_center(s, CELL_W)
 
     def row_line(r):
-        return f"{fmt_cell(r,0)}│{fmt_cell(r,1)}│{fmt_cell(r,2)}"
+        return f"{VERT}{fmt_cell(r,0)}{VERT}{fmt_cell(r,1)}{VERT}{fmt_cell(r,2)}{VERT}"
 
-    inner = row_line(0)
-    width = len(inner)
-    top    = "╔" + "═" * width + "╗"
-    mid    = "╠" + "═" * width + "╣"
-    bot    = "╚" + "═" * width + "╝"
+    # Rahmen
+    bar = HOR * CELL_W
+    top    = f"┌{bar}┬{bar}┬{bar}┐"
+    mid    = f"├{bar}┼{bar}┼{bar}┤"
+    bottom = f"└{bar}┴{bar}┴{bar}┘"
 
-    left  = [" ", " ", " "]
-    right = [" ", " ", " "]
-    if 0 in winline_idxs: left[0] = right[0] = "▶"
-    if 1 in winline_idxs: left[1] = right[1] = "▶"
-    if 2 in winline_idxs: left[2] = right[2] = "▶"
+    # Pfeile für horizontale Gewinne
+    arrows = [" ", " ", " "]
+    if 0 in winline_idxs: arrows[0] = "▶"
+    if 1 in winline_idxs: arrows[1] = "▶"
+    if 2 in winline_idxs: arrows[2] = "▶"
 
     lines = [
+        "```",
         top,
-        f"║ {row_line(0)} ║ {left[0]}",
+        f"{row_line(0)} {arrows[0]}",
         mid,
-        f"║ {row_line(1)} ║ {left[1]}",
+        f"{row_line(1)} {arrows[1]}",
         mid,
-        f"║ {row_line(2)} ║ {left[2]}",
-        bot,
+        f"{row_line(2)} {arrows[2]}",
+        bottom,
+        "```"
     ]
 
+    # Legende
     extra = []
-    if 3 in winline_idxs: extra.append("Linke Spalte")
-    if 4 in winline_idxs: extra.append("Mittlere Spalte")
-    if 5 in winline_idxs: extra.append("Rechte Spalte")
-    if 6 in winline_idxs: extra.append("↘ Diagonale")
-    if 7 in winline_idxs: extra.append("↗ Diagonale")
-    if 8 in winline_idxs: extra.append("Mittellinie (Bonus)")
-
-    txt = "```\n" + "\n".join(lines) + "\n```"
-
-    leg = []
-    if extra:
-        leg.append("Gewinnlinien: " + ", ".join(extra))
+    if winline_idxs:
+        names = [PAYLINES[i][1] for i in sorted(winline_idxs)]
+        extra.append("Gewinnlinien: " + ", ".join(names))
     if freespins_left > 0:
-        leg.append(f"Freespins verbleibend: **{freespins_left}**")
-    if leg:
-        txt += "\n" + "\n".join(leg)
+        extra.append(f"Freespins verbleibend: **{freespins_left}**")
 
+    txt = "\n".join(lines)
+    if extra:
+        txt += "\n" + "\n".join(extra)
     return txt
 
 def build_spin_frames(final_board, spin_frames=5):
@@ -271,6 +290,7 @@ def evaluate(board, bet):
     else:
         free = 0
     return total, winlines, free, breakdown
+
 
 class SlotView(ui.View):
     def __init__(self, cog, interaction, bet):
