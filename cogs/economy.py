@@ -8,7 +8,261 @@ import asyncio
 from typing import Literal
 import random
 from datetime import datetime, timedelta
+from discord import ui
 
+# ---------- Slot-Config ----------
+WILD = "⭐"
+SCAT = "🔔"
+
+REEL_STRIPS = [
+    ["🍒","🍇","🍋","🍊","🍓",WILD,"🍉","🍒","🍋","🍍","🍇","🍋","🍓","🍊","🍒","🍋","🍉",SCAT,"🍇","🍋"],
+    ["🍋","🍉","🍇","🍊",WILD,"🍓","🍍","🍋","🍇","🍒","🍋",SCAT,"🍉","🍊","🍇","🍋","🍓","🍒","🍋","🍊"],
+    ["🍇","🍋","🍓","🍊","🍒","🍍","🍉",WILD,"🍇","🍋","🍒","🍊","🍓",SCAT,"🍋","🍇","🍉","🍋","🍒","🍊"],
+]
+
+# 9 Gewinnlinien (3 Reihen, 3 Spalten, 2 Diagonalen, Mittellinie doppelt)
+PAYLINES = [
+    ([(0,0),(0,1),(0,2)], "Obere Reihe"),
+    ([(1,0),(1,1),(1,2)], "Mittlere Reihe"),
+    ([(2,0),(2,1),(2,2)], "Untere Reihe"),
+    ([(0,0),(1,0),(2,0)], "Linke Spalte"),
+    ([(0,1),(1,1),(2,1)], "Mittlere Spalte"),
+    ([(0,2),(1,2),(2,2)], "Rechte Spalte"),
+    ([(0,0),(1,1),(2,2)], "↘ Diagonale"),
+    ([(2,0),(1,1),(0,2)], "↗ Diagonale"),
+    ([(1,0),(1,1),(1,2)], "Mittellinie (Bonus)"),
+]
+
+PAYTABLE = {  # 3 in line, multiplikativ auf Einsatz
+    "🍒": 5, "🍋": 6, "🍇": 8, "🍊": 10, "🍓": 12, "🍉": 16, "🍍": 22, WILD: 30
+}
+SCATTER_PAYS = {3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0}  # Scatter gibt hier nur Freespins
+FREESPINS_FOR_3_SCAT = 8
+NUDGE_SCATTER_CHANCE = 0.35
+
+SPIN_FRAMES = 5
+FRAME_DELAY = 0.35
+
+def spin_reels():
+    board = [[None]*3 for _ in range(3)]
+    for c, strip in enumerate(REEL_STRIPS):
+        start = random.randint(0, len(strip)-1)
+        for r in range(3):
+            board[r][c] = strip[(start+r) % len(strip)]
+    return board
+
+def nudge_for_scatter(board):
+    # Wenn genau 2 Scatter sichtbar, 35% Chance eine Spalte zu nudgen, um 3. Scatter zu treffen
+    flat = [(r,c) for r in range(3) for c in range(3)]
+    scs = [(r,c) for (r,c) in flat if board[r][c] == SCAT]
+    if len(scs) != 2 or random.random() > NUDGE_SCATTER_CHANCE:
+        return board
+    # versuche jede Spalte 1 nach unten zu schieben (zyklisch), falls sie den Scatter zeigen kann
+    for col in range(3):
+        # bau neue Spalte aus Strip um einen Schritt verschoben
+        # finde „Fenster“-Offset durch reverse-engineering: suche das obere Symbol in Strip
+        top = board[0][col]
+        strip = REEL_STRIPS[col]
+        idx = strip.index(top)
+        idx = (idx + 1) % len(strip)
+        new_col = [strip[idx % len(strip)], strip[(idx+1) % len(strip)], strip[(idx+2) % len(strip)]]
+        new_board = [row[:] for row in board]
+        for r in range(3):
+            new_board[r][col] = new_col[r]
+        if sum(1 for r in range(3) for c in range(3) if new_board[r][c] == SCAT) >= 3:
+            return new_board
+    return board
+
+def render_board(board, winline_idxs=None, freespins_left=0):
+    winline_idxs = set(winline_idxs or [])
+    S = "  "
+    def row_str(r): return f"{board[r][0]}{S}{board[r][1]}{S}{board[r][2]}"
+    left = [" "," "," "]
+    right = [" "," "," "]
+    # markiere Reihen
+    if 0 in winline_idxs: left[0]=right[0]="▶"
+    if 1 in winline_idxs: left[1]=right[1]="▶"
+    if 2 in winline_idxs: left[2]=right[2]="▶"
+    # Baue Board
+    lines = [
+        "┏━━━━━━━━━━━━━━━┓",
+        f"┃ {row_str(0)} ┃ {left[0]}",
+        f"┃ {row_str(1)} ┃ {left[1]}",
+        f"┃ {row_str(2)} ┃ {left[2]}",
+        "┗━━━━━━━━━━━━━━━┛",
+    ]
+    txt = "```\n" + "\n".join(lines) + "\n```"
+    # Hinweise für Spalten/Diagonalen unter dem Feld
+    extras = []
+    if 3 in winline_idxs: extras.append("Linke Spalte")
+    if 4 in winline_idxs: extras.append("Mittlere Spalte")
+    if 5 in winline_idxs: extras.append("Rechte Spalte")
+    if 6 in winline_idxs: extras.append("↘ Diagonale")
+    if 7 in winline_idxs: extras.append("↗ Diagonale")
+    if 8 in winline_idxs: extras.append("Mittellinie (Bonus)")
+    if extras:
+        txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
+    if freespins_left > 0:
+        txt += f"Freespins verbleibend: **{freespins_left}**\n"
+    return txt
+
+def line_payout(coords, board, bet):
+    syms = [board[r][c] for r,c in coords]
+    if any(s == SCAT for s in syms):
+        return 0, None
+    base = next((s for s in syms if s != WILD), WILD)
+    if not all(s == base or s == WILD for s in syms):
+        return 0, None
+    multi = PAYTABLE.get(base, 0)
+    return bet * multi, base
+
+def evaluate(board, bet):
+    total = 0
+    winlines = []
+    breakdown = []
+    # Linien
+    for idx, (coords, name) in enumerate(PAYLINES):
+        payout, sym = line_payout(coords, board, bet)
+        if payout > 0:
+            total += payout
+            winlines.append(idx)
+            breakdown.append((name, sym, payout))
+    # Scatter → Freespins
+    scatters = sum(1 for r in range(3) for c in range(3) if board[r][c] == SCAT)
+    free = FREESPINS_FOR_3_SCAT if scatters >= 3 else 0
+    if free:
+        breakdown.append(("Freespins", SCAT, 0))
+    return total, winlines, free, breakdown
+
+class SlotView(ui.View):
+    def __init__(self, cog, interaction, bet):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.user_id = interaction.user.id
+        self.bet = max(10, bet)
+        self.freespins = 0
+        self.last_win = 0
+        self.msg = None
+        self.lock = asyncio.Lock()
+
+    async def ensure_owner(self, interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Nur der ursprüngliche Spieler kann hier interagieren.", ephemeral=True)
+            return False
+        return True
+
+    async def spin_once(self, interaction):
+        # Balance check/abzug nur wenn keine Freespins laufen
+        user_data = await self.cog.get_user(self.user_id)
+        wallet = user_data[1]
+        if self.freespins == 0:
+            if self.bet <= 0 or wallet < self.bet:
+                await interaction.followup.send("<:Astra_x:1141303954555289600> Zu wenig Coins oder ungültiger Einsatz.", ephemeral=True)
+                return None, None, None, None
+            await self.cog.update_balance(self.user_id, wallet_change=-self.bet)
+
+        # Animation
+        frames = [spin_reels() for _ in range(SPIN_FRAMES)]
+        final = spin_reels()
+        # Nudge-Logik für Scatter
+        final = nudge_for_scatter(final)
+
+        # Zeige animierte Frames
+        for idx, b in enumerate(frames):
+            await asyncio.sleep(FRAME_DELAY)
+            em = discord.Embed(colour=discord.Colour.blurple(), title="🎰 Slots",
+                               description=f"Einsatz: **{self.bet}** <:Coin:1359178077011181811>{' (Freespin)' if self.freespins>0 else ''}")
+            em.add_field(name="Walzen", value=render_board(b, freespins_left=self.freespins), inline=False)
+            await self.msg.edit(embed=em)
+
+        # Ergebnis
+        payout, winlines, freespins_got, breakdown = evaluate(final, self.bet)
+        if freespins_got:
+            self.freespins += freespins_got
+        board_text = render_board(final, winlines, self.freespins)
+
+        # Gewinne gutschreiben
+        if payout > 0:
+            await self.cog.update_balance(self.user_id, wallet_change=payout)
+        self.last_win = payout
+
+        # Freespin runterzählen (der aktuelle wurde verbraucht)
+        if self.freespins > 0:
+            self.freespins -= 1
+
+        # Ergebnis-Embed
+        if payout > 0:
+            res = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{payout}** <:Coin:1359178077011181811>"
+        else:
+            res = f"<:Astra_x:1141303954555289600> Kein Gewinn."
+
+        details = "Keine Gewinnlinien."
+        if breakdown:
+            parts = []
+            for name, sym, val in breakdown:
+                parts.append(f"• {name} {sym or ''} {'→ **+%s**' % val if val>0 else ''}")
+            details = "\n".join(parts)
+
+        end = discord.Embed(colour=discord.Colour.blue(), title="🎰 Slots – Ergebnis")
+        end.add_field(name="Walzen", value=board_text, inline=False)
+        end.add_field(name="Ergebnis", value=res, inline=False)
+        end.add_field(name="Details", value=details, inline=False)
+        await self.msg.edit(embed=end, view=self)
+        return final, payout, winlines, breakdown
+
+    # ---- Buttons ----
+
+    @ui.button(label="▶️ Spin", style=discord.ButtonStyle.green)
+    async def spin(self, interaction: discord.Interaction, button: ui.Button):
+        if not await self.ensure_owner(interaction): return
+        async with self.lock:
+            await interaction.response.defer()
+            await self.spin_once(interaction)
+
+    @ui.button(label="🔁 Auto x5", style=discord.ButtonStyle.primary)
+    async def auto(self, interaction: discord.Interaction, button: ui.Button):
+        if not await self.ensure_owner(interaction): return
+        async with self.lock:
+            await interaction.response.defer()
+            for _ in range(5):
+                await self.spin_once(interaction)
+                await asyncio.sleep(0.3)
+                # Stop wenn User kein Geld mehr hat
+                user_data = await self.cog.get_user(self.user_id)
+                if user_data[1] < self.bet and self.freespins == 0:
+                    break
+
+    @ui.button(label="🎲 Gamble", style=discord.ButtonStyle.red)
+    async def gamble(self, interaction: discord.Interaction, button: ui.Button):
+        if not await self.ensure_owner(interaction): return
+        async with self.lock:
+            await interaction.response.defer(ephemeral=True)
+            if self.last_win <= 0:
+                await interaction.followup.send("Kein Gewinn zum Verdoppeln.", ephemeral=True)
+                return
+            # 48% Gewinnchance – house edge 😈
+            if random.random() < 0.48:
+                # doppeln
+                await self.cog.update_balance(self.user_id, wallet_change=self.last_win)
+                self.last_win *= 2
+                await interaction.followup.send(f"🎉 Verdoppelt! Neuer Gewinn: **+{self.last_win}**", ephemeral=True)
+            else:
+                # Verlust des zuletzt gewonnenen Betrags
+                await self.cog.update_balance(self.user_id, wallet_change=-self.last_win)
+                self.last_win = 0
+                await interaction.followup.send("💥 Verloren – Gewinn futsch.", ephemeral=True)
+
+    @ui.button(label="➖", style=discord.ButtonStyle.secondary)
+    async def bet_minus(self, interaction: discord.Interaction, button: ui.Button):
+        if not await self.ensure_owner(interaction): return
+        self.bet = max(10, int(self.bet * 0.5))
+        await interaction.response.send_message(f"Einsatz: **{self.bet}**", ephemeral=True)
+
+    @ui.button(label="➕", style=discord.ButtonStyle.secondary)
+    async def bet_plus(self, interaction: discord.Interaction, button: ui.Button):
+        if not await self.ensure_owner(interaction): return
+        self.bet = min(1_000_000, int(self.bet * 1.5) or self.bet+10)
+        await interaction.response.send_message(f"Einsatz: **{self.bet}**", ephemeral=True)
 
 JOBS = [{"name": "Küchenhilfe", "req": 0,
          "desc": "\nVerdiene zwischen 20 und 30 <:Coin:1359178077011181811>  pro Stunde.\nDu musst mindestens **0** Stunden gearbeitet haben, um diesen Job freizuschalten.",
@@ -429,220 +683,24 @@ class EconomyClass(app_commands.Group):
         wallet = user_data[1]
 
         if einsatz <= 0 or einsatz > wallet:
-            await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> Ungültiger Einsatz.", ephemeral=True
-            )
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Einsatz.",
+                                                    ephemeral=True)
             return
 
-        # Einsatz sofort abziehen
-        await self.update_balance(user_id, wallet_change=-einsatz)
+        view = SlotView(self, interaction, einsatz)
 
-        # ---------- KONFIG ----------
-        # Symbole
-        WILD = "⭐"
-        SCAT = "🔔"
-        # Häufige/seltene Symbole (für mehr Realismus): jede Walze hat ihr Strip
-        REEL_STRIPS = [
-            # Reel 1
-            ["🍒", "🍇", "🍋", "🍊", "🍓", WILD, "🍉", "🍒", "🍋", "🍍", "🍇", "🍋", "🍓", "🍊", "🍒", "🍋", "🍉", SCAT, "🍇", "🍋"],
-            # Reel 2
-            ["🍋", "🍉", "🍇", "🍊", WILD, "🍓", "🍍", "🍋", "🍇", "🍒", "🍋", SCAT, "🍉", "🍊", "🍇", "🍋", "🍓", "🍒", "🍋", "🍊"],
-            # Reel 3
-            ["🍇", "🍋", "🍓", "🍊", "🍒", "🍍", "🍉", WILD, "🍇", "🍋", "🍒", "🍊", "🍓", SCAT, "🍋", "🍇", "🍉", "🍋", "🍒", "🍊"],
-        ]
-
-        # Paytable: 3-in-line (ohne Scatter); Wild ersetzt
-        # Multiplikator relativ zum Einsatz
-        PAYTABLE = {
-            "🍒": 5,
-            "🍋": 6,
-            "🍇": 8,
-            "🍊": 10,
-            "🍓": 12,
-            "🍉": 15,
-            "🍍": 20,
-            WILD: 25,  # 3x Wild
-        }
-        # Scatter zahlt „any“ (3 oder mehr irgendwo)
-        SCATTER_PAYS = {3: 5, 4: 12, 5: 25, 6: 50, 7: 100, 8: 200, 9: 400}  # 3..9 Scatter auf dem Board
-
-        # Gewinnlinien (Koordinaten)
-        PAYLINES = {
-            0: ([(0, 0), (0, 1), (0, 2)], "Obere Reihe"),
-            1: ([(1, 0), (1, 1), (1, 2)], "Mittlere Reihe"),
-            2: ([(2, 0), (2, 1), (2, 2)], "Untere Reihe"),
-            3: ([(0, 0), (1, 1), (2, 2)], "↘ Diagonale"),
-            4: ([(2, 0), (1, 1), (0, 2)], "↗ Diagonale"),
-        }
-
-        SPIN_FRAMES = 4  # Anzahl „laufender“ Frames vor Stopp
-        FRAME_DELAY = 0.5  # Sekunden zwischen Frames
-
-        # ---------- Hilfsfunktionen ----------
-        import random, asyncio
-
-        def spin_reels():
-            """Gibt das finale 3x3 Board indem jeder Reel einen zufälligen Startoffset bekommt."""
-            board = [[None, None, None], [None, None, None], [None, None, None]]
-            for col, strip in enumerate(REEL_STRIPS):
-                start = random.randint(0, len(strip) - 1)
-                # „Fenster“ = 3 Symbole ab Start
-                for row in range(3):
-                    board[row][col] = strip[(start + row) % len(strip)]
-            return board
-
-        def render(board, winline_idxs=None, scatter_count=0):
-            """Schönes Board. Markiert Linien mit Pfeilen; zeigt Scatter-Info."""
-            winline_idxs = set(winline_idxs or [])
-            S = "  "  # stabiler Abstand in Discord
-
-            def row_str(r):
-                return f"{board[r][0]}{S}{board[r][1]}{S}{board[r][2]}"
-
-            left = [" ", " ", " "];
-            right = [" ", " ", " "]
-            if 0 in winline_idxs: left[0] = right[0] = "▶"
-            if 1 in winline_idxs: left[1] = right[1] = "▶"
-            if 2 in winline_idxs: left[2] = right[2] = "▶"
-
-            lines = [
-                "┏━━━━━━━━━━━━━━━┓",
-                f"┃ {row_str(0)} ┃ {left[0]}",
-                f"┃ {row_str(1)} ┃ {left[1]}",
-                f"┃ {row_str(2)} ┃ {left[2]}",
-                "┗━━━━━━━━━━━━━━━┛",
-            ]
-            txt = "```\n" + "\n".join(lines) + "\n```"
-            extra = []
-            if 3 in winline_idxs: extra.append("↘ Diagonale")
-            if 4 in winline_idxs: extra.append("↗ Diagonale")
-            if extra:
-                txt += "Gewinnlinie(n): " + ", ".join(extra) + "\n"
-            if scatter_count >= 3:
-                txt += f"Scatter: **{scatter_count}× {SCAT}**\n"
-            return txt
-
-        def line_payout(line_coords, board):
-            """Berechnet Liniengewinn (3 in Folge) mit Wild-Substitution."""
-            syms = [board[r][c] for (r, c) in line_coords]
-            # Scatter zählt nicht auf Linien
-            if any(s == SCAT for s in syms):
-                return 0, None
-
-            # Bestimme „Zielsymbol“: wenn Wilds dabei, nimm das erste Nicht-Wild; sonst das Symbol selbst
-            base = next((s for s in syms if s != WILD), WILD)
-            # Alle 3 matchen mit Wild-Substitution?
-            ok = all(s == base or s == WILD for s in syms)
-            if not ok: return 0, None
-            multi = PAYTABLE.get(base, 0)
-            return einsatz * multi, base
-
-        def evaluate(board):
-            total = 0
-            winlines = []
-            breakdown = []  # [(name, symbol, payout)]
-            # Linien
-            for idx, (coords, name) in PAYLINES.items():
-                payout, sym = line_payout(coords, board)
-                if payout > 0:
-                    total += payout
-                    winlines.append(idx)
-                    breakdown.append((name, sym, payout))
-            # Scatter
-            scatters = sum(1 for r in range(3) for c in range(3) if board[r][c] == SCAT)
-            scat_payout = 0
-            if scatters >= 3:
-                # cap auf 9
-                multi = SCATTER_PAYS.get(min(scatters, 9), 0)
-                scat_payout = einsatz * multi
-                total += scat_payout
-                breakdown.append(("Scatter (any)", SCAT, scat_payout))
-            return total, winlines, scatters, breakdown
-
-        # ---------- Animation vorbereiten ----------
-        # ein paar „laufende“ Frames (zufällig), dann Spalten nacheinander auf final
-        # Frames vorbereiten (läuft)
-        frames = []
-        for _ in range(SPIN_FRAMES):
-            frames.append(spin_reels())
-
-        # finales Board
-        final = spin_reels()
-
-        # Spalten nacheinander stoppen (0 -> 1 -> 2)
-        last = frames[-1]  # der letzte "laufende" Frame als Ausgang
-        for col in range(3):
-            step = [
-                [final[r][c] if c <= col else last[r][c] for c in range(3)]
-                for r in range(3)
-            ]
-            frames.append(step)
-            last = step  # nächster Schritt baut auf diesem auf
-
-        # (Optional) zur Sicherheit noch den finalen Voll-Frame anhängen
-        frames.append(final)
-
-        # ---------- Start-Embed ----------
-        embed = discord.Embed(
+        # Start-Embed
+        em = discord.Embed(
             colour=discord.Colour.blurple(),
             title="🎰 Slots",
             description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>\nViel Glück, {interaction.user.mention}!"
         )
-        embed.add_field(name="Walzen", value=render(frames[0]), inline=False)
-        embed.set_author(
-            name=str(interaction.user),
-            icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
-        )
-        await interaction.response.send_message(embed=embed)
-        msg = await interaction.original_response()
+        em.add_field(name="Walzen", value=render_board(spin_reels()), inline=False)
+        em.set_author(name=str(interaction.user),
+                      icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
 
-        # ---------- Animation abspielen ----------
-        for b in frames[1:]:
-            await asyncio.sleep(FRAME_DELAY)
-            em = discord.Embed(
-                colour=discord.Colour.blurple(),
-                title="🎰 Slots",
-                description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>"
-            )
-            em.add_field(name="Walzen", value=render(b), inline=False)
-            em.set_author(
-                name=str(interaction.user),
-                icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
-            )
-            await msg.edit(embed=em)
-
-        # ---------- Ergebnis ----------
-        payout, winline_ids, scatters, breakdown = evaluate(final)
-        # Auszahlung gutschreiben (Einsatz ist schon abgezogen)
-        if payout > 0:
-            await self.update_balance(user_id, wallet_change=payout)
-
-        if payout > 0:
-            res = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{payout}** <:Coin:1359178077011181811>"
-        else:
-            res = f"<:Astra_x:1141303954555289600> Leider verloren **{einsatz}** <:Coin:1359178077011181811>"
-
-        # Breakdown-Text
-        if breakdown:
-            parts = []
-            for name, sym, val in breakdown:
-                parts.append(f"• {name} {sym if sym else ''} → **+{val}**")
-            detail = "\n".join(parts)
-        else:
-            detail = "Keine Gewinnlinien."
-
-        end = discord.Embed(
-            colour=discord.Colour.blue(),
-            title="🎰 Slots – Endergebnis"
-        )
-        end.add_field(name="Walzen", value=render(final, winline_ids, scatter_count=scatters), inline=False)
-        end.add_field(name="Ergebnis", value=res, inline=False)
-        end.add_field(name="Details", value=detail, inline=False)
-        end.set_author(
-            name=str(interaction.user),
-            icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
-        )
-        await msg.edit(embed=end)
+        await interaction.response.send_message(embed=em, view=view)
+        view.msg = await interaction.original_response()
 
     @app_commands.command(name="rps", description="Spiele Schere, Stein, Papier gegen den Bot.")
     @app_commands.guild_only()
