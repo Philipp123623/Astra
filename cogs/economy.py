@@ -420,7 +420,7 @@ class EconomyClass(app_commands.Group):
 
         await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Du hast {amount} <:Coin:1359178077011181811> von einem freundlichen Fremden erhalten!")
 
-    @app_commands.command(name="slot", description="Spiele ein Slot-Spiel um Coins zu gewinnen oder zu verlieren.")
+    @app_commands.command(name="slot", description="Spiele ein realistisches 3×3 Slot-Spiel.")
     @app_commands.guild_only()
     @app_commands.describe(einsatz="Wie viele Coins willst du setzen?")
     async def slot(self, interaction: discord.Interaction, einsatz: int):
@@ -434,145 +434,206 @@ class EconomyClass(app_commands.Group):
             )
             return
 
-        # sofort Einsatz abziehen (wie bei Blackjack)
+        # Einsatz sofort abziehen
         await self.update_balance(user_id, wallet_change=-einsatz)
 
-        fruits = ["🍒", "🍋", "🍇", "🍓", "🍊", "🍉", "🍍"]
-        SPIN_FRAMES = 4  # wie lange animieren
-        FRAME_DELAY = 0.6  # Sekunden
-
-        # finaler 3x3-Treffer
-        final = [[random.choice(fruits) for _ in range(3)] for _ in range(3)]
-
-        def render(board, highlight=None):
-            """
-            board: 3x3 Liste an Emojis
-            highlight: Liste von Koordinaten [(r,c), ...] die fett markiert werden
-            """
-            hset = set(highlight or [])
-
-            def cell(r, c):
-                v = board[r][c]
-                return f"**{v}**" if (r, c) in hset else v
-
-            lines = [
-                f"┌───────────────┐",
-                f"│ {cell(0, 0)}  {cell(0, 1)}  {cell(0, 2)} │",
-                f"│ {cell(1, 0)}  {cell(1, 1)}  {cell(1, 2)} │",
-                f"│ {cell(2, 0)}  {cell(2, 1)}  {cell(2, 2)} │",
-                f"└───────────────┘",
-            ]
-            # Damit Discord das hübsch im Monospace rendert
-            return "```\n" + "\n".join(lines) + "\n```"
-
-        # einfache Reel-Animation: jede Spalte „läuft“ und stoppt nacheinander
-        frames = []
-        temp = [[random.choice(fruits) for _ in range(3)] for _ in range(3)]
-        for i in range(SPIN_FRAMES):
-            # alle Spalten „laufen“
-            for col in range(3):
-                for row in range(3):
-                    temp[row][col] = random.choice(fruits)
-            frames.append([row[:] for row in temp])
-
-        # Spalten 0..2 nacheinander auf final setzen (Stopp-Effekt)
-        for col in range(3):
-            for row in range(3):
-                temp[row][col] = final[row][col]
-            frames.append([row[:] for row in temp])
-
-        # Gewinnlinien berechnen
-        paylines = [
-            [(0, 0), (0, 1), (0, 2)],
-            [(1, 0), (1, 1), (1, 2)],
-            [(2, 0), (2, 1), (2, 2)],
-            [(0, 0), (1, 1), (2, 2)],
-            [(2, 0), (1, 1), (0, 2)],
+        # ---------- KONFIG ----------
+        # Symbole
+        WILD = "⭐"
+        SCAT = "🔔"
+        # Häufige/seltene Symbole (für mehr Realismus): jede Walze hat ihr Strip
+        REEL_STRIPS = [
+            # Reel 1
+            ["🍒", "🍇", "🍋", "🍊", "🍓", WILD, "🍉", "🍒", "🍋", "🍍", "🍇", "🍋", "🍓", "🍊", "🍒", "🍋", "🍉", SCAT, "🍇", "🍋"],
+            # Reel 2
+            ["🍋", "🍉", "🍇", "🍊", WILD, "🍓", "🍍", "🍋", "🍇", "🍒", "🍋", SCAT, "🍉", "🍊", "🍇", "🍋", "🍓", "🍒", "🍋", "🍊"],
+            # Reel 3
+            ["🍇", "🍋", "🍓", "🍊", "🍒", "🍍", "🍉", WILD, "🍇", "🍋", "🍒", "🍊", "🍓", SCAT, "🍋", "🍇", "🍉", "🍋", "🍒", "🍊"],
         ]
 
+        # Paytable: 3-in-line (ohne Scatter); Wild ersetzt
+        # Multiplikator relativ zum Einsatz
+        PAYTABLE = {
+            "🍒": 5,
+            "🍋": 6,
+            "🍇": 8,
+            "🍊": 10,
+            "🍓": 12,
+            "🍉": 15,
+            "🍍": 20,
+            WILD: 25,  # 3x Wild
+        }
+        # Scatter zahlt „any“ (3 oder mehr irgendwo)
+        SCATTER_PAYS = {3: 5, 4: 12, 5: 25, 6: 50, 7: 100, 8: 200, 9: 400}  # 3..9 Scatter auf dem Board
+
+        # Gewinnlinien (Koordinaten)
+        PAYLINES = {
+            0: ([(0, 0), (0, 1), (0, 2)], "Obere Reihe"),
+            1: ([(1, 0), (1, 1), (1, 2)], "Mittlere Reihe"),
+            2: ([(2, 0), (2, 1), (2, 2)], "Untere Reihe"),
+            3: ([(0, 0), (1, 1), (2, 2)], "↘ Diagonale"),
+            4: ([(2, 0), (1, 1), (0, 2)], "↗ Diagonale"),
+        }
+
+        SPIN_FRAMES = 4  # Anzahl „laufender“ Frames vor Stopp
+        FRAME_DELAY = 0.5  # Sekunden zwischen Frames
+
+        # ---------- Hilfsfunktionen ----------
+        import random, asyncio
+
+        def spin_reels():
+            """Gibt das finale 3x3 Board indem jeder Reel einen zufälligen Startoffset bekommt."""
+            board = [[None, None, None], [None, None, None], [None, None, None]]
+            for col, strip in enumerate(REEL_STRIPS):
+                start = random.randint(0, len(strip) - 1)
+                # „Fenster“ = 3 Symbole ab Start
+                for row in range(3):
+                    board[row][col] = strip[(start + row) % len(strip)]
+            return board
+
+        def render(board, winline_idxs=None, scatter_count=0):
+            """Schönes Board. Markiert Linien mit Pfeilen; zeigt Scatter-Info."""
+            winline_idxs = set(winline_idxs or [])
+            S = "  "  # stabiler Abstand in Discord
+
+            def row_str(r):
+                return f"{board[r][0]}{S}{board[r][1]}{S}{board[r][2]}"
+
+            left = [" ", " ", " "];
+            right = [" ", " ", " "]
+            if 0 in winline_idxs: left[0] = right[0] = "▶"
+            if 1 in winline_idxs: left[1] = right[1] = "▶"
+            if 2 in winline_idxs: left[2] = right[2] = "▶"
+
+            lines = [
+                "┏━━━━━━━━━━━━━━━┓",
+                f"┃ {row_str(0)} ┃ {left[0]}",
+                f"┃ {row_str(1)} ┃ {left[1]}",
+                f"┃ {row_str(2)} ┃ {left[2]}",
+                "┗━━━━━━━━━━━━━━━┛",
+            ]
+            txt = "```\n" + "\n".join(lines) + "\n```"
+            extra = []
+            if 3 in winline_idxs: extra.append("↘ Diagonale")
+            if 4 in winline_idxs: extra.append("↗ Diagonale")
+            if extra:
+                txt += "Gewinnlinie(n): " + ", ".join(extra) + "\n"
+            if scatter_count >= 3:
+                txt += f"Scatter: **{scatter_count}× {SCAT}**\n"
+            return txt
+
+        def line_payout(line_coords, board):
+            """Berechnet Liniengewinn (3 in Folge) mit Wild-Substitution."""
+            syms = [board[r][c] for (r, c) in line_coords]
+            # Scatter zählt nicht auf Linien
+            if any(s == SCAT for s in syms):
+                return 0, None
+
+            # Bestimme „Zielsymbol“: wenn Wilds dabei, nimm das erste Nicht-Wild; sonst das Symbol selbst
+            base = next((s for s in syms if s != WILD), WILD)
+            # Alle 3 matchen mit Wild-Substitution?
+            ok = all(s == base or s == WILD for s in syms)
+            if not ok: return 0, None
+            multi = PAYTABLE.get(base, 0)
+            return einsatz * multi, base
+
         def evaluate(board):
-            win_coords = []
-            payout = 0
+            total = 0
+            winlines = []
+            breakdown = []  # [(name, symbol, payout)]
+            # Linien
+            for idx, (coords, name) in PAYLINES.items():
+                payout, sym = line_payout(coords, board)
+                if payout > 0:
+                    total += payout
+                    winlines.append(idx)
+                    breakdown.append((name, sym, payout))
+            # Scatter
+            scatters = sum(1 for r in range(3) for c in range(3) if board[r][c] == SCAT)
+            scat_payout = 0
+            if scatters >= 3:
+                # cap auf 9
+                multi = SCATTER_PAYS.get(min(scatters, 9), 0)
+                scat_payout = einsatz * multi
+                total += scat_payout
+                breakdown.append(("Scatter (any)", SCAT, scat_payout))
+            return total, winlines, scatters, breakdown
 
-            # 3 in einer Linie?
-            for line in paylines:
-                a, b, c = line
-                v1 = board[a[0]][a[1]]
-                v2 = board[b[0]][b[1]]
-                v3 = board[c[0]][c[1]]
-                if v1 == v2 == v3:
-                    payout += einsatz * 5
-                    win_coords.extend(line)
+        # ---------- Animation vorbereiten ----------
+        # ein paar „laufende“ Frames (zufällig), dann Spalten nacheinander auf final
+        frames = []
+        tmp = spin_reels()
+        for _ in range(SPIN_FRAMES):
+            tmp = spin_reels()
+            frames.append(tmp)
+        final = spin_reels()
+        # Spalten stopp-Sequenz
+        step = [[final[r][c] if c <= col else frames[-1][r][c] for c in range(3)] for r in range(3)]
+        frames.append(step)
+        step = [[final[r][c] if c <= 1 else frames[-1][r][c] for c in range(3)] for r in range(3)]
+        frames.append(step)
+        frames.append(final)
 
-            # kleiner Trostpreis: 2 gleiche auf der Mittellinie
-            mid = [(1, 0), (1, 1), (1, 2)]
-            mvals = [board[r][c] for r, c in mid]
-            if payout == 0:
-                if mvals.count(mvals[0]) == 2 or mvals.count(mvals[1]) == 2:
-                    payout = einsatz * 2
-                    # markiere die Mittellinie
-                    win_coords.extend(mid)
-
-            if payout == 0:
-                payout = -einsatz
-
-            return payout, list(dict.fromkeys(win_coords))  # uniq
-
-        # erstes Embed (Start)
+        # ---------- Start-Embed ----------
         embed = discord.Embed(
             colour=discord.Colour.blurple(),
             title="🎰 Slots",
-            description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>\n"
-                        f"Viel Glück, {interaction.user.mention}!"
+            description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>\nViel Glück, {interaction.user.mention}!"
         )
-        view_text = render(frames[0])
-        embed.add_field(name="Walzen", value=view_text, inline=False)
-        embed.set_author(name=str(interaction.user),
-                         icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
-
+        embed.add_field(name="Walzen", value=render(frames[0]), inline=False)
+        embed.set_author(
+            name=str(interaction.user),
+            icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
+        )
         await interaction.response.send_message(embed=embed)
         msg = await interaction.original_response()
 
-        # Animation abspielen
-        for board in frames[1:]:
+        # ---------- Animation abspielen ----------
+        for b in frames[1:]:
             await asyncio.sleep(FRAME_DELAY)
             em = discord.Embed(
                 colour=discord.Colour.blurple(),
                 title="🎰 Slots",
                 description=f"Einsatz: **{einsatz}** <:Coin:1359178077011181811>"
             )
-            em.add_field(name="Walzen", value=render(board), inline=False)
-            em.set_author(name=str(interaction.user),
-                          icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
+            em.add_field(name="Walzen", value=render(b), inline=False)
+            em.set_author(
+                name=str(interaction.user),
+                icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
+            )
             await msg.edit(embed=em)
 
-        # Ergebnis + Auszahlung
-        auszahlung, wins = evaluate(final)
-        if auszahlung > 0:
-            result_text = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{auszahlung}** <:Coin:1359178077011181811>"
-        elif auszahlung == 0:
-            result_text = f"Unentschieden."
+        # ---------- Ergebnis ----------
+        payout, winline_ids, scatters, breakdown = evaluate(final)
+        # Auszahlung gutschreiben (Einsatz ist schon abgezogen)
+        if payout > 0:
+            await self.update_balance(user_id, wallet_change=payout)
+
+        if payout > 0:
+            res = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{payout}** <:Coin:1359178077011181811>"
         else:
-            result_text = f"<:Astra_x:1141303954555289600> Verloren **{einsatz}** <:Coin:1359178077011181811>"
+            res = f"<:Astra_x:1141303954555289600> Leider verloren **{einsatz}** <:Coin:1359178077011181811>"
 
-        # Gewinne hervorheben
-        board_field = render(final, highlight=wins)
-
-        # Balance gutschreiben (nur bei Gewinn/Unentschieden relevant – Einsatz wurde vorab abgezogen)
-        if auszahlung > 0:
-            await self.update_balance(user_id, wallet_change=auszahlung)
-        elif auszahlung == 0:
-            await self.update_balance(user_id, wallet_change=einsatz)  # Einsatz zurück
+        # Breakdown-Text
+        if breakdown:
+            parts = []
+            for name, sym, val in breakdown:
+                parts.append(f"• {name} {sym if sym else ''} → **+{val}**")
+            detail = "\n".join(parts)
+        else:
+            detail = "Keine Gewinnlinien."
 
         end = discord.Embed(
             colour=discord.Colour.blue(),
             title="🎰 Slots – Endergebnis"
         )
-        end.add_field(name="Walzen", value=board_field, inline=False)
-        end.add_field(name="Ergebnis", value=result_text, inline=False)
-        end.set_author(name=str(interaction.user),
-                       icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None)
-
+        end.add_field(name="Walzen", value=render(final, winline_ids, scatter_count=scatters), inline=False)
+        end.add_field(name="Ergebnis", value=res, inline=False)
+        end.add_field(name="Details", value=detail, inline=False)
+        end.set_author(
+            name=str(interaction.user),
+            icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
+        )
         await msg.edit(embed=end)
 
     @app_commands.command(name="rps", description="Spiele Schere, Stein, Papier gegen den Bot.")
