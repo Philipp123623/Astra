@@ -411,8 +411,10 @@ class mod(commands.Cog):
                 limit=amount,
                 after=cutoff,
                 bulk=True,
-                reason=f"/clear von {interaction.user} ({amount})"
+                reason=f"/clear von {interaction.user} ({amount})",
+                check=lambda m: not m.pinned  # ⬅️ pinned Nachrichten werden übersprungen
             )
+
             total_deleted += len(deleted_bulk)
             remaining = amount - total_deleted
 
