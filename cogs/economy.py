@@ -853,6 +853,33 @@ class Economy(commands.Cog):
                 await cur.execute("SELECT wallet, bank FROM economy_users WHERE user_id = %s", (user_id,))
                 return await cur.fetchone()
 
+    @commands.command(name="unlockjobs")
+    @commands.is_owner()
+    async def unlock_jobs(self, ctx, user: discord.User, max_hours: int):
+        """
+        Schaltet einem User Jobs bis zu einer bestimmten Stundenanforderung frei.
+        Beispiel: astra!unlockjobs @User 200
+        """
+        if max_hours < 0:
+            await ctx.send("<:Astra_x:1141303954555289600> Ungültiger Wert.")
+            return
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # User anlegen falls nicht existiert
+                await cur.execute("SELECT * FROM economy_users WHERE user_id=%s", (user.id,))
+                row = await cur.fetchone()
+                if not row:
+                    await cur.execute("INSERT INTO economy_users (user_id, hours_worked) VALUES (%s, %s)",
+                                      (user.id, max_hours))
+                else:
+                    # Stunden hochsetzen
+                    await cur.execute("UPDATE economy_users SET hours_worked = %s WHERE user_id=%s",
+                                      (max_hours, user.id))
+
+        await ctx.send(
+            f"<:Astra_accept:1141303821176422460> {user.mention} wurden alle Jobs bis **{max_hours} Stunden** freigeschaltet!")
+
     @commands.command(name="addcoins",
                       description="Füge einem Nutzer <:Coin:1359178077011181811> hinzu (Nur für Botbesitzer).")
     @commands.is_owner()
