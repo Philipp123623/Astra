@@ -10,25 +10,24 @@ import random
 from datetime import datetime, timedelta
 from discord import ui
 
-# ---------- Slot-Config ----------
-# ---------- Slot-Config (balanciert) ----------
+# ---------- Slot-Config (balanciert & lohnend) ----------
 WILD = "⭐"
 SCAT = "🔔"
 
-# Mehr Low-Symbole (höhere Hit-Rate), etwas Cluster, 2–3 Scatter pro Strip
+# Reels: 1x ⭐ pro Reel, 1–2x 🔔, mehr Low/Mid, wenige Highs
 REEL_STRIPS = [
     # Reel 1
-    ["🍒","🍒","🍋","🍊","🍒","🍋","🍊","🍇","🍓","🍉",
-     "🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍍", WILD, SCAT],
+    ["🍒","🍒","🍋","🍊","🍇","🍓","🍒","🍋","🍊","🍉",
+     "🍒","🍋","🍇","🍓","🍊","🍍", SCAT, "🍒", WILD, "🍋"],
     # Reel 2
     ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇",
-     "🍓","🍒","🍋","🍊","🍍", WILD, SCAT, "🍒","🍋","🍊"],
-    # Reel 3 (etwas mehr Scatter für Freespins)
+     "🍓","🍒","🍋","🍊","🍍","🍉", WILD, SCAT, "🍇","🍋"],
+    # Reel 3
     ["🍒","🍋","🍊","🍇","🍓","🍉","🍒","🍋","🍊","🍇",
-     "🍓","🍒","🍋","🍊","🍍", WILD, SCAT, "🍒","🍋", SCAT],
+     "🍓","🍒","🍋","🍊","🍍","🍉", SCAT, "🍇", WILD, "🍋"],
 ]
 
-# 9 Linien wie gehabt:
+# 9 Gewinnlinien
 PAYLINES = [
     ([(0,0),(0,1),(0,2)], "Obere Reihe"),
     ([(1,0),(1,1),(1,2)], "Mittlere Reihe"),
@@ -41,25 +40,33 @@ PAYLINES = [
     ([(1,0),(1,1),(1,2)], "Mittellinie (Bonus)"),
 ]
 
-# Kleinere Multis bei häufigen Symbolen, etwas sattere Highs
+# Basis-Multis (größer als vorher, damit Treffer lohnen)
 PAYTABLE = {
     "🍒": 2,
     "🍋": 3,
     "🍊": 4,
-    "🍇": 6,
-    "🍓": 8,
-    "🍉": 12,
-    "🍍": 18,
-    WILD: 30,  # 3x Wild
+    "🍇": 7,
+    "🍓": 10,
+    "🍉": 15,
+    "🍍": 25,
+    WILD: 0,  # 3×⭐ wird separat behandelt (siehe line_payout)
 }
 
-# Scatter etwas häufiger, dafür Payout capped/niedriger
-SCATTER_PAYS = {3: 3, 4: 6, 5: 12}
-FREESPINS_FOR_3_SCAT = 4
+# Wild-Boost für gemischte Linien (Base + 1–2 Wilds)
+WILD_LINE_MULT = {
+    0: 1,  # ohne ⭐
+    1: 2,  # 1 Wild ≈ x2
+    2: 4,  # 2 Wilds ≈ x4
+}
+PURE_WILDS_MULTI = 40  # 3×⭐ auf einer Linie
 
-# Nudge-Chancen
-NUDGE_SCATTER_CHANCE = 0.45     # hilft öfter zu 3x Scatter
-NUDGE_LINE_CHANCE    = 0.18     # schiebt manchmal eine 2/3-Linie zu 3/3
+# Scatter zahlt + Freespins
+SCATTER_PAYS = {3: 3, 4: 6, 5: 12}  # => payout = bet * factor
+FREESPINS_FOR_3_SCAT = 6            # spürbarer Bonus
+
+# Nudges etwas konservativer, damit „Rettungen“ selten bleiben
+NUDGE_SCATTER_CHANCE = 0.30
+NUDGE_LINE_CHANCE    = 0.14
 
 SPIN_FRAMES = 5
 FRAME_DELAY = 0.35
@@ -75,15 +82,12 @@ def spin_reels():
     return [list(row) for row in zip(*cols)]
 
 def nudge_for_scatter(board):
-    # Wenn genau 2 Scatter sichtbar, 35% Chance eine Spalte zu nudgen, um 3. Scatter zu treffen
+    # Wenn genau 2 Scatter sichtbar, Chance eine Spalte zu nudgen -> 3. Scatter
     flat = [(r,c) for r in range(3) for c in range(3)]
     scs = [(r,c) for (r,c) in flat if board[r][c] == SCAT]
     if len(scs) != 2 or random.random() > NUDGE_SCATTER_CHANCE:
         return board
-    # versuche jede Spalte 1 nach unten zu schieben (zyklisch), falls sie den Scatter zeigen kann
     for col in range(3):
-        # bau neue Spalte aus Strip um einen Schritt verschoben
-        # finde „Fenster“-Offset durch reverse-engineering: suche das obere Symbol in Strip
         top = board[0][col]
         strip = REEL_STRIPS[col]
         idx = strip.index(top)
@@ -96,21 +100,43 @@ def nudge_for_scatter(board):
             return new_board
     return board
 
+# hübsches, stabil ausgerichtetes Slot-Feld
 def render_board(board, winline_idxs=None, freespins_left=0):
+    """
+    Zeichnet ein sauberes 3×3-Spielfeld mit Markierung der Gewinnlinien.
+    - Gewinnfelder werden mit eckigen Klammern „〔 〕“ hervorgehoben
+    - Links/Rechts erscheinen Pfeile für horizontale Gewinne
+    - Unter dem Feld folgt eine kompakte Legende
+    """
     winline_idxs = set(winline_idxs or [])
 
-    FIG = "\u2007"        # Figure Space (monospace-fest)
-    CELL_PAD = FIG * 2
+    idx_to_coords = {i: coords for i, (coords, _name) in enumerate(PAYLINES)}
+    highlight_cells = set()
+    for i in winline_idxs:
+        for rc in idx_to_coords.get(i, []):
+            highlight_cells.add(rc)
 
-    def cell(r, c):  return f"{board[r][c]}{CELL_PAD}"
-    def row_line(r): return f"{cell(r,0)}│{cell(r,1)}│{cell(r,2)}"
+    FIG = "\u2007"  # Figure space
+    PAD = FIG
 
-    inner_width = len(row_line(0))
-    top    = "╔" + "═" * inner_width + "╗"
-    midsep = "╠" + "═" * inner_width + "╣"
-    bot    = "╚" + "═" * inner_width + "╝"
+    def fmt_cell(r, c):
+        s = board[r][c]
+        if (r, c) in highlight_cells:
+            return f"〔{s}〕"
+        else:
+            return f" {s} {PAD}"
 
-    left  = [" "," "," "]; right = [" "," "," "]
+    def row_line(r):
+        return f"{fmt_cell(r,0)}│{fmt_cell(r,1)}│{fmt_cell(r,2)}"
+
+    inner = row_line(0)
+    width = len(inner)
+    top    = "╔" + "═" * width + "╗"
+    mid    = "╠" + "═" * width + "╣"
+    bot    = "╚" + "═" * width + "╝"
+
+    left  = [" ", " ", " "]
+    right = [" ", " ", " "]
     if 0 in winline_idxs: left[0] = right[0] = "▶"
     if 1 in winline_idxs: left[1] = right[1] = "▶"
     if 2 in winline_idxs: left[2] = right[2] = "▶"
@@ -118,27 +144,32 @@ def render_board(board, winline_idxs=None, freespins_left=0):
     lines = [
         top,
         f"║ {row_line(0)} ║ {left[0]}",
-        midsep,
+        mid,
         f"║ {row_line(1)} ║ {left[1]}",
-        midsep,
+        mid,
         f"║ {row_line(2)} ║ {left[2]}",
         bot,
     ]
+
+    extra = []
+    if 3 in winline_idxs: extra.append("Linke Spalte")
+    if 4 in winline_idxs: extra.append("Mittlere Spalte")
+    if 5 in winline_idxs: extra.append("Rechte Spalte")
+    if 6 in winline_idxs: extra.append("↘ Diagonale")
+    if 7 in winline_idxs: extra.append("↗ Diagonale")
+    if 8 in winline_idxs: extra.append("Mittellinie (Bonus)")
+
     txt = "```\n" + "\n".join(lines) + "\n```"
 
-    extras = []
-    if 3 in winline_idxs: extras.append("Linke Spalte")
-    if 4 in winline_idxs: extras.append("Mittlere Spalte")
-    if 5 in winline_idxs: extras.append("Rechte Spalte")
-    if 6 in winline_idxs: extras.append("↘ Diagonale")
-    if 7 in winline_idxs: extras.append("↗ Diagonale")
-    if 8 in winline_idxs: extras.append("Mittellinie (Bonus)")
-    if extras:
-        txt += "Gewinnlinie(n): " + ", ".join(extras) + "\n"
+    leg = []
+    if extra:
+        leg.append("Gewinnlinien: " + ", ".join(extra))
     if freespins_left > 0:
-        txt += f"Freespins verbleibend: **{freespins_left}**\n"
-    return txt
+        leg.append(f"Freespins verbleibend: **{freespins_left}**")
+    if leg:
+        txt += "\n" + "\n".join(leg)
 
+    return txt
 
 def build_spin_frames(final_board, spin_frames=5):
     frames = [spin_reels() for _ in range(max(1, spin_frames))]
@@ -151,52 +182,68 @@ def build_spin_frames(final_board, spin_frames=5):
     return frames
 
 def nudge_for_line(board):
-    """Mit kleiner Chance (NUDGE_LINE_CHANCE) wird eine 2/3-Linie zu 3/3 geschoben,
-       falls das mit einem 1-Step-Shift in der betreffenden Spalte geht."""
-    import random
+    """Kleine Chance (NUDGE_LINE_CHANCE), eine 2/3-Linie zu 3/3 zu schieben."""
     if random.random() > NUDGE_LINE_CHANCE:
         return board
 
     for idx, (coords, _name) in enumerate(PAYLINES):
-        # nur horizontale/vertikale/diagonale Dreier; suche 2 gleiche + 1 abweichend
         syms = [board[r][c] for (r,c) in coords]
-        if SCAT in syms:  # Scatter zählt nicht
+        if SCAT in syms:
             continue
         base = next((s for s in syms if s != WILD), WILD)
         match = sum(1 for s in syms if s == base or s == WILD)
         if match != 2:
             continue
 
-        # finde die "falsche" Zelle
         for k, (r,c) in enumerate(coords):
             if not (board[r][c] == base or board[r][c] == WILD):
-                # versuche Spalte c um 1 zu verschieben
                 strip = REEL_STRIPS[c]
                 top = board[0][c]
                 i = strip.index(top)
-                for step in (+1, -1):  # up/down
+                for step in (+1, -1):
                     i2 = (i + step) % len(strip)
                     new_col = [strip[(i2 + d) % len(strip)] for d in range(3)]
                     candidate = [row[:] for row in board]
                     for rr in range(3):
                         candidate[rr][c] = new_col[rr]
-                    # erfüllt Linie jetzt 3/3?
                     vals = [candidate[rr][cc] for (rr,cc) in coords]
                     ok = all(v == base or v == WILD for v in vals)
                     if ok:
                         return candidate
     return board
 
-
+# ---------- ROBUSTE AUSZAHLUNGSLOGIK ----------
 def line_payout(coords, board, bet):
+    """
+    - 🔔 blockiert Liniengewinne (Scatter zahlt separat)
+    - ⭐ ist Joker für Basissymbole
+    - 3×⭐ zahlt separat (PURE_WILDS_MULTI)
+    - 1–2 ⭐ boosten die Linie (WILD_LINE_MULT)
+    """
     syms = [board[r][c] for r,c in coords]
     if any(s == SCAT for s in syms):
         return 0, None
-    base = next((s for s in syms if s != WILD), WILD)
-    if not all(s == base or s == WILD for s in syms):
+
+    wilds = sum(1 for s in syms if s == WILD)
+    nonwild = [s for s in syms if s != WILD]
+
+    if wilds == 3:
+        return bet * PURE_WILDS_MULTI, WILD
+
+    if not nonwild:
         return 0, None
-    multi = PAYTABLE.get(base, 0)
-    return bet * multi, base
+
+    base = nonwild[0]
+    if any(s != base for s in nonwild):
+        # z.B. 🍒 ⭐ 🍋 -> kein Gewinn
+        return 0, None
+
+    base_multi = PAYTABLE.get(base, 0)
+    if base_multi <= 0:
+        return 0, None
+
+    extra = WILD_LINE_MULT.get(wilds, 1)
+    return bet * base_multi * extra, base
 
 def evaluate(board, bet):
     total = 0
@@ -209,11 +256,20 @@ def evaluate(board, bet):
             total += payout
             winlines.append(idx)
             breakdown.append((name, sym, payout))
-    # Scatter → Freespins
+    # Scatter zahlt unabhängig von Linien
     scatters = sum(1 for r in range(3) for c in range(3) if board[r][c] == SCAT)
-    free = FREESPINS_FOR_3_SCAT if scatters >= 3 else 0
-    if free:
+    if scatters >= 3:
+        # Payout
+        keys = sorted(SCATTER_PAYS.keys())
+        tier = max(k for k in keys if scatters >= k)
+        scat_pay = bet * SCATTER_PAYS[tier]
+        total += scat_pay
+        breakdown.append((f"{scatters}x Scatter", SCAT, scat_pay))
+        # Freespins
         breakdown.append(("Freespins", SCAT, 0))
+        free = FREESPINS_FOR_3_SCAT
+    else:
+        free = 0
     return total, winlines, free, breakdown
 
 class SlotView(ui.View):
@@ -234,23 +290,28 @@ class SlotView(ui.View):
         return True
 
     async def spin_once(self, interaction):
-        # Balance check/abzug nur wenn keine Freespins laufen
+        # Balance check/Abzug nur wenn keine Freespins laufen
         user_data = await self.cog.get_user(self.user_id)
         wallet = user_data[1]
         if self.freespins == 0:
             if self.bet <= 0 or wallet < self.bet:
-                await interaction.followup.send("<:Astra_x:1141303954555289600> Zu wenig Coins oder ungültiger Einsatz.", ephemeral=True)
+                await interaction.followup.send(
+                    "<:Astra_x:1141303954555289600> Zu wenig Coins oder ungültiger Einsatz.",
+                    ephemeral=True
+                )
                 return None, None, None, None
             await self.cog.update_balance(self.user_id, wallet_change=-self.bet)
 
-        # Animation
-        # Finale bestimmen + Nudge, dann Frames erzeugen
+        # --- Finale ermitteln + kleine Hilfen (Nudges) ---
         final = spin_reels()
         final = nudge_for_scatter(final)
+        final = nudge_for_line(final)
+
+        # --- Animationsframes: Spalten nacheinander stoppen ---
         frames = build_spin_frames(final, SPIN_FRAMES)
 
-        # Animation abspielen
-        for b in frames[:-1]:  # bis kurz vor final
+        # --- Animation abspielen (alle bis kurz vor final) ---
+        for b in frames[:-1]:
             await asyncio.sleep(FRAME_DELAY)
             em = discord.Embed(
                 colour=discord.Colour.blurple(),
@@ -260,32 +321,30 @@ class SlotView(ui.View):
             em.add_field(name="Walzen", value=render_board(b, freespins_left=self.freespins), inline=False)
             await self.msg.edit(embed=em)
 
-        # Ergebnis mit finalem Board berechnen/anzeigen
+        # --- Ergebnis ---
         payout, winlines, freespins_got, breakdown = evaluate(final, self.bet)
         if freespins_got:
             self.freespins += freespins_got
-        board_text = render_board(final, winlines, self.freespins)
 
-        # Gewinne gutschreiben
+        # Gewinne gutschreiben (Einsatz wurde ggf. oben abgezogen)
         if payout > 0:
             await self.cog.update_balance(self.user_id, wallet_change=payout)
         self.last_win = payout
 
-        # Freespin runterzählen (der aktuelle wurde verbraucht)
+        # Freespin runterzählen
         if self.freespins > 0:
             self.freespins -= 1
 
-        # Ergebnis-Embed
-        if payout > 0:
-            res = f"<:Astra_gw1:1141303852889550928> Gewinn: **+{payout}** <:Coin:1359178077011181811>"
-        else:
-            res = f"<:Astra_x:1141303954555289600> Kein Gewinn."
+        # Anzeige
+        board_text = render_board(final, winlines, self.freespins)
+        res = (f"<:Astra_gw1:1141303852889550928> Gewinn: **+{payout}** <:Coin:1359178077011181811>"
+               if payout > 0 else "Kein Gewinn.")
 
         details = "Keine Gewinnlinien."
         if breakdown:
             parts = []
             for name, sym, val in breakdown:
-                parts.append(f"• {name} {sym or ''} {'→ **+%s**' % val if val>0 else ''}")
+                parts.append(f"• {name} {sym or ''} {'→ **+%s**' % val if val > 0 else ''}")
             details = "\n".join(parts)
 
         end = discord.Embed(colour=discord.Colour.blue(), title="🎰 Slots – Ergebnis")
@@ -293,6 +352,7 @@ class SlotView(ui.View):
         end.add_field(name="Ergebnis", value=res, inline=False)
         end.add_field(name="Details", value=details, inline=False)
         await self.msg.edit(embed=end, view=self)
+
         return final, payout, winlines, breakdown
 
     # ---- Buttons ----
@@ -327,12 +387,10 @@ class SlotView(ui.View):
                 return
             # 48% Gewinnchance – house edge 😈
             if random.random() < 0.48:
-                # doppeln
                 await self.cog.update_balance(self.user_id, wallet_change=self.last_win)
                 self.last_win *= 2
                 await interaction.followup.send(f"🎉 Verdoppelt! Neuer Gewinn: **+{self.last_win}**", ephemeral=True)
             else:
-                # Verlust des zuletzt gewonnenen Betrags
                 await self.cog.update_balance(self.user_id, wallet_change=-self.last_win)
                 self.last_win = 0
                 await interaction.followup.send("💥 Verloren – Gewinn futsch.", ephemeral=True)
@@ -423,55 +481,45 @@ JOBS = [{"name": "Küchenhilfe", "req": 0,
          "amt": [300, 330]},
         {"name": "Pilot", "req": 400,
          "desc": "\nVerdiene zwischen 300 und 310 <:Coin:1359178077011181811>  pro Stunde.\nDu musst mindestens **400** Stunden gearbeitet haben, um diesen Job freizuschalten.",
-         "amt": [330, 400]}
-]
+         "amt": [330, 400]}]
 
 JOBS += [
     {"name": "Wissenschaftler", "req": 450,
      "desc": "\nVerdiene zwischen 410 und 430 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **450** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [410, 430]},
-
     {"name": "Professor", "req": 500,
      "desc": "\nVerdiene zwischen 440 und 460 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **500** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [440, 460]},
-
     {"name": "Pharmaforscher", "req": 550,
      "desc": "\nVerdiene zwischen 470 und 490 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **550** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [470, 490]},
-
     {"name": "Bankmanager", "req": 600,
      "desc": "\nVerdiene zwischen 500 und 530 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **600** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [500, 530]},
-
     {"name": "Politiker", "req": 650,
      "desc": "\nVerdiene zwischen 530 und 560 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **650** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [530, 560]},
-
     {"name": "Unternehmensberater", "req": 700,
      "desc": "\nVerdiene zwischen 560 und 590 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **700** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [560, 590]},
-
     {"name": "Chefredakteur", "req": 750,
      "desc": "\nVerdiene zwischen 590 und 620 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **750** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [590, 620]},
-
     {"name": "Finanzanalyst", "req": 800,
      "desc": "\nVerdiene zwischen 620 und 650 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **800** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [620, 650]},
-
     {"name": "Medienproduzent", "req": 850,
      "desc": "\nVerdiene zwischen 650 und 680 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **850** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [650, 680]},
-
     {"name": "Entwicklungsleiter", "req": 900,
      "desc": "\nVerdiene zwischen 680 und 710 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **900** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [680, 710]},
-
     {"name": "Regierungsberater", "req": 1000,
      "desc": "\nVerdiene zwischen 710 und 750 <:Coin:1359178077011181811> pro Stunde.\nDu musst mindestens **1000** Stunden gearbeitet haben, um diesen Job freizuschalten.",
      "amt": [710, 750]}
 ]
 
+# ---------------------- Blackjack ----------------------
 
 # Kartenwert berechnung
 CARD_VALUES = {
@@ -484,7 +532,7 @@ def calculate_hand_value(hand):
     value = 0
     aces = 0
     for card in hand:
-        rank = card[:-1] if card[:-1] != '' else card[0]  # handle '10♠'
+        rank = card[:-1] if card[:-1] != '' else card[0]
         card_value = CARD_VALUES.get(rank, 0)
         value += card_value
         if rank == 'A':
@@ -595,7 +643,7 @@ class BlackjackView(discord.ui.View):
             await self.update_message()
             await asyncio.sleep(1.2)
 
-
+# ---------------------- Jobliste & Economy ----------------------
 
 class JobListView(discord.ui.View):
     def __init__(self, jobs, user_hours):
@@ -651,7 +699,7 @@ class JobListView(discord.ui.View):
 @app_commands.guild_only()
 class EconomyClass(app_commands.Group):
     def __init__(self, bot):
-        self.bot = bot  # <--- Hinzufügen!
+        self.bot = bot
         super().__init__(
             name="eco",
             description="Alles rund um Economy."
@@ -681,11 +729,9 @@ class EconomyClass(app_commands.Group):
                 await cur.execute("SELECT wallet, bank FROM economy_users WHERE user_id = %s", (user_id,))
                 return await cur.fetchone()
 
-
     @app_commands.command(name="balance", description="Zeigt deinen aktuellen Kontostand an.")
     @app_commands.guild_only()
     async def balance(self, interaction: discord.Interaction):
-        """Zeigt deinen aktuellen Kontostand an."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)
         wallet, bank = user_data[1], user_data[2]
@@ -703,7 +749,6 @@ class EconomyClass(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(betrag="Der Betrag, den du einzahlen möchtest.")
     async def deposit(self, interaction: discord.Interaction, betrag: int):
-        """Zahle Geld auf dein Bankkonto ein."""
         if betrag <= 0:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
@@ -720,7 +765,6 @@ class EconomyClass(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(betrag="Der Betrag, den du abheben möchtest.")
     async def withdraw(self, interaction: discord.Interaction, betrag: int):
-        """Hebe Geld von deinem Bankkonto ab."""
         if betrag <= 0:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen gültigen Betrag ein.", ephemeral=True)
             return
@@ -733,15 +777,12 @@ class EconomyClass(app_commands.Group):
         await self.update_balance(interaction.user.id, betrag, -betrag)
         await interaction.response.send_message(f"Du hast {betrag} <:Coin:1359178077011181811> von deinem Bankkonto abgehoben.")
 
-
-
     @app_commands.command(name="beg", description="Bitte um ein kleines Trinkgeld.")
     @app_commands.guild_only()
     async def beg(self, interaction: discord.Interaction):
-        """Bitte um ein kleines Trinkgeld."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)
-        last_work = user_data[5]  # Wir verwenden last_work auch als letzte beg Zeit für Demo
+        last_work = user_data[5]
         now = datetime.utcnow()
 
         if last_work and now < last_work + timedelta(hours=3):
@@ -774,7 +815,6 @@ class EconomyClass(app_commands.Group):
 
         view = SlotView(self, interaction, einsatz)
 
-        # Start-Embed
         em = discord.Embed(
             colour=discord.Colour.blurple(),
             title="🎰 Slots",
@@ -791,7 +831,6 @@ class EconomyClass(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(choice="Wähle 'Schere', 'Stein' oder 'Papier'.")
     async def rps(self, interaction: discord.Interaction, choice: Literal['Stein', 'Schere', 'Papier']):
-        """Spiele Schere, Stein, Papier gegen den Bot."""
         choice = choice.lower()
         if choice not in ["schere", "stein", "papier"]:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte wähle entweder 'Schere', 'Stein' oder 'Papier'.",
@@ -817,13 +856,10 @@ class EconomyClass(app_commands.Group):
 
         await interaction.response.send_message(embed=embed)
 
-
     @app_commands.command(name="coinflip", description="Münzwurf: Wähle Kopf oder Zahl und setze.")
     @app_commands.guild_only()
     @app_commands.describe(wahl="Deine Wahl: 'Kopf' oder 'Zahl'", betrag="Der Betrag, den du setzen möchtest.")
     async def coinflip(self, interaction: discord.Interaction, wahl: str, betrag: int):
-        """Lass die Münze entscheiden! Wähle 'Kopf' oder 'Zahl' und setze einen Einsatz."""
-        # Überprüfen, ob die Eingabe gültig ist
         guess = wahl.lower()
         if guess not in ["kopf", "zahl"]:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte wähle entweder 'Kopf' oder 'Zahl'.", ephemeral=True)
@@ -842,33 +878,26 @@ class EconomyClass(app_commands.Group):
                 f"<:Astra_x:1141303954555289600> Du hast nicht genug Münzen. Dein aktueller Kontostand ist {wallet} <:Coin:1359178077011181811>.", ephemeral=True)
             return
 
-        # Münzwurf
         result = random.choice(["Kopf", "Zahl"])
 
-        # Embed erstellen
         embed = discord.Embed(title="Münzwurf", color=discord.Color.blue())
         embed.add_field(name="Deine Wahl", value=f"**{guess.capitalize()}**", inline=False)
         embed.add_field(name="Ergebnis", value=f"**{result}**", inline=False)
 
-        # Das Ergebnis vergleichen und eine Nachricht ausgeben
         if guess == result.lower():
-            # Nutzer hat gewonnen, Coins zurückgeben + Gewinn
-            gewonnen = betrag * 2  # Einfaches Beispiel, doppelter Einsatz bei Gewinn
+            gewonnen = betrag * 2
             await self.update_balance(interaction.user.id, gewonnen, 0)
             embed.add_field(name="<:Astra_gw1:1141303852889550928> Glückwunsch!", value=f"Du hast gewonnen! Du erhältst {gewonnen} <:Coin:1359178077011181811>.", inline=False)
         else:
-            # Nutzer hat verloren, Coins abziehen
             await self.update_balance(interaction.user.id, -betrag, 0)
             embed.add_field(name="<:Astra_x:1141303954555289600>  Leider verloren", value=f"Du hast verloren und {betrag} <:Coin:1359178077011181811> verloren.", inline=False)
 
-        # Nachricht senden
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="rob", description="Versuche, einen anderen Nutzer auszurauben!")
     @app_commands.guild_only()
     @app_commands.describe(ziel="Wen willst du ausrauben?")
     async def rob(self, interaction: discord.Interaction, ziel: discord.User):
-        """Versuche, einen anderen Nutzer auszurauben."""
         user_id = interaction.user.id
         target_id = ziel.id
 
@@ -907,7 +936,6 @@ class EconomyClass(app_commands.Group):
 
         await interaction.response.send_message(msg)
 
-
     @app_commands.command(name="leaderboard", description="Zeige die reichsten Spieler.")
     @app_commands.guild_only()
     @app_commands.describe(scope="Wähle, ob die globale oder serverbezogene Rangliste angezeigt wird.")
@@ -916,9 +944,7 @@ class EconomyClass(app_commands.Group):
             interaction: discord.Interaction,
             scope: Literal["global", "server"]
     ):
-        """Zeige die reichsten Spieler, entweder global oder serverbezogen."""
         try:
-            # Datenbankverbindung aufbauen
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     if scope == "global":
@@ -944,7 +970,6 @@ class EconomyClass(app_commands.Group):
                     "Es wurden keine Benutzer gefunden oder die Rangliste ist leer.")
                 return
 
-            # Embed erstellen
             embed = discord.Embed(
                 title="<:Astra_users:1141303946602872872> Rangliste (Global)" if scope == "global" else f"<:Astra_users:1141303946602872872> Rangliste ({interaction.guild.name})",
                 color=discord.Color.blue()
@@ -969,7 +994,6 @@ class EconomyClass(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(einsatz="Der Betrag, den du setzen möchtest.")
     async def blackjack(self, interaction: discord.Interaction, einsatz: int):
-        """Spiele eine Runde Blackjack."""
         user_data = await self.get_user(interaction.user.id)
         wallet = user_data[1]
 
@@ -983,11 +1007,9 @@ class EconomyClass(app_commands.Group):
                                                     ephemeral=True)
             return
 
-        # Abziehen des Einsatzes
         await self.update_balance(interaction.user.id, wallet_change=-einsatz)
 
-        # Blackjack-View mit dem Economy-System
-        view = BlackjackView(self.bot, interaction, einsatz, self)  # Übergabe des Economy-Cogs
+        view = BlackjackView(self.bot, interaction, einsatz, self)
 
         embed = discord.Embed(
             title="Blackjack wird gestartet!",
@@ -997,14 +1019,13 @@ class EconomyClass(app_commands.Group):
         embed.add_field(name="Einsatz", value=f"{einsatz} <:Coin:1359178077011181811>", inline=False)
 
         await interaction.response.send_message(embed=embed, view=view)
-        view.message = await interaction.original_response()  # Damit `update_message` funktioniert
+        view.message = await interaction.original_response()
         await view.update_message()
-
 
 @app_commands.guild_only()
 class Job(app_commands.Group):
     def __init__(self, bot):
-        self.bot = bot  # <--- Hinzufügen!
+        self.bot = bot
         super().__init__(
             name="job",
             description="Alles rund um deinen Job"
@@ -1023,7 +1044,6 @@ class Job(app_commands.Group):
     @app_commands.command(name="work", description="Arbeite in deinem aktuellen Job.")
     @app_commands.guild_only()
     async def work(self, interaction: discord.Interaction):
-        """Arbeite in deinem aktuellen Job."""
         user_id = interaction.user.id
         user_data = await self.get_user(user_id)
         job_name = user_data[3]
@@ -1066,9 +1086,8 @@ class Job(app_commands.Group):
     @app_commands.command(name="list", description="Zeigt die Jobliste.")
     @app_commands.guild_only()
     async def job_list(self, interaction: discord.Interaction):
-        """Erhalte eine Liste mit allen Jobs"""
         user_data = await self.get_user(interaction.user.id)
-        user_hours = user_data[4]  # Stunden, die der User gearbeitet hat
+        user_hours = user_data[4]
 
         view = JobListView(JOBS, user_hours)
         embed = view.generate_job_embed()
@@ -1078,7 +1097,6 @@ class Job(app_commands.Group):
     @app_commands.guild_only()
     @app_commands.describe(name="Name des Jobs, den du annehmen möchtest.")
     async def job_apply(self, interaction: discord.Interaction, name: str):
-        """Bewirb dich auf einen verfügbaren Job."""
         user_data = await self.get_user(interaction.user.id)
         user_hours = user_data[4]
         job = next((j for j in JOBS if j["name"].lower() == name.lower()), None)
@@ -1105,7 +1123,6 @@ class Job(app_commands.Group):
     @app_commands.command(name="quit", description="Kündige deinen aktuellen Job.")
     @app_commands.guild_only()
     async def job_quit(self, interaction: discord.Interaction):
-        """Kündige deinen aktuellen Job."""
         user_data = await self.get_user(interaction.user.id)
         if not user_data[3]:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast momentan keinen Job.",
