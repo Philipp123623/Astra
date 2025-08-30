@@ -16,6 +16,13 @@ ASTRA_BLUE = discord.Colour.blue()
 #                      HELPERS
 # =========================================================
 
+PRETTY_TO_INTERNAL = {
+    "⏰ Stunden bis Auto-Close": "autoclose_hours",
+    "🔔 Minuten bis Reminder": "remind_minutes",
+    "♻️ Stunden für Reopen": "reopen_hours",
+    "🚫 Ping-Throttle (Minuten)": "ping_throttle_minutes",
+}
+
 def mk_embed(
     *,
     title: str,
@@ -752,43 +759,52 @@ class Ticket(app_commands.Group):
     # Konfiguration: Auto-Close & Reminder & Reopen
     @app_commands.command(name="config", description="Konfiguriere Auto-Close/Reminder/Reopen.")
     @app_commands.describe(
-        autoclose_hours="Stunden bis Auto-Close (0=aus)",
-        remind_minutes="Minuten bis Reminder (0=aus)",
-        reopen_hours="Stunden, in denen Reopen möglich ist",
-        ping_throttle_minutes="(Reserviert) Minuten für Ping-Throttle"
+        einstellung="Welche Einstellung möchtest du ändern?",
+        wert="Zahl für diese Einstellung (0 = deaktiviert)",
     )
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.choices(
+        einstellung=[
+            app_commands.Choice(name=pretty, value=internal)
+            for pretty, internal in PRETTY_TO_INTERNAL.items()
+        ]
+    )
     async def ticket_config(
-        self,
-        interaction: discord.Interaction,
-        autoclose_hours: Optional[int] = None,
-        remind_minutes: Optional[int] = None,
-        reopen_hours: Optional[int] = None,
-        ping_throttle_minutes: Optional[int] = None,
+            self,
+            interaction: discord.Interaction,
+            einstellung: app_commands.Choice[str],
+            wert: int,
     ):
-        updates = {}
-        for k, v in dict(
-            autoclose_hours=autoclose_hours,
-            remind_minutes=remind_minutes,
-            reopen_hours=reopen_hours,
-            ping_throttle_minutes=ping_throttle_minutes,
-        ).items():
-            if v is not None and v >= 0:
-                updates[k] = v
-        if updates:
-            await set_guild_config(self.bot.pool, interaction.guild.id, **updates)  # type: ignore[attr-defined]
-        cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
+        # interner Key
+        key = einstellung.value  # z. B. "autoclose_hours"
+        pretty = einstellung.name  # z. B. "⏰ Stunden bis Auto-Close"
 
-        e = mk_embed(
-            title="⚙️ Ticket-Konfiguration",
-            description=(
-                f"**Auto-Close:** {cfg['autoclose_hours']} h\n"
-                f"**Reminder:** {cfg['remind_minutes']} min\n"
-                f"**Reopen:** {cfg['reopen_hours']} h\n"
-                f"**Ping-Throttle:** {cfg['ping_throttle_minutes']} min"
+        if wert < 0:
+            return await interaction.response.send_message("❌ Wert darf nicht negativ sein.", ephemeral=True)
+
+        # DB speichern
+        await set_guild_config(self.bot.pool, interaction.guild.id, **{key: wert})
+
+        # Aktuelle Konfig holen
+        cfg = await get_guild_config(self.bot.pool, interaction.guild.id)
+
+        emb = mk_embed(
+            title="⚙️ Ticket-Konfiguration aktualisiert",
+            description="\n".join(
+                [
+                    f"⏰ Auto-Close: {cfg['autoclose_hours']} h",
+                    f"🔔 Reminder: {cfg['remind_minutes']} min",
+                    f"♻️ Reopen: {cfg['reopen_hours']} h",
+                    f"🚫 Ping-Throttle: {cfg['ping_throttle_minutes']} min",
+                ]
             ),
         )
-        await interaction.response.send_message(embed=e, ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Einstellung geändert: **{pretty}** → `{wert}`",
+            embed=emb,
+            ephemeral=True,
+        )
+        return None
+
 
 # =========================================================
 #                         COG
