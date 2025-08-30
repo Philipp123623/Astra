@@ -1,394 +1,784 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import asyncio
-from typing import Literal
-from discord.app_commands import Group
+# -*- coding: utf-8 -*-
 import os
+import io
+import re
+import html
+import asyncio
+from typing import Optional, Literal, List, Tuple
 
+import discord
+from discord.ext import commands, tasks
+from discord import app_commands
 
-class ticket_buttons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+ASTRA_BLUE = discord.Colour.blue()
 
-    @discord.ui.button(label='Schließen', style=discord.ButtonStyle.red, custom_id='persistent_view_allg:close',
-                       emoji="🔒")
-    async def close_alg(self, interaction: discord.Interaction, button: discord.Button):
-        guild = interaction.guild
-        member = interaction.user
-        channel = interaction.channel
-        channelid = channel.id
-        cat = channel.category.id
-        async with interaction.client.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT roleID FROM ticketsystem WHERE categoryID = (%s)", (cat))
-                result1 = await cur.fetchone()
-                roleID = result1[0]
-                suprole = guild.get_role(roleID)
-                if suprole in member.roles:
-                    await cur.execute("SELECT channelID FROM ticketsystem_channels WHERE channelID = (%s)", (channelid))
-                    result = await cur.fetchall()
-                    for eintrag in result:
-                        channelID = eintrag[0]
+# =========================================================
+#                      HELPERS
+# =========================================================
 
-                        if channelID == channelid:
-                            await cur.execute("UPDATE ticketsystem_channels SET closed = (%s) WHERE channelID = (%s)",
-                                              (interaction.user.id, channelID))
-                            await cur.execute(
-                                "SELECT closed FROM ticketsystem_channels WHERE channelID = (%s)",
-                                (channelID))
-                            result1 = await cur.fetchone()
-                            closed = result1[0]
-                            await cur.execute(
-                                "SELECT claimed, opened, time FROM ticketsystem_channels WHERE channelID = (%s)",
-                                (channelID))
-                            result5 = await cur.fetchall()
-                            await cur.execute("SELECT thema FROM ticketsystem WHERE roleID = (%s)", (roleID))
-                            result6 = await cur.fetchone()
-                            for eintrag in result5:
-                                claimed = eintrag[0]
-                                opened = eintrag[1]
-                                time = eintrag[2]
-                                thema = result6[0]
-                                user = interaction.client.get_user(int(opened))
+def mk_embed(
+    *,
+    title: str,
+    description: str = "",
+    color: discord.Colour = ASTRA_BLUE,
+    thumb: Optional[str] = None,
+    footer: Optional[str] = None,
+) -> discord.Embed:
+    e = discord.Embed(title=title, description=description, colour=color)
+    if thumb:
+        e.set_thumbnail(url=thumb)
+    if footer:
+        e.set_footer(text=footer)
+    return e
 
-                                if claimed == "Not Set":
-                                    user_claimed = "Nicht geclaimed."
-                                else:
-                                    user_claimed = interaction.client.get_user(int(claimed))
-                                user_closed = interaction.client.get_user(int(closed))
-                                await cur.execute(f"SELECT channelID FROM ticketlog WHERE guildID = (%s)",
-                                                  (interaction.guild.id))
-                                result7 = await cur.fetchone()
-                                if result7 == "None":
-                                    await interaction.response.send_message(
-                                        "<:Astra_info:1141303860556738620> **Das Ticket wird in 5 Sekunden geschlossen.**")
-                                    await asyncio.sleep(5)
-                                    await channel.delete()
-                                    await cur.execute(
-                                        "DELETE FROM ticketsystem_channels WHERE channelID = (%s) and guildID = (%s)",
-                                        (channelid, guild.id))
-                                if result7:
-                                    channelID = result7[0]
-                                    log_channel = interaction.client.get_channel(channelID)
-                                    filename = f"{interaction.channel.id}.log"
-                                    with open(filename, "w", encoding='utf-8') as file:
-                                        if user_claimed == "Nicht geclaimed":
-                                            file.write(
-                                                f"Ticket: {interaction.channel.name}\nUser: {user.name}#{user.discriminator} ({member.id})\nModerator: Kein Moderator hat geclaimed.\n\n")
-                                        if user_claimed != "Nicht geclaimed":
-                                            file.write(
-                                                f"Ticket: {interaction.channel.name}\nUser: {user.name}#{user.discriminator} ({member.id})\nModerator: {user_claimed.name}#{user_claimed.discriminator}\n\n")
-                                        async for msg in interaction.channel.history(limit=None, oldest_first=True):
-                                            file.write(
-                                                f"{msg.created_at.strftime('%d.%m.%Y, %H:%M Uhr')} - {msg.author.name}: {msg.content}\n")
-                                    log_embed = discord.Embed(title="Ticket geschlossen",
-                                                              description=f"Ticket-Log für ``{interaction.channel.name}``",
-                                                              colour=discord.Colour.blue())
-                                    log_embed.add_field(name="<:opened:1142025945369280563> Geöffnet von",
-                                                        value=user.mention,
-                                                        inline=False)
-                                    log_embed.add_field(name="<:closed:1142026076898480188> Geschlossen von ",
-                                                        value=user_closed.mention, inline=False)
-                                    try:
-                                        log_embed.add_field(name="<:claimed:1142026074432208926> Geclaimed von",
-                                                            value=user_claimed.mention, inline=False)
-                                    except:
-                                        log_embed.add_field(name="<:claimed:1142026074432208926> Geclaimed von",
-                                                            value="Nicht geclaimed", inline=False)
-                                    log_embed.add_field(name="<:time:1142026081688363059> Ticket geöffnet", value=time,
-                                                        inline=False)
-                                    log_embed.add_field(name="<:grund:1142026078542630983> Thema", value=thema,
-                                                        inline=False)
-                                    await log_channel.send(embed=log_embed, file=discord.File(f'{filename}'))
-                                    os.remove(filename)
-                                await interaction.response.send_message(
-                                        "<:Astra_info:1141303860556738620> **Das Ticket wird in 5 Sekunden geschlossen.**")
-                                await asyncio.sleep(5)
-                                await channel.delete()
-                                await cur.execute(
-                                    "DELETE FROM ticketsystem_channels WHERE channelID = (%s) and guildID = (%s)",
-                                    (channelid, guild.id))
-                else:
-                    await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Nur User mit der Supportrolle sind berechtigt Tickets zu schließen.**",
-                        ephemeral=True)
+def fmt_user(u: discord.abc.User) -> str:
+    return f"{u.name}#{u.discriminator}"
 
-    @discord.ui.button(label='Claim', style=discord.ButtonStyle.green, custom_id='persistent_view_allg:take',
-                       emoji="👮‍♂️")
-    async def take_allg(self, interaction: discord.Interaction, button: discord.Button):
-        async with interaction.client.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                guild = interaction.guild
-                member = interaction.user
-                channel = interaction.channel
-                channelid = channel.id
-                cat = channel.category.id
-                await cur.execute("SELECT roleID FROM ticketsystem WHERE categoryID = (%s)", (cat))
-                roleid = await cur.fetchone()
-                roleID = roleid[0]
-                suprole = guild.get_role(roleID)
-                if suprole in member.roles:
-                    await cur.execute("SELECT channelID FROM ticketsystem_channels WHERE channelID = (%s)",
-                                      channelid)
-                    result = await cur.fetchall()
-                    for eintrag in result:
-                        channelID = eintrag[0]
+def sanitize_filename(name: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", name)[:60]
 
-                        if channelID == channelid:
-                            await cur.execute("SELECT msgID FROM ticketsystem_channels WHERE channelID = (%s)",
-                                              (channelID))
-                            result2 = await cur.fetchone()
-                            msgID = result2[0]
-                            msg = await channel.fetch_message(msgID)
+# =========================================================
+#                    DB INIT / CONFIG
+# =========================================================
 
-                            await cur.execute(
-                                "UPDATE ticketsystem_channels SET claimed = (%s) WHERE channelID = (%s)",
-                                (interaction.user.id, channelID))
-                            button.disabled = True
-                            await cur.execute("SELECT opened FROM ticketsystem_channels WHERE channelID = (%s)",
-                                              (channelID))
-                            result3 = await cur.fetchone()
-                            open_member_id = result3[0]
-                            await cur.execute("SELECT thema FROM ticketsystem WHERE roleID = (%s)", (suprole.id))
-                            result4 = await cur.fetchone()
-                            title = result4[0]
-                            open_member = interaction.client.get_user(open_member_id)
-                            embed = discord.Embed(title=f"Ticket von {member.name}",
-                                                  description=f"Hallo, {member.mention} ein Teammitglied wird sich bald um dich kümmern. Bitte beschreibe in dieser Zeit dein Problem.",
-                                                  colour=discord.Colour.blue())
-                            embed.set_author(name=open_member, icon_url=open_member.avatar)
-                            embed.add_field(name="Thema", value=title)
-                            embed.add_field(name="Geclaimed von", value=interaction.user.mention)
-                            await msg.edit(embed=embed, view=self)
-                            await interaction.response.send_message(
-                                f"<:Astra_info:1141303860556738620> **{interaction.user.mention} hat das Ticket geclaimed**")
-                else:
-                    await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Nur User mit der Supportrolle sind berechtigt Tickets zu claimen.**",
-                        ephemeral=True)
+CREATE_CONFIG = """
+CREATE TABLE IF NOT EXISTS ticket_config (guildID BIGINT PRIMARY KEY, autoclose_hours INT DEFAULT 0, remind_minutes INT DEFAULT 0, reopen_hours INT DEFAULT 24, ping_throttle_minutes INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
 
+CREATE_AUTOCLOSE = """
+CREATE TABLE IF NOT EXISTS ticket_autoclose_state (channelID BIGINT PRIMARY KEY, reminded TINYINT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
 
-class ticket_open(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=None)
-        self.bot = bot
+DEFAULT_CFG = dict(autoclose_hours=0, remind_minutes=0, reopen_hours=24, ping_throttle_minutes=0)
 
-    @discord.ui.button(label='Ticket Öffnen', style=discord.ButtonStyle.green, custom_id='persistent_view_kaufen:take',
-                       emoji="<:Astra_ticket:1061392302444126271>")
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.Button):
-        async with interaction.client.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                guild = interaction.guild
-                memberid = interaction.user.id
-                member = interaction.user
-                await cur.execute("SELECT categoryID, thema, roleID FROM ticketsystem WHERE channelID = (%s)",
-                                  interaction.channel.id)
-                result = await cur.fetchall()
-                for eintrag in result:
-                    categoryID = eintrag[0]
-                    thema = eintrag[1]
-                    roleID = eintrag[2]
-                    suprole = guild.get_role(roleID)
-                    category = discord.utils.get(guild.categories, id=categoryID)
-                    send2 = interaction.response.send_message
-                    overwrites = {
-                        interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                        interaction.user: discord.PermissionOverwrite(view_channel=True),
-                        interaction.guild.me: discord.PermissionOverwrite(view_channel=True),
-                        suprole: discord.PermissionOverwrite(view_channel=True, send_messages=True)
-                    }
-                    for channel in category.text_channels:
-                        if str(memberid) == channel.topic:
-                            await interaction.response.send_message("<:Astra_x:1141303954555289600> **Du hast bereits ein offenes Ticket.**", ephemeral=True)
-                            return
-                        else:
-                            overwrites = {
-                                interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                                interaction.user: discord.PermissionOverwrite(view_channel=True),
-                                interaction.guild.me: discord.PermissionOverwrite(view_channel=True),
-                                suprole: discord.PermissionOverwrite(view_channel=True, send_messages=True)
-                            }
-                    ticketchannel = await interaction.guild.create_text_channel(
-                        f'ticket-{interaction.user.name}',
-                        category=category, overwrites=overwrites,
-                        topic=f"{member.id}")
-                    await interaction.response.send_message(
-                        f"<:Astra_accept:1141303821176422460> **Dein Ticket: {ticketchannel.mention} wurde erstellt.**",
-                        ephemeral=True)
-                    butterfly = interaction.client.get_emoji(1017431196378083338)
-                    embed = discord.Embed(title=f"Ticket von {member.name}",
-                                                  description=f"Hallo, {member.mention} ein Teammitglied wird sich bald um dich kümmern. Bitte beschreibe in dieser Zeit dein Problem.",
-                                                  colour=discord.Colour.blue())
-                    embed.set_author(name=member, icon_url=member.avatar)
-                    embed.add_field(name="Thema", value=thema)
-                    embed.add_field(name="Geclaimed von", value="Nicht geclaimed")
-                    msg = await ticketchannel.send(f"{suprole.mention} | {interaction.user.mention}", embed=embed,
-                                                   view=ticket_buttons())
-                    await cur.execute(
-                        "INSERT INTO ticketsystem_channels(guildID, channelID, msgID, opened, claimed, closed, time) VALUES(%s, %s, %s, %s, %s, %s, %s)",
-                        (guild.id, ticketchannel.id, msg.id, interaction.user.id, "Not Set", "Not Set",
-                         discord.utils.format_dt(ticketchannel.created_at, 'F')))
-                    await cur.execute("UPDATE ticketsystem_channels SET opened = (%s) WHERE channelID = (%s)",
-                                      (member.id, ticketchannel.id))
-                    await cur.execute("UPDATE ticketsystem_channels SET msgID = (%s) WHERE channelID = (%s)",
-                                      (msg.id, ticketchannel.id))
+async def ensure_extra_tables(pool):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(CREATE_CONFIG)
+            await cur.execute(CREATE_AUTOCLOSE)
 
-@app_commands.guild_only()
-class Ticket(app_commands.Group):
-    def __init__(self, bot):
-        self.bot = bot  # <--- Hinzufügen!
-        super().__init__(
-            name="ticket",
-            description="Alles rund ums Ticketsystem."
+async def get_guild_config(pool, guild_id: int) -> dict:
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT autoclose_hours, remind_minutes, reopen_hours, ping_throttle_minutes FROM ticket_config WHERE guildID=%s", (guild_id,))
+            row = await cur.fetchone()
+            if not row:
+                await cur.execute("INSERT INTO ticket_config (guildID) VALUES (%s)", (guild_id,))
+                return DEFAULT_CFG.copy()
+    return dict(autoclose_hours=row[0], remind_minutes=row[1], reopen_hours=row[2], ping_throttle_minutes=row[3])
+
+async def set_guild_config(pool, guild_id: int, **kwargs):
+    fields = []
+    vals: List = []
+    for k, v in kwargs.items():
+        if k in DEFAULT_CFG:
+            fields.append(f"{k}=%s")
+            vals.append(int(v))
+    if not fields:
+        return
+    vals.append(guild_id)
+    q = f"UPDATE ticket_config SET {', '.join(fields)} WHERE guildID=%s"
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(q, tuple(vals))
+
+# =========================================================
+#                 SETUP WIZARD (VIEWS/MODAL)
+# =========================================================
+
+class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
+    def __init__(self, cb_submit):
+        super().__init__(timeout=180)
+        self._cb_submit = cb_submit
+        self.inp_title = discord.ui.TextInput(
+            label="Panel-Titel",
+            placeholder="z. B. Support, Teamkontakt, Bewerben …",
+            max_length=100,
+            required=True,
         )
+        self.inp_desc = discord.ui.TextInput(
+            label="Panel-Beschreibung",
+            style=discord.TextStyle.paragraph,
+            placeholder="Beschreibe kurz, wofür dieses Ticket gedacht ist.",
+            max_length=1024,
+            required=True,
+        )
+        self.add_item(self.inp_title)
+        self.add_item(self.inp_desc)
 
-    @app_commands.command(name="setup", description="Erstelle ein Ticket-Panel.")
-    @app_commands.describe(channel="Kanal, in dem das Ticket-Panel gesendet werden soll.")
-    @app_commands.describe(title="Titel des Ticket-Panels.")
-    @app_commands.describe(description="Beschreibung des Ticket-Panels.")
-    @app_commands.describe(supportrole="Rolle, die Zugriff auf Tickets haben soll.")
-    @app_commands.describe(categorie="Kategorie, in der die Tickets erstellt werden.")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_setup(self, interaction: discord.Interaction, channel: discord.TextChannel, title: str, description: str, supportrole: discord.Role, categorie: discord.CategoryChannel):
-        """Erstelle ein Ticket-Panel."""
-        async with self.bot.pool.acquire() as conn:
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
+
+
+class SetupWizardView(discord.ui.View):
+    """Geführter Wizard: Kanal/Kategorie/Rolle → Modal → Erstellen"""
+
+    def __init__(self, bot: commands.Bot, invoker: discord.User):
+        super().__init__(timeout=600)
+        self.bot = bot
+        self.invoker = invoker
+
+        # State
+        self.target_channel: Optional[discord.TextChannel] = None
+        self.category: Optional[discord.CategoryChannel] = None
+        self.role: Optional[discord.Role] = None
+        self.panel_title: Optional[str] = None
+        self.panel_desc: Optional[str] = None
+
+        self.btn_next.disabled = True
+        self.btn_create.disabled = True
+
+    # ---------- Selects ----------
+
+    @discord.ui.channel_select(
+        placeholder="Wähle Ziel-Kanal (Text)",
+        channel_types=[discord.ChannelType.text],
+        min_values=1, max_values=1,
+        custom_id="ticket_setup:channel"
+    )
+    async def sel_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.target_channel = select.values[0]  # type: ignore
+        await self._refresh(interaction)
+
+    @discord.ui.channel_select(
+        placeholder="Wähle Ticket-Kategorie",
+        channel_types=[discord.ChannelType.category],
+        min_values=1, max_values=1,
+        custom_id="ticket_setup:category"
+    )
+    async def sel_category(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.category = select.values[0]  # type: ignore
+        await self._refresh(interaction)
+
+    @discord.ui.role_select(
+        placeholder="Wähle Support-Rolle",
+        min_values=1, max_values=1,
+        custom_id="ticket_setup:role"
+    )
+    async def sel_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
+        self.role = select.values[0]
+        await self._refresh(interaction)
+
+    # ---------- Buttons ----------
+
+    @discord.ui.button(label="Weiter (Titel & Beschreibung)", style=discord.ButtonStyle.blurple,
+                       custom_id="ticket_setup:next")
+    async def btn_next(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.user.id != self.invoker.id:
+            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+        await interaction.response.send_modal(PanelTextModal(self._after_texts))
+
+    @discord.ui.button(label="Erstellen", style=discord.ButtonStyle.green,
+                       custom_id="ticket_setup:create")
+    async def btn_create(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.user.id != self.invoker.id:
+            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+
+        assert self.target_channel and self.category and self.role and self.panel_title and self.panel_desc
+
+        # DB: ticketsystem
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
                 await cur.execute(
                     "INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID) VALUES(%s, %s, %s, %s, %s)",
-                    (interaction.guild.id, channel.id, title, supportrole.id, categorie.id))
-                embed = discord.Embed(title=title,
-                                      description=description,
-                                      colour=discord.Colour.blue())
-                embed.set_thumbnail(url=interaction.guild.icon.url)
-                embed.set_footer(text="Klicke auf den Button um ein Ticket zu erstellen!",
-                                 icon_url=interaction.guild.icon)
-                await channel.send(embed=embed, view=ticket_open(bot=self.bot))
-                em = discord.Embed(title="Ticketsystem", description="Dein Panel wurde erstellt",
-                                   colour=discord.Colour.blue())
-                em.add_field(name="Kanal:", value=channel.mention)
-                em.add_field(name="Embed-Tiitel:", value=title, inline=False)
-                em.add_field(name="Embed-Beschreibung", value=description, inline=True)
-                em.add_field(name="Support-Rolle:", value=supportrole.mention, inline=True)
-                em.add_field(name="Ticket-Kategorie:", value=categorie.name, inline=False)
-                await interaction.response.send_message(f"{interaction.user.mention} | Dein Panel wurde erstellt.",
-                                                        embed=em, ephemeral=True)
+                    (interaction.guild.id, self.target_channel.id, self.panel_title, self.role.id, self.category.id),
+                )
 
-    @app_commands.command(name="löschen", description="Lösche ein Ticket-Panel.")
-    @app_commands.describe(channel="Der Kanal, in dem sich das Ticket-Panel befindet.")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_delete(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        """Lösche ein Ticket-Panel."""
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("DELETE FROM ticketsystem WHERE channelID = (%s)", (channel.id))
-                await interaction.response.send_message(
-                    "<:Astra_accept:1141303821176422460> **Das Ticket-Panel wurde gelöscht.**", ephemeral=True)
+        # Panel posten
+        panel = mk_embed(
+            title=self.panel_title,
+            description=self.panel_desc,
+            color=ASTRA_BLUE,
+            thumb=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None,
+            footer="Klicke auf den Button, um ein Ticket zu erstellen!",
+        )
+        await self.target_channel.send(embed=panel, view=TicketOpenView(self.bot))
 
-    @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels deines Servers auf.")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_list(self, interaction: discord.Interaction):
-        """Listet alle Ticket-Panels deines Servers auf."""
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    f"SELECT channelID, thema FROM ticketsystem WHERE guildID = (%s)", (interaction.guild.id,))
-                result = await cursor.fetchall()
-                if not result:
-                    await interaction.response.send_message(
-                        "<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**",
-                        ephemeral=True)
-                if result:
+        done = mk_embed(
+            title="✅ Ticket-Panel erstellt",
+            description=(
+                f"**Kanal:** {self.target_channel.mention}\n"
+                f"**Kategorie:** {self.category.name}\n"
+                f"**Support-Rolle:** {self.role.mention}\n\n"
+                "Du kannst diesen Wizard jetzt schließen."
+            ),
+            color=discord.Colour.green(),
+        )
+        await interaction.response.edit_message(embed=done, view=None)
 
-                    embed = discord.Embed(title="Aktuelle Ticket-Panels",
-                                          description=f"Um Ticket-Panels zu löschen nutze `/ticket delete`.",
-                                          color=discord.Color.green())
+    @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
+                       custom_id="ticket_setup:cancel")
+    async def btn_cancel(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if interaction.user.id != self.invoker.id:
+            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+        await interaction.response.edit_message(
+            embed=mk_embed(title="❌ Abgebrochen", description="Der Setup-Wizard wurde beendet."),
+            view=None
+        )
 
-                    for eintrag in result:
-                        channelID = eintrag[0]
-                        thema = eintrag[1]
+    # ---------- Helpers ----------
 
-                        try:
-                            ch = interaction.guild.get_channel(int(channelID))
-                        except:
-                            await interaction.response.send_message(
-                                "<:Astra_x:1141303954555289600> **Keine Ticket-Panels in diesem Server aktiv.**",
-                                ephemeral=True)
+    async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
+        self.panel_title = title.strip()
+        self.panel_desc = desc.strip()
+        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
+        await self._refresh(interaction)
 
-                        embed.add_field(name=ch.mention, value=thema, inline=True)
-                    await interaction.response.send_message(embed=embed)
+    async def _refresh(self, interaction: discord.Interaction):
+        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
 
-    @app_commands.command(name="log", description="Richte ein Ticket-Log für deinen Server ein.")
-    @app_commands.describe(argument="Einschalten oder Ausschalten.")
-    @app_commands.describe(channel="Der Kanal, in dem Ticket-Logs gesendet werden sollen.")
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
-    async def ticketlog(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten'], channel: discord.TextChannel):
-        """Setup a Ticketlog for your Server!"""
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                if argument == "Einschalten":
-                    await cursor.execute(f"SELECT channelID FROM ticketlog WHERE guildID = (%s)",
-                                         (interaction.guild.id))
-                    server2 = await cursor.fetchone()
-                    await cursor.execute(f"SELECT guildID FROM ticketlog WHERE guildID = (%s)", (channel.id))
-                    channel2 = await cursor.fetchone()
-                    if server2 is None and channel2 is None:
-                        await cursor.execute("INSERT INTO ticketlog (guildID, channelID) VALUES (%s, %s)",
-                                             (interaction.guild.id, channel.id))
+        lines = []
+        lines.append("**So funktioniert's:**")
+        lines.append("1️⃣ Wähle **Ziel-Kanal**, **Kategorie** und **Support-Rolle** über die Menüs.")
+        lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
+        lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
+        lines.append("**Aktuelle Auswahl:**")
+        lines.append(f"• Kanal: {self.target_channel.mention if self.target_channel else '—'}")
+        lines.append(f"• Kategorie: {self.category.name if self.category else '—'}")
+        lines.append(f"• Support-Rolle: {self.role.mention if self.role else '—'}")
+        if self.panel_title or self.panel_desc:
+            lines.append(f"• Titel: {self.panel_title or '—'}")
+            if self.panel_desc:
+                short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
+                lines.append(f"• Beschreibung: {short}")
+            else:
+                lines.append("• Beschreibung: —")
 
-                        embed1 = discord.Embed(title="Ticket-Log Aktiviert",
-                                               description=f"Der Ticket-Log wird in {channel.mention} stattfinden.",
-                                               color=discord.Color.blue())
-                        await interaction.response.send_message(embed=embed1)
+        embed = mk_embed(
+            title="🎟️ Ticket-Setup-Wizard",
+            description="\n".join(lines),
+            color=ASTRA_BLUE,
+        )
 
-                    else:
-                        try:
-                            ch = interaction.guild.get_channel(int(server2[0]))
-                        except:
-                            return
-                        embed = discord.Embed(title="Der Ticket-Log ist bereits aktiv",
-                                              description=f"Um den Ticket-Log zu ändern nutze `/ticket log`.",
-                                              color=discord.Color.green())
-                        embed.add_field(name="Kanal", value=ch, inline=False)
-                        await interaction.response.send_message(embed=embed)
-                elif argument == "Ausschalten":
-                    await cursor.execute(f"SELECT channelID FROM ticketlog WHERE guildID = (%s)",
-                                         (interaction.guild.id))
-                    result = await cursor.fetchone()
-                    if result is None:
-                        await interaction.response.send_message(
-                            "<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**",
-                            ephemeral=True)
-                    if result is not None:
-                        (channelID,) = result
-                        if channel.id == channelID:
-                            await cursor.execute(
-                                f"DELETE FROM ticketlog WHERE channelID = (%s) AND guildID = (%s)",
-                                (channel.id, interaction.guild.id))
-                            await interaction.response.send_message(
-                                "<:Astra_accept:1141303821176422460> **Der Ticket-Log wurde erfolgreich für diesen Server deaktiviert.**",
-                                ephemeral=True)
-                        else:
-                            await interaction.response.send_message(
-                                "<:Astra_x:1141303954555289600> **Der Ticket-Log ist für diesen Server bereits deaktiviert.**",
-                                ephemeral=True)
-                            return
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
 
-class ticket(commands.Cog):
+# =========================================================
+#                  IN-TICKET VIEWS (CLAIM/CLOSE)
+# =========================================================
 
-    def __init__(self, bot):
+class ReopenView(discord.ui.View):
+    """Button im Log, um innerhalb X Stunden das Ticket neu zu öffnen."""
+    def __init__(self, bot: commands.Bot, guild_id: int, opener_id: int, thema: str, category_id: int, role_id: int, expires_ts: int):
+        super().__init__(timeout=expires_ts - int(discord.utils.utcnow().timestamp()))
         self.bot = bot
+        self.guild_id = guild_id
+        self.opener_id = opener_id
+        self.thema = thema
+        self.category_id = category_id
+        self.role_id = role_id
+        self.expires_ts = expires_ts
+
+    @discord.ui.button(label="Ticket erneut öffnen", style=discord.ButtonStyle.green, emoji="🔁", custom_id="ticket:reopen")
+    async def reopen(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        now = int(discord.utils.utcnow().timestamp())
+        if now > self.expires_ts:
+            return await interaction.response.send_message("Reopen abgelaufen.", ephemeral=True)
+
+        guild = interaction.client.get_guild(self.guild_id)
+        if not guild:
+            return await interaction.response.send_message("Guild nicht gefunden.", ephemeral=True)
+
+        opener = guild.get_member(self.opener_id) or interaction.client.get_user(self.opener_id)
+        category = guild.get_channel(self.category_id)
+        role = guild.get_role(self.role_id)
+        if not isinstance(category, discord.CategoryChannel):
+            return await interaction.response.send_message("Kategorie existiert nicht mehr.", ephemeral=True)
+
+        # Channel erstellen
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+        }
+        if opener:
+            overwrites[opener] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+
+        new_channel = await guild.create_text_channel(
+            name=f"ticket-{sanitize_filename(opener.name if opener else 'user')}",
+            category=category,
+            overwrites=overwrites,
+            topic=str(self.opener_id),
+            reason="Ticket reopen",
+        )
+
+        # Begrüßungs-Embed
+        e = mk_embed(
+            title=f"Ticket von {fmt_user(opener) if opener else 'User'}",
+            description=f"Ticket wurde erneut geöffnet. Bitte schildere dein Anliegen erneut.",
+            color=ASTRA_BLUE,
+        )
+        e.add_field(name="Thema", value=self.thema or "—")
+        e.add_field(name="Geclaimed von", value="Nicht geclaimed")
+        msg = await new_channel.send(f"{role.mention if role else ''} {opener.mention if opener else ''}".strip(), embed=e, view=TicketButtons(self.bot))
+
+        # DB anlegen
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT INTO ticketsystem_channels(guildID, channelID, msgID, opened, claimed, closed, time) "
+                    "VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    (guild.id, new_channel.id, msg.id, self.opener_id, "Not Set", "Not Set", discord.utils.format_dt(new_channel.created_at, "F")),
+                )
+
+        await interaction.response.send_message(f"✅ Ticket neu geöffnet: {new_channel.mention}", ephemeral=True)
+
+
+class TicketButtons(discord.ui.View):
+    def __init__(self, bot: commands.Bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(label="Schließen", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket:close")
+    async def close_ticket(self, interaction: discord.Interaction, _button: discord.Button):
+        channel: discord.TextChannel = interaction.channel  # type: ignore
+        guild = interaction.guild
+        user = interaction.user
+
+        # Support-Rolle für diese Kategorie
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT roleID, thema FROM ticketsystem WHERE categoryID=%s", (channel.category.id,))
+                row = await cur.fetchone()
+        if not row:
+            return await interaction.response.send_message("Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
+        role_id, thema = int(row[0]), row[1]
+        role = guild.get_role(role_id)
+        if role not in user.roles:
+            return await interaction.response.send_message("Nur Mitglieder mit der Support-Rolle dürfen Tickets schließen.", ephemeral=True)
+
+        # Grund per Modal
+        class CloseReason(discord.ui.Modal, title="Ticket schließen"):
+            reason = discord.ui.TextInput(label="Schließ-Grund (optional)", style=discord.TextStyle.paragraph, required=False, max_length=500)
+            async def on_submit(self, inter: discord.Interaction):
+                await self._do_close(inter, str(self.reason.value))
+
+            async def _do_close(self, inter: discord.Interaction, reason_text: str):
+                # DB-Infos laden
+                async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                    async with conn.cursor() as cur:
+                        await cur.execute("SELECT msgID, opened, claimed, time FROM ticketsystem_channels WHERE channelID=%s", (channel.id,))
+                        row2 = await cur.fetchone()
+                        if not row2:
+                            return await inter.response.send_message("Interner Fehler (kein DB-Eintrag).", ephemeral=True)
+                        msg_id, opened_id, claimed, time_open = row2
+                        await cur.execute("UPDATE ticketsystem_channels SET closed=%s WHERE channelID=%s", (inter.user.id, channel.id))
+
+                        # Log-Kanal
+                        await cur.execute("SELECT channelID FROM ticketlog WHERE guildID=%s", (guild.id,))
+                        logrow = await cur.fetchone()
+
+                opener = inter.client.get_user(int(opened_id))
+                claimer = None if claimed == "Not Set" else inter.client.get_user(int(claimed))
+                closer = inter.user
+
+                # Transkript (TXT + HTML)
+                txt_name = f"{channel.id}.log"
+                html_name = f"{sanitize_filename(channel.name)}.html"
+                txt_buf = io.StringIO()
+                txt_buf.write(f"Ticket: {channel.name}\nUser: {fmt_user(opener)} ({opener.id})\nModerator: {fmt_user(claimer) if claimer else 'Keiner'}\n\n")
+                html_buf = io.StringIO()
+                html_buf.write("<!doctype html><meta charset='utf-8'><title>Ticket Transcript</title>")
+                html_buf.write("<style>body{font-family:system-ui,Segoe UI,Arial;max-width:900px;margin:20px auto;padding:0 12px;} .msg{margin:10px 0;padding:10px;border-radius:10px;background:#f5f7fb} .meta{font-size:12px;color:#555} .author{font-weight:600} pre{white-space:pre-wrap;}</style>")
+                html_buf.write(f"<h1>Ticket: {html.escape(channel.name)}</h1>")
+                html_buf.write(f"<p><b>User:</b> {html.escape(fmt_user(opener))} ({opener.id}) &nbsp; <b>Moderator:</b> {html.escape(fmt_user(claimer)) if claimer else 'Keiner'}</p>")
+
+                async for msg in channel.history(limit=None, oldest_first=True):
+                    created = msg.created_at.strftime('%d.%m.%Y, %H:%M')
+                    content = msg.content or ""
+                    content = html.escape(content)
+                    html_buf.write("<div class='msg'>")
+                    html_buf.write(f"<div class='meta'><span class='author'>{html.escape(fmt_user(msg.author))}</span> · {created}</div>")
+                    if content:
+                        html_buf.write(f"<pre>{content}</pre>")
+                    if msg.attachments:
+                        html_buf.write("<div>Anhänge:<ul>")
+                        for a in msg.attachments:
+                            html_buf.write(f"<li><a href='{html.escape(a.url)}'>{html.escape(a.filename)}</a></li>")
+                        html_buf.write("</ul></div>")
+                    html_buf.write("</div>")
+                    txt_buf.write(f"{created} - {fmt_user(msg.author)}: {msg.content}\n")
+
+                txt_bytes = io.BytesIO(txt_buf.getvalue().encode("utf-8"))
+                html_bytes = io.BytesIO(html_buf.getvalue().encode("utf-8"))
+
+                # Log versenden + Reopen-Button
+                if logrow:
+                    log_channel = inter.client.get_channel(int(logrow[0]))
+                    emb = mk_embed(
+                        title="Ticket geschlossen",
+                        description=f"Transkript für `{channel.name}`",
+                        color=ASTRA_BLUE,
+                    )
+                    emb.add_field(name="Geöffnet von", value=opener.mention, inline=False)
+                    emb.add_field(name="Geschlossen von", value=closer.mention, inline=False)
+                    emb.add_field(name="Geclaimed von", value=(claimer.mention if claimer else "Nicht geclaimed"), inline=False)
+                    emb.add_field(name="Geöffnet am", value=time_open, inline=False)
+                    emb.add_field(name="Thema", value=thema or "—", inline=False)
+                    if reason_text:
+                        emb.add_field(name="Grund", value=reason_text, inline=False)
+
+                    cfg = await get_guild_config(self.bot.pool, guild.id)  # type: ignore[attr-defined]
+                    expires_ts = int(discord.utils.utcnow().timestamp()) + int(cfg.get("reopen_hours", 24)) * 3600
+                    await log_channel.send(
+                        embed=emb,
+                        files=[
+                            discord.File(fp=txt_bytes, filename=txt_name, description="Text-Transkript"),
+                            discord.File(fp=html_bytes, filename=html_name, description="HTML-Transkript"),
+                        ],
+                        view=ReopenView(self.bot, guild.id, int(opened_id), thema, channel.category.id, role_id, expires_ts),
+                    )
+
+                await inter.response.send_message("Das Ticket wird in **5 Sekunden** geschlossen …")
+                await asyncio.sleep(5)
+                try:
+                    await channel.delete()
+                finally:
+                    async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                        async with conn.cursor() as cur:
+                            await cur.execute("DELETE FROM ticketsystem_channels WHERE channelID=%s AND guildID=%s", (channel.id, guild.id))
+                            await cur.execute("DELETE FROM ticket_autoclose_state WHERE channelID=%s", (channel.id,))
+
+        await interaction.response.send_modal(CloseReason())
+
+    @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, emoji="👮‍♂️", custom_id="ticket:claim")
+    async def claim(self, interaction: discord.Interaction, button: discord.Button):
+        channel: discord.TextChannel = interaction.channel  # type: ignore
+        guild = interaction.guild
+        member = interaction.user
+
+        # Support-Rolle check
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT roleID, thema FROM ticketsystem WHERE categoryID=%s", (channel.category.id,))
+                row = await cur.fetchone()
+        if not row:
+            return await interaction.response.send_message("Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
+
+        role_id, thematext = int(row[0]), row[1]
+        role = guild.get_role(role_id)
+        if role not in member.roles:
+            return await interaction.response.send_message("Nur Mitglieder mit der Support-Rolle dürfen Tickets claimen.", ephemeral=True)
+
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT msgID, opened FROM ticketsystem_channels WHERE channelID=%s", (channel.id,))
+                row2 = await cur.fetchone()
+                if not row2:
+                    return await interaction.response.send_message("Interner Fehler (kein DB-Eintrag).", ephemeral=True)
+                msg_id, opened_id = row2
+                await cur.execute("UPDATE ticketsystem_channels SET claimed=%s WHERE channelID=%s", (member.id, channel.id))
+
+        msg = await channel.fetch_message(int(msg_id))
+        opener = interaction.client.get_user(int(opened_id))
+
+        # Schönes Embed + Button lokal deaktivieren
+        embed = mk_embed(
+            title=f"Ticket von {opener.name}",
+            description=f"Hallo {opener.mention}, {member.mention} kümmert sich um dein Anliegen. "
+                        f"Bitte beschreibe kurz dein Problem.",
+            color=ASTRA_BLUE,
+        )
+        embed.set_author(name=str(opener), icon_url=opener.display_avatar.url)
+        embed.add_field(name="Thema", value=thematext or "—")
+        embed.add_field(name="Geclaimed von", value=member.mention)
+
+        button.disabled = True
+        await msg.edit(embed=embed, view=self)
+
+        # Bonus: Channel-Rename
+        try:
+            new_name = f"ticket-claimed-{sanitize_filename(member.name)}".lower()
+            await channel.edit(name=new_name, reason="Ticket geclaimed")
+        except Exception:
+            pass
+
+        await interaction.response.send_message(f"{member.mention} hat das Ticket geclaimed.", suppress_embeds=True)
+
+# =========================================================
+#                      PANEL VIEW
+# =========================================================
+
+class TicketOpenView(discord.ui.View):
+    def __init__(self, bot: commands.Bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    @discord.ui.button(label="Ticket öffnen", style=discord.ButtonStyle.green, emoji="🎫", custom_id="ticket_panel:open")
+    async def open_ticket(self, interaction: discord.Interaction, _button: discord.Button):
+        guild = interaction.guild
+        user = interaction.user
+        panel_channel: discord.TextChannel = interaction.channel  # type: ignore
+
+        # Panel-Config
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT categoryID, thema, roleID FROM ticketsystem WHERE channelID=%s", (panel_channel.id,))
+                row = await cur.fetchone()
+        if not row:
+            return await interaction.response.send_message("Für diesen Kanal ist kein Ticket-Panel hinterlegt.", ephemeral=True)
+
+        category_id, thema, role_id = int(row[0]), row[1], int(row[2])
+        category = guild.get_channel(category_id)
+        role = guild.get_role(role_id)
+        if not isinstance(category, discord.CategoryChannel):
+            return await interaction.response.send_message("Die hinterlegte Ticket-Kategorie existiert nicht mehr.", ephemeral=True)
+
+        # Schon ein Ticket?
+        for ch in category.text_channels:
+            if ch.topic == str(user.id):
+                return await interaction.response.send_message("Du hast bereits ein offenes Ticket in dieser Kategorie.", ephemeral=True)
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+            user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+        }
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+
+        new_channel = await guild.create_text_channel(
+            name=f"ticket-{sanitize_filename(user.name)}".lower(),
+            category=category,
+            overwrites=overwrites,
+            topic=str(user.id),
+            reason="Ticket eröffnet",
+        )
+
+        e = mk_embed(
+            title=f"Ticket von {user.name}",
+            description=f"Hallo {user.mention}! Ein Teammitglied meldet sich gleich. "
+                        f"Bitte beschreibe in der Zwischenzeit dein Anliegen.",
+            color=ASTRA_BLUE,
+        )
+        e.set_author(name=str(user), icon_url=user.display_avatar.url)
+        e.add_field(name="Thema", value=thema or "—")
+        e.add_field(name="Geclaimed von", value="Nicht geclaimed")
+
+        msg = await new_channel.send(
+            f"{role.mention if role else ''} {user.mention}".strip(),  # Ping nur beim Erstellen
+            embed=e,
+            view=TicketButtons(self.bot)
+        )
+
+        # DB
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT INTO ticketsystem_channels(guildID, channelID, msgID, opened, claimed, closed, time) "
+                    "VALUES(%s,%s,%s,%s,%s,%s,%s)",
+                    (guild.id, new_channel.id, msg.id, user.id, "Not Set", "Not Set", discord.utils.format_dt(new_channel.created_at, "F")),
+                )
+
+        await interaction.response.send_message(f"✅ Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
+
+# =========================================================
+#                     SLASH COMMANDS
+# =========================================================
+
+@app_commands.guild_only()
+class Ticket(app_commands.Group):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        super().__init__(name="ticket", description="Alles rund ums Ticketsystem.")
+
+    # Setup-Wizard
+    @app_commands.command(name="setup", description="Starte den Setup-Wizard für ein Ticket-Panel.")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
+    async def ticket_setup(self, interaction: discord.Interaction):
+        view = SetupWizardView(self.bot, interaction.user)
+        # Defaults: aktueller Kanal, erste Kategorie, höchste 'support'-Rolle
+        if isinstance(interaction.channel, discord.TextChannel):
+            view.target_channel = interaction.channel
+        if interaction.guild.categories:
+            view.category = interaction.guild.categories[0]
+        support = next((r for r in reversed(interaction.guild.roles) if "support" in r.name.lower()), None)
+        if support:
+            view.role = support
+        # Intro-Embed
+        intro = mk_embed(
+            title="🎟️ Ticket-Setup-Wizard",
+            description="Wähle **Kanal**, **Kategorie** und **Support-Rolle** unten. "
+                        "Klicke dann **Weiter**, um Titel & Beschreibung zu setzen.",
+        )
+        await interaction.response.send_message(embed=intro, view=view, ephemeral=True)
+
+    # Panels auflisten
+    @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
+    async def ticket_list(self, interaction: discord.Interaction):
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT channelID, thema FROM ticketsystem WHERE guildID=%s", (interaction.guild.id,))
+                rows = await cur.fetchall()
+        if not rows:
+            return await interaction.response.send_message("Keine Ticket-Panels aktiv.", ephemeral=True)
+
+        e = mk_embed(title="Aktive Ticket-Panels", color=discord.Colour.green())
+        for ch_id, thema in rows:
+            ch = interaction.guild.get_channel(int(ch_id))
+            e.add_field(name=ch.mention if ch else f"#{ch_id}", value=thema or "—", inline=False)
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+    # Panel löschen
+    @app_commands.command(name="löschen", description="Lösche ein Ticket-Panel.")
+    @app_commands.describe(channel="Kanal mit dem Ticket-Panel")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
+    async def ticket_delete(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("DELETE FROM ticketsystem WHERE channelID=%s AND guildID=%s", (channel.id, interaction.guild.id))
+        await interaction.response.send_message("✅ Panel gelöscht.", ephemeral=True)
+
+    # Ticket-Log konfigurieren
+    @app_commands.command(name="log", description="Richte einen Ticket-Log-Kanal ein/aus.")
+    @app_commands.describe(argument="Einschalten oder Ausschalten.", channel="Log-Kanal")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def ticketlog(self, interaction: discord.Interaction, argument: Literal["Einschalten", "Ausschalten"], channel: Optional[discord.TextChannel] = None):
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                if argument == "Einschalten":
+                    if not channel:
+                        return await interaction.response.send_message("Bitte einen Log-Kanal angeben.", ephemeral=True)
+                    await cur.execute("REPLACE INTO ticketlog (guildID, channelID) VALUES (%s,%s)", (interaction.guild.id, channel.id))
+                    await interaction.response.send_message(f"✅ Ticket-Log aktiviert: {channel.mention}", ephemeral=True)
+                else:
+                    await cur.execute("DELETE FROM ticketlog WHERE guildID=%s", (interaction.guild.id,))
+                    await interaction.response.send_message("✅ Ticket-Log deaktiviert.", ephemeral=True)
+
+    # Konfiguration: Auto-Close & Reminder & Reopen
+    @app_commands.command(name="config", description="Konfiguriere Auto-Close/Reminder/Reopen.")
+    @app_commands.describe(
+        autoclose_hours="Stunden bis Auto-Close (0=aus)",
+        remind_minutes="Minuten bis Reminder (0=aus)",
+        reopen_hours="Stunden, in denen Reopen möglich ist",
+        ping_throttle_minutes="(Reserviert) Minuten für Ping-Throttle"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def ticket_config(
+        self,
+        interaction: discord.Interaction,
+        autoclose_hours: Optional[int] = None,
+        remind_minutes: Optional[int] = None,
+        reopen_hours: Optional[int] = None,
+        ping_throttle_minutes: Optional[int] = None,
+    ):
+        updates = {}
+        for k, v in dict(
+            autoclose_hours=autoclose_hours,
+            remind_minutes=remind_minutes,
+            reopen_hours=reopen_hours,
+            ping_throttle_minutes=ping_throttle_minutes,
+        ).items():
+            if v is not None and v >= 0:
+                updates[k] = v
+        if updates:
+            await set_guild_config(self.bot.pool, interaction.guild.id, **updates)  # type: ignore[attr-defined]
+        cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
+
+        e = mk_embed(
+            title="⚙️ Ticket-Konfiguration",
+            description=(
+                f"**Auto-Close:** {cfg['autoclose_hours']} h\n"
+                f"**Reminder:** {cfg['remind_minutes']} min\n"
+                f"**Reopen:** {cfg['reopen_hours']} h\n"
+                f"**Ping-Throttle:** {cfg['ping_throttle_minutes']} min"
+            ),
+        )
+        await interaction.response.send_message(embed=e, ephemeral=True)
+
+# =========================================================
+#                         COG
+# =========================================================
+
+class TicketCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.autoclose_task.start()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.bot.add_view(ticket_open(bot=self.bot))
-        self.bot.add_view(ticket_buttons())
+        # Persistente Views
+        self.bot.add_view(TicketOpenView(self.bot))
+        self.bot.add_view(TicketButtons(self.bot))
+        # Tables sicherstellen
+        await ensure_extra_tables(self.bot.pool)  # type: ignore[attr-defined]
 
+    # ---------------- AUTO-CLOSE & REMINDER ----------------
+
+    @tasks.loop(minutes=5)
+    async def autoclose_task(self):
+        await self.bot.wait_until_ready()
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT guildID, channelID FROM ticketsystem_channels")
+                rows = await cur.fetchall()
+
+        for guild_id, channel_id in rows:
+            guild = self.bot.get_guild(int(guild_id))
+            if not guild:
+                continue
+            ch = guild.get_channel(int(channel_id))
+            if not isinstance(ch, discord.TextChannel):
+                continue
+
+            cfg = await get_guild_config(self.bot.pool, guild.id)  # type: ignore[attr-defined]
+            autoclose_h = int(cfg.get("autoclose_hours", 0))
+            remind_m = int(cfg.get("remind_minutes", 0))
+
+            if autoclose_h <= 0 and remind_m <= 0:
+                continue
+
+            try:
+                last_msg = await ch.fetch_message(ch.last_message_id) if ch.last_message_id else None
+            except Exception:
+                last_msg = None
+
+            last_time = last_msg.created_at if last_msg else ch.created_at
+            delta = discord.utils.utcnow() - last_time
+
+            # Reminder?
+            if remind_m > 0 and delta.total_seconds() > remind_m * 60:
+                # Check if reminded already
+                async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                    async with conn.cursor() as cur:
+                        await cur.execute("SELECT reminded FROM ticket_autoclose_state WHERE channelID=%s", (ch.id,))
+                        r = await cur.fetchone()
+                        if not r or r[0] == 0:
+                            await ch.send("⏰ Erinnerung: Bitte gib uns ein Update, sonst wird dieses Ticket automatisch geschlossen.")
+                            await cur.execute("REPLACE INTO ticket_autoclose_state (channelID, reminded) VALUES (%s, %s)", (ch.id, 1))
+
+            # Auto-Close?
+            if autoclose_h > 0 and delta.total_seconds() > autoclose_h * 3600:
+                # Simples Close ohne Log-Reopen (Task-Kontext) – ruft Button-Logik nicht erneut
+                try:
+                    await ch.send("🔒 Dieses Ticket wurde wegen Inaktivität geschlossen.")
+                except Exception:
+                    pass
+                try:
+                    await ch.delete()
+                except Exception:
+                    pass
+                async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                    async with conn.cursor() as cur:
+                        await cur.execute("DELETE FROM ticketsystem_channels WHERE channelID=%s", (ch.id,))
+                        await cur.execute("DELETE FROM ticket_autoclose_state WHERE channelID=%s", (ch.id,))
+
+    @autoclose_task.before_loop
+    async def before_autoclose(self):
+        await self.bot.wait_until_ready()
+
+# =========================================================
+#                      SETUP ENTRY
+# =========================================================
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ticket(bot))
+    await bot.add_cog(TicketCog(bot))
+    # Slash-Gruppe registrieren
     bot.tree.add_command(Ticket(bot))
