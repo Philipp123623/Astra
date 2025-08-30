@@ -16,15 +16,6 @@ ASTRA_BLUE = discord.Colour.blue()
 #                      HELPERS
 # =========================================================
 
-# ===== hübsche Labels -> interne Keys =====
-PRETTY_TO_INTERNAL = {
-    "⏰ Auto-Close": "autoclose_hours",
-    "🔔 Reminder": "remind_minutes",
-    "♻️ Reopen-Fenster": "reopen_hours",
-    "🚫 Ping-Throttle": "ping_throttle_minutes",
-}
-INTERNAL_TO_PRETTY = {v: k for k, v in PRETTY_TO_INTERNAL.items()}
-
 # Globale Presets (passen für alle Felder)
 # Values sind „Input-Strings“, die der Parser versteht.
 GLOBAL_PRESETS = [
@@ -75,10 +66,10 @@ def format_native_value(key: str, native: int) -> str:
 def human_cfg(cfg: dict) -> str:
     """Schöne Zusammenfassung fürs Embed."""
     lines = []
-    lines.append(f"⏰ **Auto-Close:** {format_native_value('autoclose_hours', cfg['autoclose_hours'])}")
-    lines.append(f"🔔 **Reminder:** {format_native_value('remind_minutes', cfg['remind_minutes'])}")
-    lines.append(f"♻️ **Reopen-Fenster:** {format_native_value('reopen_hours', cfg['reopen_hours'])}")
-    lines.append(f"🚫 **Ping-Throttle:** {format_native_value('ping_throttle_minutes', cfg['ping_throttle_minutes'])}")
+    lines.append(f"<:Astra_locked:1141824745243942912> **Auto-Close:** {format_native_value('autoclose_hours', cfg['autoclose_hours'])}")
+    lines.append(f"<:Astra_time:1141303932061233202> **Reminder:** {format_native_value('remind_minutes', cfg['remind_minutes'])}")
+    lines.append(f"<:Astra_file1:1141303837181886494> **Reopen-Fenster:** {format_native_value('reopen_hours', cfg['reopen_hours'])}")
+    lines.append(f"<:Astra_support:1141303923752325210> **Ping-Throttle:** {format_native_value('ping_throttle_minutes', cfg['ping_throttle_minutes'])}")
     return "\n".join(lines)
 
 def parse_duration_to_native(key: str, value: str, unit_hint: Optional[str]) -> int:
@@ -350,7 +341,7 @@ class SetupWizardView(discord.ui.View):
 
         # Abschlussmeldung
         done = mk_embed(
-            title="✅ Ticket-Panel erstellt",
+            title="Ticket-Panel erstellt",
             description=(
                 f"**Kanal:** <#{chan.id}>\n"
                 f"**Kategorie:** {cat.name}\n"
@@ -359,16 +350,16 @@ class SetupWizardView(discord.ui.View):
             ),
             color=discord.Colour.green(),
         )
-        await interaction.response.edit_message(embed=done, view=None)
+        await interaction.response.edit_message("<:Astra_accept:1141303821176422460> Das Ticket Panel wurde erfolgreich erstellt!", embed=done, view=None, ephemeral=True)
         return None
 
     @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
-                       custom_id="ticket_setup:cancel")
+                       custom_id="ticket_setup:cancel", emoji="<:Astra_x:1141303954555289600>")
     async def btn_cancel(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
             return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
         await interaction.response.edit_message(
-            embed=mk_embed(title="❌ Abgebrochen", description="Der Setup-Wizard wurde beendet."),
+            embed=mk_embed(title="<:Astra_x:1141303954555289600> Abgebrochen", description="Der Setup-Wizard wurde beendet."),
             view=None
         )
 
@@ -427,7 +418,7 @@ class SetupWizardView(discord.ui.View):
             else:
                 lines.append("• Beschreibung: Nicht gesetzt")
 
-        return mk_embed(title="🎟️ Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
+        return mk_embed(title="<:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
 
     async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
         self.panel_title = title.strip()
@@ -517,7 +508,8 @@ class ReopenView(discord.ui.View):
                     (guild.id, new_channel.id, msg.id, self.opener_id, "Not Set", "Not Set", discord.utils.format_dt(new_channel.created_at, "F")),
                 )
 
-        await interaction.response.send_message(f"✅ Ticket neu geöffnet: {new_channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Das folgende Ticket: {new_channel.mention} wurde wieder geöffnet.", ephemeral=True)
+        return None
 
 
 class TicketButtons(discord.ui.View):
@@ -525,7 +517,7 @@ class TicketButtons(discord.ui.View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="Schließen", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket:close")
+    @discord.ui.button(label="Schließen", style=discord.ButtonStyle.red, emoji="<:Astra_locked:1141824745243942912>", custom_id="ticket:close")
     async def close_ticket(self, interaction: discord.Interaction, _button: discord.Button):
         channel: discord.TextChannel = interaction.channel  # type: ignore
         guild = interaction.guild
@@ -698,7 +690,7 @@ class TicketButtons(discord.ui.View):
         await interaction.response.send_modal(CloseReason())
         return None
 
-    @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, emoji="👮‍♂️", custom_id="ticket:claim")
+    @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, emoji="<:Astra_user2:1141303942324699206>", custom_id="ticket:claim")
     async def claim(self, interaction: discord.Interaction, button: discord.Button):
         channel: discord.TextChannel = interaction.channel  # type: ignore
         guild = interaction.guild
@@ -710,19 +702,19 @@ class TicketButtons(discord.ui.View):
                 await cur.execute("SELECT roleID, thema FROM ticketsystem WHERE categoryID=%s", (channel.category.id,))
                 row = await cur.fetchone()
         if not row:
-            return await interaction.response.send_message("Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
 
         role_id, thematext = int(row[0]), row[1]
         role = guild.get_role(role_id)
         if role not in member.roles:
-            return await interaction.response.send_message("Nur Mitglieder mit der Support-Rolle dürfen Tickets claimen.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur Mitglieder mit der Support-Rolle dürfen Tickets claimen.", ephemeral=True)
 
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
                 await cur.execute("SELECT msgID, opened FROM ticketsystem_channels WHERE channelID=%s", (channel.id,))
                 row2 = await cur.fetchone()
                 if not row2:
-                    return await interaction.response.send_message("Interner Fehler (kein DB-Eintrag).", ephemeral=True)
+                    return await interaction.response.send_message("<:Astra_x:1141303954555289600> Interner Fehler (kein DB-Eintrag).", ephemeral=True)
                 msg_id, opened_id = row2
                 await cur.execute("UPDATE ticketsystem_channels SET claimed=%s WHERE channelID=%s", (member.id, channel.id))
 
@@ -761,7 +753,7 @@ class TicketOpenView(discord.ui.View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="Ticket öffnen", style=discord.ButtonStyle.green, emoji="🎫", custom_id="ticket_panel:open")
+    @discord.ui.button(label="Ticket öffnen", style=discord.ButtonStyle.green, emoji="<:Astra_ticket:1141833836204937347>", custom_id="ticket_panel:open")
     async def open_ticket(self, interaction: discord.Interaction, _button: discord.Button):
         guild = interaction.guild
         user = interaction.user
@@ -773,18 +765,18 @@ class TicketOpenView(discord.ui.View):
                 await cur.execute("SELECT categoryID, thema, roleID FROM ticketsystem WHERE channelID=%s", (panel_channel.id,))
                 row = await cur.fetchone()
         if not row:
-            return await interaction.response.send_message("Für diesen Kanal ist kein Ticket-Panel hinterlegt.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Für diesen Kanal ist kein Ticket-Panel hinterlegt.", ephemeral=True)
 
         category_id, thema, role_id = int(row[0]), row[1], int(row[2])
         category = guild.get_channel(category_id)
         role = guild.get_role(role_id)
         if not isinstance(category, discord.CategoryChannel):
-            return await interaction.response.send_message("Die hinterlegte Ticket-Kategorie existiert nicht mehr.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die hinterlegte Ticket-Kategorie existiert nicht mehr.", ephemeral=True)
 
         # Schon ein Ticket?
         for ch in category.text_channels:
             if ch.topic == str(user.id):
-                return await interaction.response.send_message("Du hast bereits ein offenes Ticket in dieser Kategorie.", ephemeral=True)
+                return await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast bereits ein offenes Ticket in dieser Kategorie.", ephemeral=True)
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -827,7 +819,9 @@ class TicketOpenView(discord.ui.View):
                     (guild.id, new_channel.id, msg.id, user.id, "Not Set", "Not Set", discord.utils.format_dt(new_channel.created_at, "F")),
                 )
 
-        await interaction.response.send_message(f"✅ Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
+        return None
+
 
 # =========================================================
 #                     SLASH COMMANDS
@@ -870,6 +864,7 @@ class Ticket(app_commands.Group):
             ch = interaction.guild.get_channel(int(ch_id))
             e.add_field(name=ch.mention if ch else f"#{ch_id}", value=thema or "—", inline=False)
         await interaction.response.send_message(embed=e, ephemeral=True)
+        return None
 
     # Panel löschen
     @app_commands.command(name="löschen", description="Lösche ein Ticket-Panel.")
@@ -880,7 +875,7 @@ class Ticket(app_commands.Group):
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
                 await cur.execute("DELETE FROM ticketsystem WHERE channelID=%s AND guildID=%s", (channel.id, interaction.guild.id))
-        await interaction.response.send_message("✅ Panel gelöscht.", ephemeral=True)
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Das Panel wurde erfolgreich in <#{channel.id}> erstellt!", ephemeral=True)
 
     # Ticket-Log konfigurieren
     @app_commands.command(name="log", description="Richte einen Ticket-Log-Kanal ein/aus.")
@@ -891,12 +886,14 @@ class Ticket(app_commands.Group):
             async with conn.cursor() as cur:
                 if argument == "Einschalten":
                     if not channel:
-                        return await interaction.response.send_message("Bitte einen Log-Kanal angeben.", ephemeral=True)
+                        return await interaction.response.send_message("<:Astra_x:1141303954555289600> Bitte gib einen Log-Kanal an.", ephemeral=True)
                     await cur.execute("REPLACE INTO ticketlog (guildID, channelID) VALUES (%s,%s)", (interaction.guild.id, channel.id))
-                    await interaction.response.send_message(f"✅ Ticket-Log aktiviert: {channel.mention}", ephemeral=True)
+                    await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Der Ticket-Log ist nun in: {channel.mention} aktiv.", ephemeral=True)
+                    return None
                 else:
                     await cur.execute("DELETE FROM ticketlog WHERE guildID=%s", (interaction.guild.id,))
-                    await interaction.response.send_message("✅ Ticket-Log deaktiviert.", ephemeral=True)
+                    await interaction.response.send_message("<:Astra_accept:1141303821176422460> Der Ticket Log ist nun nicht mehr aktiv.", ephemeral=True)
+                    return None
 
     # Konfiguration: Auto-Close & Reminder & Reopen
     @app_commands.command(name="config", description="Zeigt oder ändert Ticket-Einstellungen.")
@@ -911,7 +908,7 @@ class Ticket(app_commands.Group):
 
         if modus == "Anzeigen":
             e = mk_embed(
-                title="⚙️ Ticket-Konfiguration",
+                title="Ticket-Konfiguration",
                 description=human_cfg(cfg),
             )
             return await interaction.response.send_message(embed=e, ephemeral=True)
@@ -961,7 +958,7 @@ class Ticket(app_commands.Group):
 
                 await inter.response.edit_message(
                     embed=mk_embed(
-                        title="⚙️ Konfiguration ändern",
+                        title="Konfiguration ändern",
                         description=(
                             f"Ausgewählt: **{picked}**\n\n"
                             "Wähle einen der **Schnell-Werte** unten oder klicke **Eigenen Wert**.\n"
@@ -1009,7 +1006,7 @@ class Ticket(app_commands.Group):
 
             async def _apply(self, inter: discord.Interaction, value_str: str):
                 if not self.selected_key:
-                    return await inter.response.send_message("⚠️ Bitte zuerst eine Einstellung wählen.", ephemeral=True)
+                    return await inter.response.send_message("<:Astra_x:1141303954555289600> Bitte zuerst eine Einstellung wählen.", ephemeral=True)
                 try:
                     new_val = parse_duration_to_native(self.selected_key, value_str, None)
                 except Exception:
@@ -1023,7 +1020,7 @@ class Ticket(app_commands.Group):
                 cfg2 = await get_guild_config(self.bot.pool, inter.guild.id)  # type: ignore[attr-defined]
 
                 e = mk_embed(
-                    title="✅ Einstellung gespeichert",
+                    title="Einstellung gespeichert",
                     description=f"**{self.selected_key}** → `{format_native_value(self.selected_key, new_val)}`\n\n{human_cfg(cfg2)}",
                     color=discord.Colour.green(),
                 )
@@ -1031,7 +1028,7 @@ class Ticket(app_commands.Group):
                 return None
 
         e = mk_embed(
-            title="⚙️ Ticket-Konfiguration",
+            title="Ticket-Konfiguration",
             description=human_cfg(cfg),
         )
         await interaction.response.send_message(embed=e, view=ConfigView(self.bot), ephemeral=True)
