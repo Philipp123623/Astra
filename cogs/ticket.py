@@ -899,113 +899,107 @@ class Ticket(app_commands.Group):
                     await interaction.response.send_message("✅ Ticket-Log deaktiviert.", ephemeral=True)
 
     # Konfiguration: Auto-Close & Reminder & Reopen
-    @app_commands.command(name="config", description="Ticket-Einstellungen anzeigen oder ändern.")
-    @app_commands.describe(aktion="Anzeigen oder Setzen?")
-    @app_commands.choices(
-        aktion=[
-            app_commands.Choice(name="🔎 Anzeigen", value="show"),
-            app_commands.Choice(name="✏️ Setzen", value="set"),
-        ]
-    )
+    @app_commands.command(name="config", description="Zeigt oder ändert Ticket-Einstellungen.")
     @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_config(
-            self,
-            interaction: discord.Interaction,
-            aktion: app_commands.Choice[str],
-    ):
-        if aktion.value == "show":
-            cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
-            e = mk_embed(title="⚙️ Ticket-Konfiguration", description=human_cfg(cfg))
-            return await interaction.response.send_message(embed=e, ephemeral=True)
+    async def ticket_config(self, interaction: discord.Interaction):
+        cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
 
-        # == SET ==
-        class CfgModal(discord.ui.Modal, title="Einstellung ändern"):
-            def __init__(self):
-                super().__init__(timeout=180)
+        class ConfigView(discord.ui.View):
+            def __init__(self, bot):
+                super().__init__(timeout=120)
+                self.bot = bot
+                self.selected_key: Optional[str] = None
 
-                self.setting = discord.ui.Select(
-                    placeholder="Welche Einstellung?",
-                    min_values=1, max_values=1,
-                    options=[
-                        discord.SelectOption(label=pretty, value=internal)
-                        for pretty, internal in PRETTY_TO_INTERNAL.items()
-                    ],
+            @discord.ui.select(
+                placeholder="⚙️ Wähle eine Einstellung …",
+                min_values=1, max_values=1,
+                options=[
+                    discord.SelectOption(label="⏰ Auto-Close", value="autoclose_hours",
+                                         description="Wann Tickets automatisch geschlossen werden"),
+                    discord.SelectOption(label="🔔 Reminder", value="remind_minutes",
+                                         description="Nach wie viel Zeit eine Erinnerung geschickt wird"),
+                    discord.SelectOption(label="♻️ Reopen", value="reopen_hours",
+                                         description="Wie lange Tickets nach Schließen reopenbar sind"),
+                    discord.SelectOption(label="🚫 Ping-Throttle", value="ping_throttle_minutes",
+                                         description="Minuten zwischen erlaubten Pings"),
+                ]
+            )
+            async def select_setting(self, inter: discord.Interaction, select: discord.ui.Select):
+                self.selected_key = select.values[0]
+                pretty = select.values[0]
+
+                # Antwort mit Buttons
+                await inter.response.edit_message(
+                    embed=mk_embed(
+                        title="⚙️ Konfiguration ändern",
+                        description=f"Ausgewählt: **{select.values[0]}**\n\n"
+                                    "Wähle einen der Presets oder klicke „Eigenen Wert eingeben“.",
+                        color=ASTRA_BLUE
+                    ),
+                    view=self
                 )
 
-                self.presets = discord.ui.Select(
-                    placeholder="Preset wählen (optional) …",
-                    min_values=0, max_values=1,
-                    options=[discord.SelectOption(label=label, value=f"preset:{val}") for (label, val) in
-                             GLOBAL_PRESETS],
-                )
+            # Preset-Buttons
+            @discord.ui.button(label="15 Minuten", style=discord.ButtonStyle.secondary, custom_id="cfg:15m")
+            async def btn_15m(self, inter: discord.Interaction, _):
+                await self._apply(inter, "15m")
 
-                self.value = discord.ui.TextInput(
-                    label="Eigener Wert (optional)",
-                    placeholder="z. B. 90, 2h, 45m, 1h30m, 3d, 2w, 1w2d3h20m",
-                    required=False,
-                    max_length=32,
-                )
+            @discord.ui.button(label="1 Stunde", style=discord.ButtonStyle.secondary, custom_id="cfg:1h")
+            async def btn_1h(self, inter: discord.Interaction, _):
+                await self._apply(inter, "1h")
 
-                self.unit = discord.ui.Select(
-                    placeholder="Einheit für nackte Zahlen (optional)",
-                    min_values=0, max_values=1,
-                    options=[
-                        discord.SelectOption(label="Automatisch (native Einheit)", value="auto"),
-                        discord.SelectOption(label="Sekunden", value="s"),
-                        discord.SelectOption(label="Minuten", value="m"),
-                        discord.SelectOption(label="Stunden", value="h"),
-                        discord.SelectOption(label="Tage", value="d"),
-                        discord.SelectOption(label="Wochen", value="w"),
-                    ],
-                )
-                self.unit.default_values = ["auto"]
+            @discord.ui.button(label="1 Tag", style=discord.ButtonStyle.secondary, custom_id="cfg:1d")
+            async def btn_1d(self, inter: discord.Interaction, _):
+                await self._apply(inter, "1d")
 
-                self.add_item(self.setting)
-                self.add_item(self.presets)
-                self.add_item(self.value)
-                self.add_item(self.unit)
+            @discord.ui.button(label="1 Woche", style=discord.ButtonStyle.secondary, custom_id="cfg:1w")
+            async def btn_1w(self, inter: discord.Interaction, _):
+                await self._apply(inter, "1w")
 
-            async def on_submit(self, inter: discord.Interaction):
-                key = self.setting.values[0]
-                pretty = INTERNAL_TO_PRETTY[key]
+            @discord.ui.button(label="Eigenen Wert eingeben", style=discord.ButtonStyle.primary, custom_id="cfg:custom")
+            async def btn_custom(self, inter: discord.Interaction, _):
+                if not self.selected_key:
+                    return await inter.response.send_message("⚠️ Bitte zuerst eine Einstellung wählen.", ephemeral=True)
 
-                preset_choice = self.presets.values[0] if self.presets.values else None
-                unit_hint = None if not self.unit.values or self.unit.values[0] == "auto" else self.unit.values[0]
+                class ValueModal(discord.ui.Modal, title="Eigenen Wert setzen"):
+                    value = discord.ui.TextInput(
+                        label="Wert (z. B. 30m, 2h, 1d, 1w2d)",
+                        required=True,
+                        max_length=32,
+                    )
 
-                # Wert bestimmen
+                    async def on_submit(self, inter2: discord.Interaction):
+                        await self.view._apply(inter2, str(self.value.value))  # type: ignore
+
+                await inter.response.send_modal(ValueModal())
+
+            async def _apply(self, inter: discord.Interaction, value_str: str):
+                if not self.selected_key:
+                    return await inter.response.send_message("⚠️ Bitte zuerst eine Einstellung wählen.", ephemeral=True)
+
                 try:
-                    if preset_choice:
-                        raw = preset_choice.split(":", 1)[1]  # z.B. "2h" / "1d"
-                        native_val = parse_duration_to_native(key, raw, None)
-                    else:
-                        raw_in = str(self.value.value or "").strip()
-                        if not raw_in:
-                            return await inter.response.send_message(
-                                "❌ Bitte Preset **oder** eigenen Wert angeben.",
-                                ephemeral=True
-                            )
-                        native_val = parse_duration_to_native(key, raw_in, unit_hint)
+                    new_val = parse_duration_to_native(self.selected_key, value_str, None)
                 except Exception:
-                    return await inter.response.send_message("❌ Ungültiges Dauerformat.", ephemeral=True)
+                    return await inter.response.send_message(
+                        "❌ Ungültiges Format. Erlaubt: `30m`, `2h`, `1d`, `1w2d3h`", ephemeral=True)
 
-                if native_val < 0:
-                    return await inter.response.send_message("❌ Der Wert darf nicht negativ sein.", ephemeral=True)
+                await set_guild_config(self.bot.pool, inter.guild.id,
+                                       **{self.selected_key: new_val})  # type: ignore[attr-defined]
+                cfg2 = await get_guild_config(self.bot.pool, inter.guild.id)  # type: ignore[attr-defined]
 
-                # Speichern
-                await set_guild_config(self.bot.pool, inter.guild.id, **{key: native_val})  # type: ignore[attr-defined]
-                cfg = await get_guild_config(self.bot.pool, inter.guild.id)  # type: ignore[attr-defined]
-
-                # Bestätigung mit schöner Einheit
-                pretty_value = format_native_value(key, native_val)
                 e = mk_embed(
                     title="✅ Einstellung gespeichert",
-                    description=f"**{pretty}** → `{pretty_value}`\n\n{human_cfg(cfg)}",
+                    description=f"{self.selected_key} → `{format_native_value(self.selected_key, new_val)}`\n\n{human_cfg(cfg2)}",
                     color=discord.Colour.green(),
                 )
                 await inter.response.send_message(embed=e, ephemeral=True)
+                return None
 
-        await interaction.response.send_modal(CfgModal())
-        return None
+        e = mk_embed(
+            title="⚙️ Ticket-Konfiguration",
+            description=human_cfg(cfg),
+        )
+        await interaction.response.send_message(embed=e, view=ConfigView(self.bot), ephemeral=True)
 
 
 # =========================================================
