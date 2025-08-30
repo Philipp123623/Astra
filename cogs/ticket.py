@@ -340,17 +340,33 @@ class SetupWizardView(discord.ui.View):
         await chan.send(embed=panel, view=TicketOpenView(self.bot))
 
         # Abschlussmeldung
+        # Abschlussmeldung
         done = mk_embed(
             title="Ticket-Panel erstellt",
             description=(
-                f"**Kanal:** <#{chan.id}>\n"
-                f"**Kategorie:** {cat.name}\n"
-                f"**Support-Rolle:** {role.mention}\n\n"
-                "Du kannst diesen Wizard jetzt schließen."
+                f"Kanal: <#{chan.id}>\n"
+                f"Kategorie: {cat.name}\n"
+                f"Support-Rolle: {role.mention}\n\n"
+                "Der Setup-Wizard kann geschlossen werden."
             ),
             color=discord.Colour.green(),
         )
-        await interaction.response.edit_message(f"<:Astra_accept:1141303821176422460> Das Panel wurde erfolgreich in <#{chan.id}> erstellt!", embed=done, view=None, ephemeral=True)
+
+        # Die ursprüngliche (ephemere) Wizard-Nachricht aktualisieren
+        try:
+            await interaction.response.edit_message(
+                content=f"<:Astra_accept:1141303821176422460> Das Panel wurde in <#{chan.id}> erstellt!",
+                embed=done,
+                view=None,
+            )
+            return None
+        except discord.InteractionResponded:
+            # Falls bereits geantwortet wurde (z. B. durch vorherige Interaktionen)
+            await interaction.edit_original_response(
+                content=f"<:Astra_accept:1141303821176422460> Das Panel wurde in <#{chan.id}> erstellt!",
+                embed=done,
+                view=None,
+            )
         return None
 
     @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
