@@ -925,22 +925,22 @@ class Ticket(app_commands.Group):
                 min_values=1, max_values=1,
                 options=[
                     discord.SelectOption(
-                        label="⏰ Auto-Close",
+                        label="<:Astra_locked:1141824745243942912> Auto-Close",
                         value="autoclose_hours",
                         description="Nach wie viel Zeit Tickets automatisch geschlossen werden",
                     ),
                     discord.SelectOption(
-                        label="🔔 Reminder",
+                        label="<:Astra_time:1141303932061233202> Reminder",
                         value="remind_minutes",
                         description="Nach wie viel Zeit eine Erinnerung im Ticket gepostet wird",
                     ),
                     discord.SelectOption(
-                        label="♻️ Reopen",
+                        label="<:Astra_file1:1141303837181886494> Reopen",
                         value="reopen_hours",
                         description="Wie lange nach dem Schließen ein Reopen möglich ist",
                     ),
                     discord.SelectOption(
-                        label="🚫 Ping-Throttle",
+                        label="<:Astra_support:1141303923752325210> Ping-Throttle",
                         value="ping_throttle_minutes",
                         description="Mindestabstand zwischen erlaubten Pings (Spam-Schutz)",
                     ),
@@ -949,10 +949,10 @@ class Ticket(app_commands.Group):
             async def select_setting(self, inter: discord.Interaction, select: discord.ui.Select):
                 self.selected_key = select.values[0]
                 pretty_map = {
-                    "autoclose_hours": "⏰ Auto-Close",
-                    "remind_minutes": "🔔 Reminder",
-                    "reopen_hours": "♻️ Reopen",
-                    "ping_throttle_minutes": "🚫 Ping-Throttle",
+                    "autoclose_hours": "<:Astra_locked:1141824745243942912> Auto-Close",
+                    "remind_minutes": "<:Astra_time:1141303932061233202> Reminder",
+                    "reopen_hours": "<:Astra_file1:1141303837181886494> Reopen",
+                    "ping_throttle_minutes": "<:Astra_support:1141303923752325210> Ping-Throttle",
                 }
                 picked = pretty_map.get(self.selected_key, self.selected_key)
 
@@ -1011,7 +1011,7 @@ class Ticket(app_commands.Group):
                     new_val = parse_duration_to_native(self.selected_key, value_str, None)
                 except Exception:
                     return await inter.response.send_message(
-                        "❌ Ungültiges Format. Beispiele: `30m`, `2h`, `1d`, `1w2d3h20m10s`, `0` (Aus).",
+                        "<:Astra_x:1141303954555289600> Ungültiges Format. Beispiele: `30m`, `2h`, `1d`, `1w2d3h20m10s`, `0` (Aus).",
                         ephemeral=True
                     )
 
@@ -1105,14 +1105,14 @@ class TicketCog(commands.Cog):
                         await cur.execute("SELECT reminded FROM ticket_autoclose_state WHERE channelID=%s", (ch.id,))
                         r = await cur.fetchone()
                         if not r or r[0] == 0:
-                            await ch.send("⏰ Erinnerung: Bitte gib uns ein Update, sonst wird dieses Ticket automatisch geschlossen.")
+                            await ch.send("<:Astra_time:1141303932061233202> Erinnerung: Bitte gib uns ein Update, sonst wird dieses Ticket automatisch geschlossen.")
                             await cur.execute("REPLACE INTO ticket_autoclose_state (channelID, reminded) VALUES (%s, %s)", (ch.id, 1))
 
             # Auto-Close?
             if autoclose_h > 0 and delta.total_seconds() > autoclose_h * 3600:
                 # Simples Close ohne Log-Reopen (Task-Kontext) – ruft Button-Logik nicht erneut
                 try:
-                    await ch.send("🔒 Dieses Ticket wurde wegen Inaktivität geschlossen.")
+                    await ch.send("<:Astra_locked:1141824745243942912> Dieses Ticket wurde wegen Inaktivität geschlossen.")
                 except Exception:
                     pass
                 try:
