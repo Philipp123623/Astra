@@ -227,13 +227,39 @@ class SetupWizardView(discord.ui.View):
 
     def build_embed(self) -> discord.Embed:
         def lbl_channel(ch):
-            return ch.mention if isinstance(ch, discord.TextChannel) else "Nicht gesetzt"
+            if not ch:
+                return "Nicht gesetzt"
+            # Versuch 1: mention (hat sowohl TextChannel als auch AppCommandChannel)
+            m = getattr(ch, "mention", None)
+            if m:
+                return m
+            # Fallback: name + id
+            nm = getattr(ch, "name", None)
+            cid = getattr(ch, "id", None)
+            if nm and cid:
+                return f"#{nm} (ID: {cid})"
+            return "Nicht gesetzt"
 
         def lbl_cat(cat):
-            return cat.name if isinstance(cat, discord.CategoryChannel) else "Nicht gesetzt"
+            if not cat:
+                return "Nicht gesetzt"
+            # Kategorie kann auch AppCommandChannel(Category) sein
+            nm = getattr(cat, "name", None)
+            if nm:
+                return nm
+            return "Nicht gesetzt"
 
         def lbl_role(r):
-            return r.mention if isinstance(r, discord.Role) else "Nicht gesetzt"
+            if not r:
+                return "Nicht gesetzt"
+            m = getattr(r, "mention", None)
+            if m:
+                return m
+            nm = getattr(r, "name", None)
+            rid = getattr(r, "id", None)
+            if nm and rid:
+                return f"@{nm} (ID: {rid})"
+            return "Nicht gesetzt"
 
         lines = []
         lines.append("**So funktioniert's:**")
