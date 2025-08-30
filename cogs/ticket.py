@@ -407,16 +407,16 @@ class SetupWizardView(discord.ui.View):
         lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
         lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
         lines.append("**Aktuelle Auswahl:**")
-        lines.append(f"• Kanal: {lbl_channel(self.target_channel)}")
-        lines.append(f"• Kategorie: {lbl_cat(self.category)}")
-        lines.append(f"• Support-Rolle: {lbl_role(self.role)}")
+        lines.append(f"<:Astra_punkt:1141303896745201696> Kanal: {lbl_channel(self.target_channel)}")
+        lines.append(f"<:Astra_punkt:1141303896745201696> Kategorie: {lbl_cat(self.category)}")
+        lines.append(f"<:Astra_punkt:1141303896745201696> Support-Rolle: {lbl_role(self.role)}")
         if self.panel_title or self.panel_desc:
-            lines.append(f"• Titel: {self.panel_title or 'Nicht gesetzt'}")
+            lines.append(f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title or 'Nicht gesetzt'}")
             if self.panel_desc:
                 short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
-                lines.append(f"• Beschreibung: {short}")
+                lines.append(f"<:Astra_punkt:1141303896745201696> Beschreibung: {short}")
             else:
-                lines.append("• Beschreibung: Nicht gesetzt")
+                lines.append("<:Astra_punkt:1141303896745201696> Beschreibung: Nicht gesetzt")
 
         return mk_embed(title="<:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
 
@@ -838,9 +838,6 @@ class Ticket(app_commands.Group):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
         view = SetupWizardView(self.bot, interaction.user)
-        # KEINE Defaults setzen – alles bleibt None
-
-        # Embed aus dem View selbst generieren
         await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
 
     # Panels auflisten
