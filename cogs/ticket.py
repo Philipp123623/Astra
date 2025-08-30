@@ -255,36 +255,6 @@ class SetupWizardView(discord.ui.View):
         else:
             await interaction.response.edit_message(embed=embed, view=self)
 
-    async def _refresh(self, interaction: discord.Interaction):
-        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
-
-        lines = []
-        lines.append("**So funktioniert's:**")
-        lines.append("1️⃣ Wähle **Ziel-Kanal**, **Kategorie** und **Support-Rolle** über die Menüs.")
-        lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
-        lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
-        lines.append("**Aktuelle Auswahl:**")
-        lines.append(f"• Kanal: {self.target_channel.mention if self.target_channel else '—'}")
-        lines.append(f"• Kategorie: {self.category.name if self.category else '—'}")
-        lines.append(f"• Support-Rolle: {self.role.mention if self.role else '—'}")
-        if self.panel_title or self.panel_desc:
-            lines.append(f"• Titel: {self.panel_title or '—'}")
-            if self.panel_desc:
-                short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
-                lines.append(f"• Beschreibung: {short}")
-            else:
-                lines.append("• Beschreibung: —")
-
-        embed = mk_embed(
-            title="🎟️ Ticket-Setup-Wizard",
-            description="\n".join(lines),
-            color=ASTRA_BLUE,
-        )
-
-        if interaction.response.is_done():
-            await interaction.edit_original_response(embed=embed, view=self)
-        else:
-            await interaction.response.edit_message(embed=embed, view=self)
 
 # =========================================================
 #                  IN-TICKET VIEWS (CLAIM/CLOSE)
