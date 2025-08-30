@@ -139,7 +139,7 @@ class SetupWizardView(discord.ui.View):
     )
     async def sel_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
         self.target_channel = select.values[0]  # type: ignore
-        await self._refresh(interaction)
+        await self._redraw(interaction)
 
     @discord.ui.select(
         cls=discord.ui.ChannelSelect,
@@ -150,7 +150,7 @@ class SetupWizardView(discord.ui.View):
     )
     async def sel_category(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
         self.category = select.values[0]  # type: ignore
-        await self._refresh(interaction)
+        await self._redraw(interaction)
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
@@ -160,7 +160,7 @@ class SetupWizardView(discord.ui.View):
     )
     async def sel_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
         self.role = select.values[0]
-        await self._refresh(interaction)
+        await self._redraw(interaction)
 
     # ---------- Buttons ----------
 
@@ -176,23 +176,84 @@ class SetupWizardView(discord.ui.View):
     async def btn_create(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
             return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+
         assert self.target_channel and self.category and self.role and self.panel_title and self.panel_desc
-        # ... (Rest unverändert)
+
+        # DB schreiben + Panel posten (wie zuvor)
+        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID) VALUES(%s, %s, %s, %s, %s)",
+                    (interaction.guild.id, self.target_channel.id, self.panel_title, self.role.id, self.category.id),
+                )
+
+        panel = mk_embed(
+            title=self.panel_title,
+            description=self.panel_desc,
+            color=ASTRA_BLUE,
+            thumb=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None,
+            footer="Klicke auf den Button, um ein Ticket zu erstellen!",
+        )
+        await self.target_channel.send(embed=panel, view=TicketOpenView(self.bot))
+
+        done = mk_embed(
+            title="✅ Ticket-Panel erstellt",
+            description=(
+                f"**Kanal:** {self.target_channel.mention}\n"
+                f"**Kategorie:** {self.category.name}\n"
+                f"**Support-Rolle:** {self.role.mention}\n\n"
+                "Du kannst diesen Wizard jetzt schließen."
+            ),
+            color=discord.Colour.green(),
+        )
+        await interaction.response.edit_message(embed=done, view=None)
 
     @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
                        custom_id="ticket_setup:cancel")
     async def btn_cancel(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
             return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
-        await interaction.response.edit_message(embed=mk_embed(title="❌ Abgebrochen", description="Der Setup-Wizard wurde beendet."), view=None)
+        await interaction.response.edit_message(
+            embed=mk_embed(title="❌ Abgebrochen", description="Der Setup-Wizard wurde beendet."),
+            view=None
+        )
 
-    # ---------- Helpers ----------
+    # ---------- Helpers (umbenannt!) ----------
 
     async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
         self.panel_title = title.strip()
         self.panel_desc = desc.strip()
         self.btn_create.disabled = not (self.panel_title and self.panel_desc)
-        await self._refresh(interaction)
+        await self._redraw(interaction)
+
+    async def _redraw(self, interaction: discord.Interaction):
+        """Embed aktualisieren (Name bewusst NICHT '_refresh')."""
+        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
+
+        lines = []
+        lines.append("**So funktioniert's:**")
+        lines.append("1️⃣ Wähle **Ziel-Kanal**, **Kategorie** und **Support-Rolle** über die Menüs.")
+        lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
+        lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
+        lines.append("**Aktuelle Auswahl:**")
+        lines.append(f"• Kanal: {self.target_channel.mention if self.target_channel else '—'}")
+        lines.append(f"• Kategorie: {self.category.name if self.category else '—'}")
+        lines.append(f"• Support-Rolle: {self.role.mention if self.role else '—'}")
+        if self.panel_title or self.panel_desc:
+            lines.append(f"• Titel: {self.panel_title or '—'}")
+            if self.panel_desc:
+                short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
+                lines.append(f"• Beschreibung: {short}")
+            else:
+                lines.append("• Beschreibung: —")
+
+        embed = mk_embed(title="🎟️ Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
+
+        # Wenn bereits geantwortet wurde (häufig bei Component-Interaktionen), editieren
+        if interaction.response.is_done():
+            await interaction.edit_original_response(embed=embed, view=self)
+        else:
+            await interaction.response.edit_message(embed=embed, view=self)
 
     async def _refresh(self, interaction: discord.Interaction):
         self.btn_next.disabled = not (self.target_channel and self.category and self.role)
