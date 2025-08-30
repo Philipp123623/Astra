@@ -224,6 +224,7 @@ class SetupWizardView(discord.ui.View):
             color=discord.Colour.green(),
         )
         await interaction.response.edit_message(embed=done, view=None)
+        return None
 
     @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
                        custom_id="ticket_setup:cancel")
@@ -376,7 +377,7 @@ class TicketButtons(discord.ui.View):
 
             async def _do_close(self, inter: discord.Interaction, reason_text: str):
                 # DB-Infos laden
-                async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                async with inter.client.pool.acquire() as conn:
                     async with conn.cursor() as cur:
                         await cur.execute("SELECT msgID, opened, claimed, time FROM ticketsystem_channels WHERE channelID=%s", (channel.id,))
                         row2 = await cur.fetchone()
@@ -439,7 +440,7 @@ class TicketButtons(discord.ui.View):
                     if reason_text:
                         emb.add_field(name="Grund", value=reason_text, inline=False)
 
-                    cfg = await get_guild_config(self.bot.pool, guild.id)  # type: ignore[attr-defined]
+                    cfg = await get_guild_config(inter.client.pool, guild.id)
                     expires_ts = int(discord.utils.utcnow().timestamp()) + int(cfg.get("reopen_hours", 24)) * 3600
                     await log_channel.send(
                         embed=emb,
@@ -455,7 +456,7 @@ class TicketButtons(discord.ui.View):
                 try:
                     await channel.delete()
                 finally:
-                    async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
+                    async with inter.client.pool.acquire() as conn:
                         async with conn.cursor() as cur:
                             await cur.execute("DELETE FROM ticketsystem_channels WHERE channelID=%s AND guildID=%s", (channel.id, guild.id))
                             await cur.execute("DELETE FROM ticket_autoclose_state WHERE channelID=%s", (channel.id,))
