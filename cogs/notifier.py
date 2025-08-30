@@ -1,5 +1,7 @@
 import logging
 import os
+import html
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, Optional, Literal
 
@@ -76,6 +78,79 @@ def _format_iso8601_duration(iso: str) -> str:
     if hours:
         return f"{hours:d}:{minutes:02d}:{seconds:02d}"
     return f"{minutes:d}:{seconds:02d}"
+
+
+# --------- Pretty formatting helpers ---------
+
+def _format_int(n) -> str:
+    try:
+        return f"{int(n):,}".replace(",", ".")
+    except Exception:
+        return str(n)
+
+_LANG_MAP = {
+    "de": "Deutsch", "en": "Englisch", "en-gb": "Englisch (UK)", "en-us": "Englisch (US)",
+    "fr": "Französisch", "es": "Spanisch", "it": "Italienisch", "pt": "Portugiesisch",
+    "pt-br": "Portugiesisch (BR)", "nl": "Niederländisch", "sv": "Schwedisch",
+    "no": "Norwegisch", "da": "Dänisch", "fi": "Finnisch", "pl": "Polnisch",
+    "cs": "Tschechisch", "sk": "Slowakisch", "hu": "Ungarisch", "tr": "Türkisch",
+    "ru": "Russisch", "uk": "Ukrainisch", "zh": "Chinesisch", "ja": "Japanisch",
+    "ko": "Koreanisch"
+}
+def _format_lang(code: Optional[str]) -> str:
+    if not code:
+        return "—"
+    c = str(code).lower()
+    return _LANG_MAP.get(c, c)
+
+def _format_ts_utc_with_relative(iso: Optional[str]) -> str:
+    if not iso:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = now - dt
+        secs = int(delta.total_seconds())
+        if secs < 60:
+            rel = f"vor {secs} Sek."
+        elif secs < 3600:
+            rel = f"vor {secs//60} Min."
+        elif secs < 86400:
+            rel = f"vor {secs//3600} Std."
+        else:
+            rel = f"vor {secs//86400} Tagen"
+        return f"{dt:%Y-%m-%d %H:%M} UTC ({rel})"
+    except Exception:
+        return iso.replace("T", " ").replace("Z", " UTC")
+
+def _clean_youtube_description(desc: str) -> str:
+    """Normalisiert Zeilenumbrüche, entpackt HTML-Entities und entfernt überflüssige Leerzeilen."""
+    if not desc:
+        return ""
+    s = html.unescape(desc)
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    s = re.sub(r"\n{3,}", "\n\n", s)  # max. 1 Leerzeile
+    s = "\n".join(line.rstrip() for line in s.split("\n")).strip()
+    return s
+
+def _fit_description_for_embed(embed_title: str, description: str, fields: Dict[str, str]) -> str:
+    """
+    Kürzt description so, dass Discord-Limits (4096 pro description, 6000 gesamt pro Embed) eingehalten werden.
+    Hängt '...' an, wenn gekürzt wurde.
+    """
+    MAX_TOTAL = 6000
+    MAX_DESC = 4096
+    # Ungefähre Restberechnung: Titel + Summe Feldnamen/-werte + Footer-Text
+    FOOTER_TEXT = "Astra Notifier • Jetzt reinschauen!"
+    other_len = len(embed_title or "") + len(FOOTER_TEXT)
+    for k, v in (fields or {}).items():
+        other_len += len(str(k)) + len(str(v or ""))
+    remaining = max(0, min(MAX_DESC, MAX_TOTAL - other_len))
+    if len(description) <= remaining:
+        return description
+    if remaining <= 3:
+        return (description[:remaining]).rstrip()
+    return (description[: remaining - 3]).rstrip() + "..."
 
 
 class Notifier(commands.Cog):
@@ -256,7 +331,6 @@ class Notifier(commands.Cog):
             url = YOUTUBE_RSS_URL.format(channel_id=yt_channel_id)
             async with self.http.get(url) as resp:
                 xml = await resp.text()
-            import re
             entries = re.findall(
                 r"<yt:videoId>(.*?)</yt:videoId>.*?<published>(.*?)</published>.*?<title>(.*?)</title>",
                 xml, flags=re.S
@@ -295,22 +369,29 @@ class Notifier(commands.Cog):
                 continue  # bereits gemeldet
             snip = item["snippet"]
             title = snip.get("title", "Neues Video")
-            desc = snip.get("description", "")
-            thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url", "")
+            raw_desc = snip.get("description", "")
             channel_title = snip.get("channelTitle", "YouTube")
             published_at = snip.get("publishedAt")
 
             details = await self._get_youtube_video_details(vid)
             fields = {
                 "Kanal": channel_title,
-                "Veröffentlicht": published_at.replace("T", " ").replace("Z", " UTC") if published_at else "—",
+                "Veröffentlicht": _format_ts_utc_with_relative(published_at) if published_at else "—",
                 "Dauer": details.get("duration", "—"),
-                "Aufrufe": details.get("views", "—"),
+                "Aufrufe": _format_int(details.get("views", "—")),
             }
+
+            # Beschreibung hübsch machen und so lang wie möglich zeigen
+            embed_title = f"🎥 Neues Video: {title}"
+            cleaned = _clean_youtube_description(raw_desc or "Ein neues Video ist online!")
+            desc = _fit_description_for_embed(embed_title, cleaned, fields)
+
+            thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url", "")
+
             await self._send_webhook(
                 channel,
-                title=f"🎥 Neues Video: {title}",
-                description=(desc or "Ein neues Video ist online!")[:500],
+                title=embed_title,
+                description=desc,
                 thumbnail=thumb,
                 url=YOUTUBE_VIDEO_URL.format(video_id=vid),
                 color=YOUTUBE_COLOR,
@@ -348,25 +429,21 @@ class Notifier(commands.Cog):
         if stream_id and last_item_id and stream_id == last_item_id:
             return  # bereits gemeldet
 
-        # Neu (Cache-Buster dranhängen):
+        title = s.get("title", f"{login} ist live!")
+        # Thumbnail + Cache-Buster (gegen Twitch/Discord Caching)
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
-
-        # Eindeutiger Cache-Key aus Stream-ID + Startzeit
-        stream_id = str(s.get("id", ""))
-        started_at = str(s.get("started_at", ""))  # z.B. "2025-08-30T10:20:03Z"
-
-        # alles Nicht-Ziffern entfernen → "20250830102003"
+        stream_id_str = str(s.get("id", ""))
+        started_at = str(s.get("started_at", ""))  # e.g. "2025-08-30T10:20:03Z"
         started_digits = "".join(ch for ch in started_at if ch.isdigit())
-        cb = f"{stream_id}{started_digits}" or str(int(datetime.now(timezone.utc).timestamp()))
-
-        # an die URL hängen (Discord und Twitch werden gezwungen, neu zu laden)
+        cb = f"{stream_id_str}{started_digits}" or str(int(datetime.now(timezone.utc).timestamp()))
         sep = "&" if "?" in thumb else "?"
         thumb = f"{thumb}{sep}cb={cb}"
+
         fields = {
             "Spiel": s.get("game_name") or "—",
-            "Zuschauer": str(s.get("viewer_count", "—")),
-            "Gestartet": s.get("started_at", "—").replace("T", " ").replace("Z", " UTC"),
-            "Sprache": s.get("language", "—"),
+            "Zuschauer": _format_int(s.get("viewer_count", "—")),
+            "Gestartet": _format_ts_utc_with_relative(s.get("started_at")),
+            "Sprache": _format_lang(s.get("language")),
         }
         await self._send_webhook(
             channel,
@@ -380,8 +457,8 @@ class Notifier(commands.Cog):
             fields=fields,
             button_label="Zum Stream",
         )
-        if stream_id:
-            await self._update_last_sent(guild_id, "twitch", target_channel_id, login, stream_id)
+        if stream_id_str:
+            await self._update_last_sent(guild_id, "twitch", target_channel_id, login, stream_id_str)
 
     # ---------- Webhooks ----------
     async def _send_webhook(
@@ -400,7 +477,7 @@ class Notifier(commands.Cog):
     ):
         webhook = await self._get_or_create_webhook(channel.guild.id, channel.id)
 
-        e = discord.Embed(title=title, description=(description or "")[:2000], url=url, color=color)
+        e = discord.Embed(title=title, description=(description or "")[:4096], url=url, color=color)
         e.timestamp = datetime.now(timezone.utc)
         if thumbnail:
             e.set_image(url=thumbnail)
