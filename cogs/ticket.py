@@ -238,15 +238,15 @@ class SetupWizardView(discord.ui.View):
 
     # ---------- Helpers (umbenannt!) ----------
 
-    async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
-        self.panel_title = title.strip()
-        self.panel_desc = desc.strip()
-        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
-        await self._redraw(interaction)
+    def build_embed(self) -> discord.Embed:
+        def lbl_channel(ch):
+            return ch.mention if isinstance(ch, discord.TextChannel) else "Nicht gesetzt"
 
-    async def _redraw(self, interaction: discord.Interaction):
-        """Embed aktualisieren (Name bewusst NICHT '_refresh')."""
-        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
+        def lbl_cat(cat):
+            return cat.name if isinstance(cat, discord.CategoryChannel) else "Nicht gesetzt"
+
+        def lbl_role(r):
+            return r.mention if isinstance(r, discord.Role) else "Nicht gesetzt"
 
         lines = []
         lines.append("**So funktioniert's:**")
@@ -254,24 +254,36 @@ class SetupWizardView(discord.ui.View):
         lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
         lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
         lines.append("**Aktuelle Auswahl:**")
-        lines.append(f"• Kanal: {self.target_channel.mention if self.target_channel else '—'}")
-        lines.append(f"• Kategorie: {self.category.name if self.category else '—'}")
-        lines.append(f"• Support-Rolle: {self.role.mention if self.role else '—'}")
+        lines.append(f"• Kanal: {lbl_channel(self.target_channel)}")
+        lines.append(f"• Kategorie: {lbl_cat(self.category)}")
+        lines.append(f"• Support-Rolle: {lbl_role(self.role)}")
         if self.panel_title or self.panel_desc:
-            lines.append(f"• Titel: {self.panel_title or '—'}")
+            lines.append(f"• Titel: {self.panel_title or 'Nicht gesetzt'}")
             if self.panel_desc:
                 short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
                 lines.append(f"• Beschreibung: {short}")
             else:
-                lines.append("• Beschreibung: —")
+                lines.append("• Beschreibung: Nicht gesetzt")
 
-        embed = mk_embed(title="🎟️ Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
+        return mk_embed(title="🎟️ Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
 
-        # Wenn bereits geantwortet wurde (häufig bei Component-Interaktionen), editieren
-        if interaction.response.is_done():
-            await interaction.edit_original_response(embed=embed, view=self)
-        else:
+    async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
+        self.panel_title = title.strip()
+        self.panel_desc = desc.strip()
+        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
+        await self._redraw(interaction)
+
+    async def _redraw(self, interaction: discord.Interaction):
+        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
+        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
+        embed = self.build_embed()
+
+        try:
+            # Falls die Response noch nicht benutzt wurde:
             await interaction.response.edit_message(embed=embed, view=self)
+        except discord.InteractionResponded:
+            # Wenn schon geantwortet: Original-Message updaten
+            await interaction.edit_original_response(embed=embed, view=self)
 
 
 # =========================================================
@@ -448,7 +460,7 @@ class TicketButtons(discord.ui.View):
                             discord.File(fp=txt_bytes, filename=txt_name, description="Text-Transkript"),
                             discord.File(fp=html_bytes, filename=html_name, description="HTML-Transkript"),
                         ],
-                        view=ReopenView(self.bot, guild.id, int(opened_id), thema, channel.category.id, role_id, expires_ts),
+                        view=ReopenView(inter.client, guild.id, int(opened_id), thema, channel.category.id, role_id, expires_ts),
                     )
 
                 await inter.response.send_message("Das Ticket wird in **5 Sekunden** geschlossen …")
@@ -604,27 +616,19 @@ class Ticket(app_commands.Group):
         self.bot = bot
         super().__init__(name="ticket", description="Alles rund ums Ticketsystem.")
 
-    # Setup-Wizard
     @app_commands.command(name="setup", description="Starte den Setup-Wizard für ein Ticket-Panel.")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
         view = SetupWizardView(self.bot, interaction.user)
-        # Defaults: aktueller Kanal, erste Kategorie, höchste 'support'-Rolle
-        if isinstance(interaction.channel, discord.TextChannel):
-            view.target_channel = interaction.channel
-        if interaction.guild.categories:
-            view.category = interaction.guild.categories[0]
-        support = next((r for r in reversed(interaction.guild.roles) if "support" in r.name.lower()), None)
-        if support:
-            view.role = support
-        # Intro-Embed
-        intro = mk_embed(
-            title="🎟️ Ticket-Setup-Wizard",
-            description="Wähle **Kanal**, **Kategorie** und **Support-Rolle** unten. "
-                        "Klicke dann **Weiter**, um Titel & Beschreibung zu setzen.",
+        # KEINE Defaults setzen – alles bleibt None
+
+        # Embed aus dem View selbst generieren
+        await interaction.response.send_message(
+            embed=view.build_embed(),
+            view=view,
+            ephemeral=True
         )
-        await interaction.response.send_message(embed=intro, view=view, ephemeral=True)
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
