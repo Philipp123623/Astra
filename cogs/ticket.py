@@ -41,21 +41,8 @@ def sanitize_filename(name: str) -> str:
 #                    DB INIT / CONFIG
 # =========================================================
 
-CREATE_CONFIG = """
-CREATE TABLE IF NOT EXISTS ticket_config (guildID BIGINT PRIMARY KEY, autoclose_hours INT DEFAULT 0, remind_minutes INT DEFAULT 0, reopen_hours INT DEFAULT 24, ping_throttle_minutes INT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-"""
-
-CREATE_AUTOCLOSE = """
-CREATE TABLE IF NOT EXISTS ticket_autoclose_state (channelID BIGINT PRIMARY KEY, reminded TINYINT DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-"""
 
 DEFAULT_CFG = dict(autoclose_hours=0, remind_minutes=0, reopen_hours=24, ping_throttle_minutes=0)
-
-async def ensure_extra_tables(pool):
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute(CREATE_CONFIG)
-            await cur.execute(CREATE_AUTOCLOSE)
 
 async def get_guild_config(pool, guild_id: int) -> dict:
     async with pool.acquire() as conn:
@@ -788,11 +775,23 @@ class TicketCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Persistente Views
-        self.bot.add_view(TicketOpenView(self.bot))
-        self.bot.add_view(TicketButtons(self.bot))
-        # Tables sicherstellen
-        await ensure_extra_tables(self.bot.pool)  # type: ignore[attr-defined]
+        # Persistente Views (alle relevanten Buttons dauerhaft verfügbar machen)
+        self.bot.add_view(TicketOpenView(self.bot))  # 🎫 Ticket öffnen
+        self.bot.add_view(TicketButtons(self.bot))  # 🔒 Claim / Schließen
+
+        # Für ReopenView brauchen wir keine festen Parameter, daher Dummy mit None
+        # Discord ignoriert die Parameter beim Registrieren, solange die custom_ids gleich bleiben
+        self.bot.add_view(
+            ReopenView(
+                self.bot,
+                guild_id=0,
+                opener_id=0,
+                thema="",
+                category_id=0,
+                role_id=0,
+                expires_ts=int(discord.utils.utcnow().timestamp()) + 3600
+            )
+        )
 
     # ---------------- AUTO-CLOSE & REMINDER ----------------
 
