@@ -175,33 +175,50 @@ class SetupWizardView(discord.ui.View):
                        custom_id="ticket_setup:create")
     async def btn_create(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.",
+                                                           ephemeral=True)
 
         assert self.target_channel and self.category and self.role and self.panel_title and self.panel_desc
 
-        # DB schreiben + Panel posten (wie zuvor)
+        # ⬇️ Wrapper -> echte Objekte
+        guild = interaction.guild
+        chan = guild.get_channel(int(self.target_channel.id)) or await guild.fetch_channel(int(self.target_channel.id))
+        cat = guild.get_channel(int(self.category.id))  # nur für Anzeige/Validierung
+        role = guild.get_role(int(self.role.id))
+
+        if not isinstance(chan, discord.TextChannel):
+            return await interaction.response.send_message("Der gewählte Kanal ist kein Textkanal.", ephemeral=True)
+        if not isinstance(cat, discord.CategoryChannel):
+            return await interaction.response.send_message("Die gewählte Kategorie existiert nicht mehr.",
+                                                           ephemeral=True)
+        if role is None:
+            return await interaction.response.send_message("Die gewählte Rolle existiert nicht mehr.", ephemeral=True)
+
+        # DB schreiben
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
                 await cur.execute(
                     "INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID) VALUES(%s, %s, %s, %s, %s)",
-                    (interaction.guild.id, self.target_channel.id, self.panel_title, self.role.id, self.category.id),
+                    (guild.id, chan.id, self.panel_title, role.id, cat.id),
                 )
 
+        # Panel posten
         panel = mk_embed(
             title=self.panel_title,
             description=self.panel_desc,
             color=ASTRA_BLUE,
-            thumb=interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None,
+            thumb=guild.icon.url if guild and guild.icon else None,
             footer="Klicke auf den Button, um ein Ticket zu erstellen!",
         )
-        await self.target_channel.send(embed=panel, view=TicketOpenView(self.bot))
+        await chan.send(embed=panel, view=TicketOpenView(self.bot))
 
+        # Abschlussmeldung
         done = mk_embed(
             title="✅ Ticket-Panel erstellt",
             description=(
-                f"**Kanal:** {self.target_channel.mention}\n"
-                f"**Kategorie:** {self.category.name}\n"
-                f"**Support-Rolle:** {self.role.mention}\n\n"
+                f"**Kanal:** <#{chan.id}>\n"
+                f"**Kategorie:** {cat.name}\n"
+                f"**Support-Rolle:** {role.mention}\n\n"
                 "Du kannst diesen Wizard jetzt schließen."
             ),
             color=discord.Colour.green(),
