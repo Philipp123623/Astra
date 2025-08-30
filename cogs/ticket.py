@@ -350,7 +350,7 @@ class SetupWizardView(discord.ui.View):
             ),
             color=discord.Colour.green(),
         )
-        await interaction.response.edit_message("<:Astra_accept:1141303821176422460> Das Ticket Panel wurde erfolgreich erstellt!", embed=done, view=None, ephemeral=True)
+        await interaction.response.edit_message(f"<:Astra_accept:1141303821176422460> Das Panel wurde erfolgreich in <#{chan.id}> erstellt!", embed=done, view=None, ephemeral=True)
         return None
 
     @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
@@ -841,11 +841,7 @@ class Ticket(app_commands.Group):
         # KEINE Defaults setzen – alles bleibt None
 
         # Embed aus dem View selbst generieren
-        await interaction.response.send_message(
-            embed=view.build_embed(),
-            view=view,
-            ephemeral=True
-        )
+        await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
@@ -875,7 +871,7 @@ class Ticket(app_commands.Group):
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
                 await cur.execute("DELETE FROM ticketsystem WHERE channelID=%s AND guildID=%s", (channel.id, interaction.guild.id))
-        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Das Panel wurde erfolgreich in <#{channel.id}> erstellt!", ephemeral=True)
+        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Das Panel aus {channel.mention} wurde erfolgreich gelöscht.", ephemeral=True)
 
     # Ticket-Log konfigurieren
     @app_commands.command(name="log", description="Richte einen Ticket-Log-Kanal ein/aus.")
