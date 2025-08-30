@@ -348,8 +348,20 @@ class Notifier(commands.Cog):
         if stream_id and last_item_id and stream_id == last_item_id:
             return  # bereits gemeldet
 
-        title = s.get("title", f"{login} ist live!")
+        # Neu (Cache-Buster dranhängen):
         thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
+
+        # Eindeutiger Cache-Key aus Stream-ID + Startzeit
+        stream_id = str(s.get("id", ""))
+        started_at = str(s.get("started_at", ""))  # z.B. "2025-08-30T10:20:03Z"
+
+        # alles Nicht-Ziffern entfernen → "20250830102003"
+        started_digits = "".join(ch for ch in started_at if ch.isdigit())
+        cb = f"{stream_id}{started_digits}" or str(int(datetime.now(timezone.utc).timestamp()))
+
+        # an die URL hängen (Discord und Twitch werden gezwungen, neu zu laden)
+        sep = "&" if "?" in thumb else "?"
+        thumb = f"{thumb}{sep}cb={cb}"
         fields = {
             "Spiel": s.get("game_name") or "—",
             "Zuschauer": str(s.get("viewer_count", "—")),
