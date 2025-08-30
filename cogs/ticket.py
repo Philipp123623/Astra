@@ -900,13 +900,26 @@ class Ticket(app_commands.Group):
 
     # Konfiguration: Auto-Close & Reminder & Reopen
     @app_commands.command(name="config", description="Zeigt oder ändert Ticket-Einstellungen.")
+    @app_commands.describe(modus="Was möchtest du tun?")
     @app_commands.checks.has_permissions(administrator=True)
-    async def ticket_config(self, interaction: discord.Interaction):
+    async def ticket_config(
+            self,
+            interaction: discord.Interaction,
+            modus: Literal["Anzeigen", "Setzen"],
+    ):
         cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
 
+        if modus == "Anzeigen":
+            e = mk_embed(
+                title="⚙️ Ticket-Konfiguration",
+                description=human_cfg(cfg),
+            )
+            return await interaction.response.send_message(embed=e, ephemeral=True)
+
+        # ====== Setzen: interaktive View ======
         class ConfigView(discord.ui.View):
             def __init__(self, bot):
-                super().__init__(timeout=120)
+                super().__init__(timeout=180)
                 self.bot = bot
                 self.selected_key: Optional[str] = None
 
@@ -914,32 +927,53 @@ class Ticket(app_commands.Group):
                 placeholder="⚙️ Wähle eine Einstellung …",
                 min_values=1, max_values=1,
                 options=[
-                    discord.SelectOption(label="⏰ Auto-Close", value="autoclose_hours",
-                                         description="Wann Tickets automatisch geschlossen werden"),
-                    discord.SelectOption(label="🔔 Reminder", value="remind_minutes",
-                                         description="Nach wie viel Zeit eine Erinnerung geschickt wird"),
-                    discord.SelectOption(label="♻️ Reopen", value="reopen_hours",
-                                         description="Wie lange Tickets nach Schließen reopenbar sind"),
-                    discord.SelectOption(label="🚫 Ping-Throttle", value="ping_throttle_minutes",
-                                         description="Minuten zwischen erlaubten Pings"),
+                    discord.SelectOption(
+                        label="⏰ Auto-Close",
+                        value="autoclose_hours",
+                        description="Nach wie viel Zeit Tickets automatisch geschlossen werden",
+                    ),
+                    discord.SelectOption(
+                        label="🔔 Reminder",
+                        value="remind_minutes",
+                        description="Nach wie viel Zeit eine Erinnerung im Ticket gepostet wird",
+                    ),
+                    discord.SelectOption(
+                        label="♻️ Reopen",
+                        value="reopen_hours",
+                        description="Wie lange nach dem Schließen ein Reopen möglich ist",
+                    ),
+                    discord.SelectOption(
+                        label="🚫 Ping-Throttle",
+                        value="ping_throttle_minutes",
+                        description="Mindestabstand zwischen erlaubten Pings (Spam-Schutz)",
+                    ),
                 ]
             )
             async def select_setting(self, inter: discord.Interaction, select: discord.ui.Select):
                 self.selected_key = select.values[0]
-                pretty = select.values[0]
+                pretty_map = {
+                    "autoclose_hours": "⏰ Auto-Close",
+                    "remind_minutes": "🔔 Reminder",
+                    "reopen_hours": "♻️ Reopen",
+                    "ping_throttle_minutes": "🚫 Ping-Throttle",
+                }
+                picked = pretty_map.get(self.selected_key, self.selected_key)
 
-                # Antwort mit Buttons
                 await inter.response.edit_message(
                     embed=mk_embed(
                         title="⚙️ Konfiguration ändern",
-                        description=f"Ausgewählt: **{select.values[0]}**\n\n"
-                                    "Wähle einen der Presets oder klicke „Eigenen Wert eingeben“.",
+                        description=(
+                            f"Ausgewählt: **{picked}**\n\n"
+                            "Wähle einen der **Schnell-Werte** unten oder klicke **Eigenen Wert**.\n"
+                            "Format für eigene Werte: `30m`, `2h`, `1d`, `1w2d3h20m10s` …\n"
+                            "_Hinweis:_ Reminder & Ping-Throttle werden in **Minuten**, Auto-Close & Reopen in **Stunden** gespeichert."
+                        ),
                         color=ASTRA_BLUE
                     ),
                     view=self
                 )
 
-            # Preset-Buttons
+            # Presets – passen für beide „Arten“ (werden intern umgerechnet)
             @discord.ui.button(label="15 Minuten", style=discord.ButtonStyle.secondary, custom_id="cfg:15m")
             async def btn_15m(self, inter: discord.Interaction, _):
                 await self._apply(inter, "15m")
@@ -956,16 +990,16 @@ class Ticket(app_commands.Group):
             async def btn_1w(self, inter: discord.Interaction, _):
                 await self._apply(inter, "1w")
 
-            @discord.ui.button(label="Eigenen Wert eingeben", style=discord.ButtonStyle.primary, custom_id="cfg:custom")
+            @discord.ui.button(label="Eigenen Wert", style=discord.ButtonStyle.primary, custom_id="cfg:custom")
             async def btn_custom(self, inter: discord.Interaction, _):
                 if not self.selected_key:
                     return await inter.response.send_message("⚠️ Bitte zuerst eine Einstellung wählen.", ephemeral=True)
 
                 class ValueModal(discord.ui.Modal, title="Eigenen Wert setzen"):
                     value = discord.ui.TextInput(
-                        label="Wert (z. B. 30m, 2h, 1d, 1w2d)",
+                        label="Zeit (z. B. 30m, 2h, 1d, 1w2d3h20m10s, 0=Aus)",
                         required=True,
-                        max_length=32,
+                        max_length=40,
                     )
 
                     async def on_submit(self, inter2: discord.Interaction):
@@ -976,12 +1010,13 @@ class Ticket(app_commands.Group):
             async def _apply(self, inter: discord.Interaction, value_str: str):
                 if not self.selected_key:
                     return await inter.response.send_message("⚠️ Bitte zuerst eine Einstellung wählen.", ephemeral=True)
-
                 try:
                     new_val = parse_duration_to_native(self.selected_key, value_str, None)
                 except Exception:
                     return await inter.response.send_message(
-                        "❌ Ungültiges Format. Erlaubt: `30m`, `2h`, `1d`, `1w2d3h`", ephemeral=True)
+                        "❌ Ungültiges Format. Beispiele: `30m`, `2h`, `1d`, `1w2d3h20m10s`, `0` (Aus).",
+                        ephemeral=True
+                    )
 
                 await set_guild_config(self.bot.pool, inter.guild.id,
                                        **{self.selected_key: new_val})  # type: ignore[attr-defined]
@@ -989,7 +1024,7 @@ class Ticket(app_commands.Group):
 
                 e = mk_embed(
                     title="✅ Einstellung gespeichert",
-                    description=f"{self.selected_key} → `{format_native_value(self.selected_key, new_val)}`\n\n{human_cfg(cfg2)}",
+                    description=f"**{self.selected_key}** → `{format_native_value(self.selected_key, new_val)}`\n\n{human_cfg(cfg2)}",
                     color=discord.Colour.green(),
                 )
                 await inter.response.send_message(embed=e, ephemeral=True)
@@ -1000,6 +1035,7 @@ class Ticket(app_commands.Group):
             description=human_cfg(cfg),
         )
         await interaction.response.send_message(embed=e, view=ConfigView(self.bot), ephemeral=True)
+        return None
 
 
 # =========================================================
