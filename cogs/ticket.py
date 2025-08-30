@@ -388,17 +388,25 @@ class TicketButtons(discord.ui.View):
                 await self._do_close(inter, str(self.reason.value))
 
             async def _do_close(self, inter: discord.Interaction, reason_text: str):
-                # DB-Infos laden
+                # ---------------- DB-Infos laden & schließen markieren ----------------
                 async with inter.client.pool.acquire() as conn:
                     async with conn.cursor() as cur:
-                        await cur.execute("SELECT msgID, opened, claimed, time FROM ticketsystem_channels WHERE channelID=%s", (channel.id,))
+                        await cur.execute(
+                            "SELECT msgID, opened, claimed, time FROM ticketsystem_channels WHERE channelID=%s",
+                            (channel.id,),
+                        )
                         row2 = await cur.fetchone()
                         if not row2:
-                            return await inter.response.send_message("Interner Fehler (kein DB-Eintrag).", ephemeral=True)
-                        msg_id, opened_id, claimed, time_open = row2
-                        await cur.execute("UPDATE ticketsystem_channels SET closed=%s WHERE channelID=%s", (inter.user.id, channel.id))
+                            return await inter.response.send_message("Interner Fehler (kein DB-Eintrag).",
+                                                                     ephemeral=True)
 
-                        # Log-Kanal
+                        msg_id, opened_id, claimed, time_open = row2
+                        await cur.execute(
+                            "UPDATE ticketsystem_channels SET closed=%s WHERE channelID=%s",
+                            (inter.user.id, channel.id),
+                        )
+
+                        # Log-Kanal holen (kann None sein)
                         await cur.execute("SELECT channelID FROM ticketlog WHERE guildID=%s", (guild.id,))
                         logrow = await cur.fetchone()
 
@@ -406,37 +414,72 @@ class TicketButtons(discord.ui.View):
                 claimer = None if claimed == "Not Set" else inter.client.get_user(int(claimed))
                 closer = inter.user
 
-                # Transkript (TXT + HTML)
+                # ---------------- Transkript (nur .log, hübsch & robust) ----------------
                 txt_name = f"{channel.id}.log"
-                html_name = f"{sanitize_filename(channel.name)}.html"
+
+                def _clean_mentions(raw: str, msg: discord.Message) -> str:
+                    if not raw:
+                        return ""
+                    # User-Mentions -> @Displayname
+                    for u in msg.mentions:
+                        raw = raw.replace(f"<@{u.id}>", f"@{u.display_name}")
+                        raw = raw.replace(f"<@!{u.id}>", f"@{u.display_name}")
+                    # Rollen-Mentions -> @Rollenname
+                    for r in msg.role_mentions:
+                        raw = raw.replace(f"<@&{r.id}>", f"@{r.name}")
+                    # Kanal-Mentions -> #kanalname
+                    for ch_ in msg.channel_mentions:
+                        raw = raw.replace(f"<#{ch_.id}>", f"#{ch_.name}")
+                    return raw
+
+                header_lines = [
+                    "====================  TICKET TRANSKRIPT  ====================",
+                    f"Ticket: {channel.name}  (ID: {channel.id})",
+                    f"Server: {guild.name}  (ID: {guild.id})",
+                    f"Erstellt: {channel.created_at.strftime('%d.%m.%Y %H:%M:%S UTC')}",
+                    "",
+                    f"Geöffnet von: {fmt_user(opener)} (ID: {opener.id})" if opener else "Geöffnet von: Unbekannt",
+                    f"Geclaimed von: {fmt_user(claimer)} (ID: {claimer.id})" if claimer else "Geclaimed von: Keiner",
+                    f"Geschlossen von: {fmt_user(closer)} (ID: {closer.id})",
+                ]
+                if reason_text:
+                    header_lines.append(f"Schließ-Grund: {reason_text}")
+                header_lines += [
+                    "============================================================",
+                    "",
+                ]
+
                 txt_buf = io.StringIO()
-                txt_buf.write(f"Ticket: {channel.name}\nUser: {fmt_user(opener)} ({opener.id})\nModerator: {fmt_user(claimer) if claimer else 'Keiner'}\n\n")
-                html_buf = io.StringIO()
-                html_buf.write("<!doctype html><meta charset='utf-8'><title>Ticket Transcript</title>")
-                html_buf.write("<style>body{font-family:system-ui,Segoe UI,Arial;max-width:900px;margin:20px auto;padding:0 12px;} .msg{margin:10px 0;padding:10px;border-radius:10px;background:#f5f7fb} .meta{font-size:12px;color:#555} .author{font-weight:600} pre{white-space:pre-wrap;}</style>")
-                html_buf.write(f"<h1>Ticket: {html.escape(channel.name)}</h1>")
-                html_buf.write(f"<p><b>User:</b> {html.escape(fmt_user(opener))} ({opener.id}) &nbsp; <b>Moderator:</b> {html.escape(fmt_user(claimer)) if claimer else 'Keiner'}</p>")
+                txt_buf.write("\n".join(header_lines))
+
+                msg_count = 0
+                attach_count = 0
 
                 async for msg in channel.history(limit=None, oldest_first=True):
-                    created = msg.created_at.strftime('%d.%m.%Y, %H:%M')
-                    content = msg.content or ""
-                    content = html.escape(content)
-                    html_buf.write("<div class='msg'>")
-                    html_buf.write(f"<div class='meta'><span class='author'>{html.escape(fmt_user(msg.author))}</span> · {created}</div>")
-                    if content:
-                        html_buf.write(f"<pre>{content}</pre>")
+                    msg_count += 1
+                    ts = msg.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+                    author = f"{fmt_user(msg.author)} (ID: {msg.author.id})"
+
+                    content = _clean_mentions(msg.content or "", msg)
+                    content_to_write = content if content.strip() else "—"
+
+                    txt_buf.write(f"[{ts}] {author}\n")
+                    txt_buf.write(content_to_write + "\n")
+
                     if msg.attachments:
-                        html_buf.write("<div>Anhänge:<ul>")
                         for a in msg.attachments:
-                            html_buf.write(f"<li><a href='{html.escape(a.url)}'>{html.escape(a.filename)}</a></li>")
-                        html_buf.write("</ul></div>")
-                    html_buf.write("</div>")
-                    txt_buf.write(f"{created} - {fmt_user(msg.author)}: {msg.content}\n")
+                            attach_count += 1
+                            txt_buf.write(f"  [Anhang] {a.filename}: {a.url}\n")
 
+                    txt_buf.write("-" * 60 + "\n")
+
+                txt_buf.write(
+                    f"\nNachrichten insgesamt: {msg_count} | Anhänge: {attach_count}\n"
+                    "======================  ENDE TRANSKRIPT  ======================\n"
+                )
                 txt_bytes = io.BytesIO(txt_buf.getvalue().encode("utf-8"))
-                html_bytes = io.BytesIO(html_buf.getvalue().encode("utf-8"))
 
-                # Log versenden + Reopen-Button
+                # ---------------- Log-Embed (ohne „Thema“-Feld) + Reopen ----------------
                 if logrow:
                     log_channel = inter.client.get_channel(int(logrow[0]))
                     emb = mk_embed(
@@ -444,25 +487,36 @@ class TicketButtons(discord.ui.View):
                         description=f"Transkript für `{channel.name}`",
                         color=ASTRA_BLUE,
                     )
-                    emb.add_field(name="Geöffnet von", value=opener.mention, inline=False)
+                    if opener:
+                        emb.add_field(name="Geöffnet von", value=opener.mention, inline=False)
                     emb.add_field(name="Geschlossen von", value=closer.mention, inline=False)
-                    emb.add_field(name="Geclaimed von", value=(claimer.mention if claimer else "Nicht geclaimed"), inline=False)
+                    emb.add_field(
+                        name="Geclaimed von",
+                        value=(claimer.mention if claimer else "Nicht geclaimed"),
+                        inline=False,
+                    )
                     emb.add_field(name="Geöffnet am", value=time_open, inline=False)
-                    emb.add_field(name="Thema", value=thema or "—", inline=False)
                     if reason_text:
                         emb.add_field(name="Grund", value=reason_text, inline=False)
 
                     cfg = await get_guild_config(inter.client.pool, guild.id)
                     expires_ts = int(discord.utils.utcnow().timestamp()) + int(cfg.get("reopen_hours", 24)) * 3600
+
                     await log_channel.send(
                         embed=emb,
-                        files=[
-                            discord.File(fp=txt_bytes, filename=txt_name, description="Text-Transkript"),
-                            discord.File(fp=html_bytes, filename=html_name, description="HTML-Transkript"),
-                        ],
-                        view=ReopenView(inter.client, guild.id, int(opened_id), thema, channel.category.id, role_id, expires_ts),
+                        files=[discord.File(fp=txt_bytes, filename=txt_name, description="Text-Transkript")],
+                        view=ReopenView(
+                            inter.client,
+                            guild.id,
+                            int(opened_id),
+                            thema,  # Thema bleibt nur für Reopen-Context erhalten, NICHT im Embed anzeigen
+                            channel.category.id,
+                            role_id,
+                            expires_ts,
+                        ),
                     )
 
+                # ---------------- Channel schließen & DB säubern ----------------
                 await inter.response.send_message("Das Ticket wird in **5 Sekunden** geschlossen …")
                 await asyncio.sleep(5)
                 try:
@@ -470,10 +524,17 @@ class TicketButtons(discord.ui.View):
                 finally:
                     async with inter.client.pool.acquire() as conn:
                         async with conn.cursor() as cur:
-                            await cur.execute("DELETE FROM ticketsystem_channels WHERE channelID=%s AND guildID=%s", (channel.id, guild.id))
-                            await cur.execute("DELETE FROM ticket_autoclose_state WHERE channelID=%s", (channel.id,))
+                            await cur.execute(
+                                "DELETE FROM ticketsystem_channels WHERE channelID=%s AND guildID=%s",
+                                (channel.id, guild.id),
+                            )
+                            await cur.execute(
+                                "DELETE FROM ticket_autoclose_state WHERE channelID=%s",
+                                (channel.id,),
+                            )
 
         await interaction.response.send_modal(CloseReason())
+        return None
 
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, emoji="👮‍♂️", custom_id="ticket:claim")
     async def claim(self, interaction: discord.Interaction, button: discord.Button):
