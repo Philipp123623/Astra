@@ -16,12 +16,154 @@ ASTRA_BLUE = discord.Colour.blue()
 #                      HELPERS
 # =========================================================
 
+# ===== hübsche Labels -> interne Keys =====
 PRETTY_TO_INTERNAL = {
-    "⏰ Stunden bis Auto-Close": "autoclose_hours",
-    "🔔 Minuten bis Reminder": "remind_minutes",
-    "♻️ Stunden für Reopen": "reopen_hours",
-    "🚫 Ping-Throttle (Minuten)": "ping_throttle_minutes",
+    "⏰ Auto-Close": "autoclose_hours",
+    "🔔 Reminder": "remind_minutes",
+    "♻️ Reopen-Fenster": "reopen_hours",
+    "🚫 Ping-Throttle": "ping_throttle_minutes",
 }
+INTERNAL_TO_PRETTY = {v: k for k, v in PRETTY_TO_INTERNAL.items()}
+
+# Globale Presets (passen für alle Felder)
+# Values sind „Input-Strings“, die der Parser versteht.
+GLOBAL_PRESETS = [
+    ("Deaktiviert (0)", "0"),
+    ("15 Minuten", "15m"),
+    ("30 Minuten", "30m"),
+    ("1 Stunde", "1h"),
+    ("2 Stunden", "2h"),
+    ("4 Stunden", "4h"),
+    ("8 Stunden", "8h"),
+    ("12 Stunden", "12h"),
+    ("1 Tag", "1d"),
+    ("2 Tage", "2d"),
+    ("3 Tage", "3d"),
+    ("1 Woche", "1w"),
+    ("2 Wochen", "2w"),
+]
+
+def _plural(n: int, s: str, p: str) -> str:
+    return f"{n} {s if n == 1 else p}"
+
+def format_native_value(key: str, native: int) -> str:
+    """
+    Macht aus einem gespeicherten NATIVEN Wert (h oder min) eine hübsche Anzeige
+    mit der "größten sinnvollen" Einheit.
+    """
+    # In Sekunden normalisieren:
+    if key.endswith("_hours"):
+        seconds = native * 3600
+    else:
+        seconds = native * 60
+
+    # Größte passende Einheit wählen (w>d>h>m> s)
+    if seconds % (7 * 24 * 3600) == 0 and seconds >= 7 * 24 * 3600:
+        w = seconds // (7 * 24 * 3600)
+        return _plural(w, "Woche", "Wochen")
+    if seconds % (24 * 3600) == 0 and seconds >= 24 * 3600:
+        d = seconds // (24 * 3600)
+        return _plural(d, "Tag", "Tage")
+    if seconds % 3600 == 0 and seconds >= 3600:
+        h = seconds // 3600
+        return _plural(h, "Stunde", "Stunden")
+    if seconds % 60 == 0 and seconds >= 60:
+        m = seconds // 60
+        return _plural(m, "Minute", "Minuten")
+    return _plural(int(seconds), "Sekunde", "Sekunden")
+
+def human_cfg(cfg: dict) -> str:
+    """Schöne Zusammenfassung fürs Embed."""
+    lines = []
+    lines.append(f"⏰ **Auto-Close:** {format_native_value('autoclose_hours', cfg['autoclose_hours'])}")
+    lines.append(f"🔔 **Reminder:** {format_native_value('remind_minutes', cfg['remind_minutes'])}")
+    lines.append(f"♻️ **Reopen-Fenster:** {format_native_value('reopen_hours', cfg['reopen_hours'])}")
+    lines.append(f"🚫 **Ping-Throttle:** {format_native_value('ping_throttle_minutes', cfg['ping_throttle_minutes'])}")
+    return "\n".join(lines)
+
+def parse_duration_to_native(key: str, value: str, unit_hint: Optional[str]) -> int:
+    """
+    Parse flexible Dauer-Strings in die NATIVE Einheit des Felds.
+    Unterstützt Kombinationen:  '1w2d3h30m20s'
+    Unterstützte Einheiten: s, m, h, d, w  (Sekunden, Minuten, Stunden, Tage, Wochen)
+    Nativ:
+      *_hours   -> Stunden (int, rundet mathematisch)
+      *_minutes -> Minuten (int, rundet mathematisch)
+    """
+    raw = (value or "").strip().lower().replace(" ", "")
+    native_is_hours = key.endswith("_hours")
+
+    import re
+    token_re = re.compile(r"(\d+)([smhdw])")
+    seconds_total = 0
+
+    # 1) kombinierte Tokens einsammeln
+    tokens = token_re.findall(raw)
+    if tokens:
+        for num_s, unit in tokens:
+            num = int(num_s)
+            if unit == "s":
+                seconds_total += num
+            elif unit == "m":
+                seconds_total += num * 60
+            elif unit == "h":
+                seconds_total += num * 3600
+            elif unit == "d":
+                seconds_total += num * 86400
+            elif unit == "w":
+                seconds_total += num * 604800
+        # in Nativeinheit konvertieren
+        if native_is_hours:
+            return round(seconds_total / 3600)
+        else:
+            return round(seconds_total / 60)
+
+    # 2) nackte Zahl -> Einheit aus Hint bzw. nativ
+    if raw.isdigit():
+        num = int(raw)
+        if unit_hint in ("s", "sec", "secs"):
+            seconds_total = num
+        elif unit_hint in ("m", "min", "mins"):
+            seconds_total = num * 60
+        elif unit_hint in ("h", "hr", "hrs"):
+            seconds_total = num * 3600
+        elif unit_hint in ("d", "day", "days"):
+            seconds_total = num * 86400
+        elif unit_hint in ("w", "wk", "wks"):
+            seconds_total = num * 604800
+        else:
+            # Default: native Einheit
+            if native_is_hours:
+                return num
+            else:
+                return num
+        # mit Hint angegeben:
+        if native_is_hours:
+            return round(seconds_total / 3600)
+        else:
+            return round(seconds_total / 60)
+
+    # 3) Fallback: einzelne Zahl mit Einheiten-Suffix (z. B. "120m", "2h")
+    m = re.fullmatch(r"(\d+)([smhdw])", raw)
+    if m:
+        num = int(m.group(1))
+        unit = m.group(2)
+        if unit == "s":
+            seconds_total = num
+        elif unit == "m":
+            seconds_total = num * 60
+        elif unit == "h":
+            seconds_total = num * 3600
+        elif unit == "d":
+            seconds_total = num * 86400
+        elif unit == "w":
+            seconds_total = num * 604800
+        if native_is_hours:
+            return round(seconds_total / 3600)
+        else:
+            return round(seconds_total / 60)
+
+    raise ValueError("Ungültiges Dauerformat.")
 
 def mk_embed(
     *,
@@ -757,52 +899,112 @@ class Ticket(app_commands.Group):
                     await interaction.response.send_message("✅ Ticket-Log deaktiviert.", ephemeral=True)
 
     # Konfiguration: Auto-Close & Reminder & Reopen
-    @app_commands.command(name="config", description="Konfiguriere Auto-Close/Reminder/Reopen.")
-    @app_commands.describe(
-        einstellung="Welche Einstellung möchtest du ändern?",
-        wert="Zahl für diese Einstellung (0 = deaktiviert)",
-    )
+    @app_commands.command(name="config", description="Ticket-Einstellungen anzeigen oder ändern.")
+    @app_commands.describe(aktion="Anzeigen oder Setzen?")
     @app_commands.choices(
-        einstellung=[
-            app_commands.Choice(name=pretty, value=internal)
-            for pretty, internal in PRETTY_TO_INTERNAL.items()
+        aktion=[
+            app_commands.Choice(name="🔎 Anzeigen", value="show"),
+            app_commands.Choice(name="✏️ Setzen", value="set"),
         ]
     )
+    @app_commands.checks.has_permissions(administrator=True)
     async def ticket_config(
             self,
             interaction: discord.Interaction,
-            einstellung: app_commands.Choice[str],
-            wert: int,
+            aktion: app_commands.Choice[str],
     ):
-        # interner Key
-        key = einstellung.value  # z. B. "autoclose_hours"
-        pretty = einstellung.name  # z. B. "⏰ Stunden bis Auto-Close"
+        if aktion.value == "show":
+            cfg = await get_guild_config(self.bot.pool, interaction.guild.id)  # type: ignore[attr-defined]
+            e = mk_embed(title="⚙️ Ticket-Konfiguration", description=human_cfg(cfg))
+            return await interaction.response.send_message(embed=e, ephemeral=True)
 
-        if wert < 0:
-            return await interaction.response.send_message("❌ Wert darf nicht negativ sein.", ephemeral=True)
+        # == SET ==
+        class CfgModal(discord.ui.Modal, title="Einstellung ändern"):
+            def __init__(self):
+                super().__init__(timeout=180)
 
-        # DB speichern
-        await set_guild_config(self.bot.pool, interaction.guild.id, **{key: wert})
+                self.setting = discord.ui.Select(
+                    placeholder="Welche Einstellung?",
+                    min_values=1, max_values=1,
+                    options=[
+                        discord.SelectOption(label=pretty, value=internal)
+                        for pretty, internal in PRETTY_TO_INTERNAL.items()
+                    ],
+                )
 
-        # Aktuelle Konfig holen
-        cfg = await get_guild_config(self.bot.pool, interaction.guild.id)
+                self.presets = discord.ui.Select(
+                    placeholder="Preset wählen (optional) …",
+                    min_values=0, max_values=1,
+                    options=[discord.SelectOption(label=label, value=f"preset:{val}") for (label, val) in
+                             GLOBAL_PRESETS],
+                )
 
-        emb = mk_embed(
-            title="⚙️ Ticket-Konfiguration aktualisiert",
-            description="\n".join(
-                [
-                    f"⏰ Auto-Close: {cfg['autoclose_hours']} h",
-                    f"🔔 Reminder: {cfg['remind_minutes']} min",
-                    f"♻️ Reopen: {cfg['reopen_hours']} h",
-                    f"🚫 Ping-Throttle: {cfg['ping_throttle_minutes']} min",
-                ]
-            ),
-        )
-        await interaction.response.send_message(
-            f"✅ Einstellung geändert: **{pretty}** → `{wert}`",
-            embed=emb,
-            ephemeral=True,
-        )
+                self.value = discord.ui.TextInput(
+                    label="Eigener Wert (optional)",
+                    placeholder="z. B. 90, 2h, 45m, 1h30m, 3d, 2w, 1w2d3h20m",
+                    required=False,
+                    max_length=32,
+                )
+
+                self.unit = discord.ui.Select(
+                    placeholder="Einheit für nackte Zahlen (optional)",
+                    min_values=0, max_values=1,
+                    options=[
+                        discord.SelectOption(label="Automatisch (native Einheit)", value="auto"),
+                        discord.SelectOption(label="Sekunden", value="s"),
+                        discord.SelectOption(label="Minuten", value="m"),
+                        discord.SelectOption(label="Stunden", value="h"),
+                        discord.SelectOption(label="Tage", value="d"),
+                        discord.SelectOption(label="Wochen", value="w"),
+                    ],
+                )
+                self.unit.default_values = ["auto"]
+
+                self.add_item(self.setting)
+                self.add_item(self.presets)
+                self.add_item(self.value)
+                self.add_item(self.unit)
+
+            async def on_submit(self, inter: discord.Interaction):
+                key = self.setting.values[0]
+                pretty = INTERNAL_TO_PRETTY[key]
+
+                preset_choice = self.presets.values[0] if self.presets.values else None
+                unit_hint = None if not self.unit.values or self.unit.values[0] == "auto" else self.unit.values[0]
+
+                # Wert bestimmen
+                try:
+                    if preset_choice:
+                        raw = preset_choice.split(":", 1)[1]  # z.B. "2h" / "1d"
+                        native_val = parse_duration_to_native(key, raw, None)
+                    else:
+                        raw_in = str(self.value.value or "").strip()
+                        if not raw_in:
+                            return await inter.response.send_message(
+                                "❌ Bitte Preset **oder** eigenen Wert angeben.",
+                                ephemeral=True
+                            )
+                        native_val = parse_duration_to_native(key, raw_in, unit_hint)
+                except Exception:
+                    return await inter.response.send_message("❌ Ungültiges Dauerformat.", ephemeral=True)
+
+                if native_val < 0:
+                    return await inter.response.send_message("❌ Der Wert darf nicht negativ sein.", ephemeral=True)
+
+                # Speichern
+                await set_guild_config(self.bot.pool, inter.guild.id, **{key: native_val})  # type: ignore[attr-defined]
+                cfg = await get_guild_config(self.bot.pool, inter.guild.id)  # type: ignore[attr-defined]
+
+                # Bestätigung mit schöner Einheit
+                pretty_value = format_native_value(key, native_val)
+                e = mk_embed(
+                    title="✅ Einstellung gespeichert",
+                    description=f"**{pretty}** → `{pretty_value}`\n\n{human_cfg(cfg)}",
+                    color=discord.Colour.green(),
+                )
+                await inter.response.send_message(embed=e, ephemeral=True)
+
+        await interaction.response.send_modal(CfgModal())
         return None
 
 
