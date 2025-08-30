@@ -280,7 +280,7 @@ class SetupWizardView(discord.ui.View):
 class ReopenView(discord.ui.View):
     """Button im Log, um innerhalb X Stunden das Ticket neu zu öffnen."""
     def __init__(self, bot: commands.Bot, guild_id: int, opener_id: int, thema: str, category_id: int, role_id: int, expires_ts: int):
-        super().__init__(timeout=expires_ts - int(discord.utils.utcnow().timestamp()))
+        super().__init__(timeout=None)  # <-- statt dynamischem Timeout
         self.bot = bot
         self.guild_id = guild_id
         self.opener_id = opener_id
