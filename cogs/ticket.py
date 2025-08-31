@@ -344,9 +344,11 @@ class SetupWizardView(discord.ui.View):
         done = mk_embed(
             title="Ticket-Panel erstellt",
             description=(
-                f"Kanal: <#{chan.id}>\n"
-                f"Kategorie: {cat.name}\n"
-                f"Support-Rolle: {role.mention}\n\n"
+                f"<:Astra_punkt:1141303896745201696> Kanal: <#{chan.id}>\n"
+                f"<:Astra_punkt:1141303896745201696> Kategorie: {cat.name}\n"
+                f"<:Astra_punkt:1141303896745201696> Support-Rolle: {role.mention}\n"
+                f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title}\n"
+                f"<:Astra_punkt:1141303896745201696> Beschreibung: {self.panel_desc}\n\n"
                 "Der Setup-Wizard kann geschlossen werden."
             ),
             color=discord.Colour.green(),
