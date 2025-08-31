@@ -435,7 +435,7 @@ class SetupWizardView(discord.ui.View):
                 lines.append(f"<:Astra_punkt:1141303896745201696> Beschreibung: {short}")
             else:
                 lines.append("<:Astra_punkt:1141303896745201696> Beschreibung: Nicht gesetzt")
-        lines.append(f"\n\n<:Astra_wichtig:1141303951862534224> **Wichtig:** Um unseren Bot und eure Server vor ratelimits zu schützen,\nkönnen nur User mit der Supportrolle, Tickets schließen.**")
+        lines.append(f"\n\n<:Astra_wichtig:1141303951862534224> **Wichtig:** Um unseren Bot und eure Discord-Server vor [**Ratelimits**](https://discord.com/developers/docs/topics/rate-limits) zu schützen,\nkönnen nur User mit der Supportrolle, Tickets schließen.")
 
         return mk_embed(title="<:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
 
