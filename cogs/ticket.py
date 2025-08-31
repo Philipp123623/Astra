@@ -295,14 +295,14 @@ class SetupWizardView(discord.ui.View):
                        custom_id="ticket_setup:next")
     async def btn_next(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
         await interaction.response.send_modal(PanelTextModal(self._after_texts))
 
     @discord.ui.button(label="Erstellen", style=discord.ButtonStyle.green,
                        custom_id="ticket_setup:create")
     async def btn_create(self, interaction: discord.Interaction, _button: discord.ui.Button):
         if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.",
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur der Ersteller darf diesen Wizard bedienen.",
                                                            ephemeral=True)
 
         assert self.target_channel and self.category and self.role and self.panel_title and self.panel_desc
@@ -314,12 +314,12 @@ class SetupWizardView(discord.ui.View):
         role = guild.get_role(int(self.role.id))
 
         if not isinstance(chan, discord.TextChannel):
-            return await interaction.response.send_message("Der gewählte Kanal ist kein Textkanal.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Der gewählte Kanal ist kein Textkanal.", ephemeral=True)
         if not isinstance(cat, discord.CategoryChannel):
-            return await interaction.response.send_message("Die gewählte Kategorie existiert nicht mehr.",
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die gewählte Kategorie existiert nicht mehr.",
                                                            ephemeral=True)
         if role is None:
-            return await interaction.response.send_message("Die gewählte Rolle existiert nicht mehr.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die gewählte Rolle existiert nicht mehr.", ephemeral=True)
 
         # DB schreiben
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
@@ -435,6 +435,7 @@ class SetupWizardView(discord.ui.View):
                 lines.append(f"<:Astra_punkt:1141303896745201696> Beschreibung: {short}")
             else:
                 lines.append("<:Astra_punkt:1141303896745201696> Beschreibung: Nicht gesetzt")
+        lines.append(f"\n\n<:Astra_wichtig:1141303951862534224> **Wichtig:** Um unseren Bot und eure Server vor ratelimits zu schützen,\nkönnen nur User mit der Supportrolle, Tickets schließen.**")
 
         return mk_embed(title="<:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
 
@@ -547,11 +548,11 @@ class TicketButtons(discord.ui.View):
                 await cur.execute("SELECT roleID, thema FROM ticketsystem WHERE categoryID=%s", (channel.category.id,))
                 row = await cur.fetchone()
         if not row:
-            return await interaction.response.send_message("Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Dieses Ticket ist keinem Panel zugeordnet.", ephemeral=True)
         role_id, thema = int(row[0]), row[1]
         role = guild.get_role(role_id)
         if role not in user.roles:
-            return await interaction.response.send_message("Nur Mitglieder mit der Support-Rolle dürfen Tickets schließen.", ephemeral=True)
+            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur Mitglieder mit der Support-Rolle dürfen Tickets schließen.", ephemeral=True)
 
         # Grund per Modal
         class CloseReason(discord.ui.Modal, title="Ticket schließen"):
@@ -742,8 +743,7 @@ class TicketButtons(discord.ui.View):
         # Schönes Embed + Button lokal deaktivieren
         embed = mk_embed(
             title=f"Ticket von {opener.name}",
-            description=f"Hallo {opener.mention}, {member.mention} kümmert sich um dein Anliegen. "
-                        f"Bitte beschreibe kurz dein Problem.",
+            description=f"Hallo {opener.mention}!\n{member.mention} wird sich nun um dein Anliegen kümmern. Bitte beschreibe kurz dein Problem.",
             color=ASTRA_BLUE,
         )
         embed.set_author(name=str(opener), icon_url=opener.display_avatar.url)
