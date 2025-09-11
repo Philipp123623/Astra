@@ -1,23 +1,23 @@
-# geburtstag_system.py — per-Guild Zeitzonen + HH:mm + Recalculate + Modal (Embed ja/nein)
+# geburtstag_system.py — exakt HH:mm:00, Multi-{mention}, schlichtes Embed, Alias-UPSERT, Modal (Embed ja/nein)
 import asyncio
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 import discord
 from discord.ext import commands
 from discord import app_commands
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 STD_MSG = "Lasst uns {mention} zum Geburtstag gratulieren! 🎉"
 FALLBACK_TZ = "Europe/Berlin"
 
-# Kurze, kuratierte TZ-Liste (D-A-CH + ein paar EU/US für Expat-Server)
+# Kurze, kuratierte TZ-Liste (D-A-CH + ein paar EU/US)
 ALLOWED_TZS: List[str] = [
     "Europe/Berlin", "Europe/Vienna", "Europe/Zurich",
     "Europe/Luxembourg", "Europe/Brussels", "Europe/Amsterdam",
     "Europe/Paris", "Europe/Madrid", "Europe/Rome", "Europe/London",
-    "America/New_York"
+    "America/New_York",
 ]
 
 # ================= Utils =================
@@ -54,12 +54,21 @@ def _calc_next_epoch(day: int, month: int, tz: ZoneInfo, hour: int, minute: int,
         except ValueError:
             y += 1  # z. B. 29.02.
 
-# ================= Cog: Versandticker (per Guild) =================
+def _format_mentions_list(members: List[discord.Member]) -> str:
+    # "@A", "@A und @B", "@A, @B und @C"
+    if not members:
+        return ""
+    parts = [m.mention for m in members]
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + f" und {parts[-1]}"
+
+# ================= Cog: Versandticker (pro Guild) =================
 
 class Birthday(commands.Cog):
     """
-    Prüft minütlich auf fällige Geburtstage (next_epoch) und postet in den je Guild
-    konfigurierten Channel — gemäß deren HH:mm, Zeitzone & Embedding.
+    Checkt exakt zum Minutenbeginn (HH:mm:00) fällige Geburtstage (next_epoch) und
+    postet in den je Guild konfigurierten Channel — gemäß deren HH:mm, Zeitzone & Embedding.
     Tabellen: birthdays_guild, birthday_settings
     """
     def __init__(self, bot: commands.Bot):
@@ -69,8 +78,8 @@ class Birthday(commands.Cog):
     def cog_unload(self):
         self._task.cancel()
 
-    async def _load_settings(self):
-        settings = {}
+    async def _load_settings(self) -> Dict[int, tuple]:
+        settings: Dict[int, tuple] = {}
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -86,28 +95,38 @@ class Birthday(commands.Cog):
 
     async def _ticker(self):
         await self.bot.wait_until_ready()
-        last_ts = int(datetime.now().timestamp())
+
+        def next_minute_utc(from_dt: Optional[datetime] = None) -> datetime:
+            now = (from_dt or datetime.now(timezone.utc)).astimezone(timezone.utc)
+            return (now.replace(second=0, microsecond=0) + timedelta(minutes=1))
+
+        wake = next_minute_utc()
         while not self.bot.is_closed():
             try:
-                await asyncio.sleep(60)
-                now_ts = int(datetime.now().timestamp()) + 1
+                # exakt zum Minutenbeginn
+                await discord.utils.sleep_until(wake)
+                current_ts = int(wake.timestamp())
+
                 settings = await self._load_settings()
                 if not settings:
-                    last_ts = now_ts
-                    continue
+                    wake = next_minute_utc(wake); continue
 
-                # Fällige Einträge (epoch ist global)
+                # Alle Einträge, die JETZT fällig sind
                 async with self.bot.pool.acquire() as conn:
                     async with conn.cursor() as cur:
                         await cur.execute(
                             "SELECT guild_id, user_id, birth_str, day, month, year, next_epoch "
-                            "FROM birthdays_guild WHERE next_epoch >= %s AND next_epoch < %s",
-                            (last_ts, now_ts)
+                            "FROM birthdays_guild WHERE next_epoch=%s",
+                            (current_ts,)
                         )
                         rows = await cur.fetchall()
 
-                for g_id, user_id, birth_str, d, m, y, next_epoch in rows:
-                    g_id = int(g_id); user_id = int(user_id)
+                # Gruppieren je Guild (gleichzeitige Geburtstage zusammen ausgeben)
+                grouped: Dict[int, List[tuple]] = {}
+                for g_id, user_id, birth_str, d, m, y, ne in rows:
+                    grouped.setdefault(int(g_id), []).append((int(user_id), birth_str, int(d), int(m), int(y)))
+
+                for g_id, items in grouped.items():
                     ch_id, tpl, hr, mn, tz_name, use_embed = settings.get(g_id, (0, "", 9, 0, FALLBACK_TZ, 1))
                     guild = self.bot.get_guild(g_id)
                     if not guild or not ch_id:
@@ -115,26 +134,38 @@ class Birthday(commands.Cog):
                     channel = guild.get_channel(int(ch_id))
                     if not isinstance(channel, discord.TextChannel):
                         continue
-                    member = guild.get_member(user_id)
-                    if not member:
+
+                    # Mitglieder sammeln, die (noch) auf dem Server sind
+                    members: List[discord.Member] = []
+                    any_birth_str = None
+                    for user_id, birth_str, d, m, y in items:
+                        mem = guild.get_member(user_id)
+                        if mem:
+                            members.append(mem)
+                            any_birth_str = any_birth_str or birth_str
+                    if not members:
                         continue
 
-                    msg = (tpl.strip() or STD_MSG)\
-                        .replace("{mention}", member.mention)\
-                        .replace("{user_id}", str(member.id))\
-                        .replace("{tag}", str(member))\
-                        .replace("{name}", member.display_name)
+                    # Template befüllen
+                    mentions_str = _format_mentions_list(members)
+                    first = members[0]  # Back-compat für {name}/{tag}/{user_id}
+                    msg_template = (tpl.strip() or STD_MSG)
+                    msg = (msg_template
+                           .replace("{mention}", mentions_str)
+                           .replace("{user_id}", str(first.id))
+                           .replace("{tag}", str(first))
+                           .replace("{name}", first.display_name))
 
                     tz = _safe_tz(tz_name)
+
                     if use_embed:
+                        # Schlichtes, schönes Embed: Titel + Beschreibung (Template) + Timestamp + Footer
                         embed = discord.Embed(
-                            title="🎂 Geburtstag heute!",
+                            title="🎂 Geburtstage heute",
                             description=msg,
-                            colour=discord.Colour.green(),
+                            colour=discord.Colour.blurple(),
                             timestamp=datetime.now(tz),
                         )
-                        embed.add_field(name="Geburtsdatum", value=birth_str, inline=True)
-                        embed.add_field(name="Feierzeit", value=f"<t:{next_epoch}:D>", inline=True)
                         embed.set_footer(text="Alles Gute!")
                         try:
                             await channel.send(
@@ -144,7 +175,6 @@ class Birthday(commands.Cog):
                         except Exception:
                             pass
                     else:
-                        # Nur Text
                         try:
                             await channel.send(
                                 msg,
@@ -153,22 +183,25 @@ class Birthday(commands.Cog):
                         except Exception:
                             pass
 
-                    # Nächsten Termin in Guild-Zeitzone planen
-                    new_epoch = _calc_next_epoch(d, m, tz, hr, mn)
-                    async with self.bot.pool.acquire() as conn:
-                        async with conn.cursor() as cur:
-                            await cur.execute(
-                                "UPDATE birthdays_guild SET next_epoch=%s WHERE guild_id=%s AND user_id=%s",
-                                (new_epoch, g_id, user_id)
-                            )
+                    # Nächsten Termin je User in Guild-Zeitzone planen
+                    for user_id, _birth_str, d, m, y in items:
+                        new_epoch = _calc_next_epoch(d, m, tz, hr, mn)
+                        async with self.bot.pool.acquire() as conn:
+                            async with conn.cursor() as cur:
+                                await cur.execute(
+                                    "UPDATE birthdays_guild SET next_epoch=%s WHERE guild_id=%s AND user_id=%s",
+                                    (new_epoch, g_id, user_id)
+                                )
 
-                last_ts = now_ts
+                wake = next_minute_utc(wake)
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 print(f"[Birthday] ticker error: {e}")
+                wake = next_minute_utc()
 
-# ================= Slash-Commands (per Guild) =================
+# ================= Slash-Commands (pro Guild) =================
 
 @app_commands.guild_only()
 class Geburtstag(app_commands.Group):
@@ -298,13 +331,17 @@ class Geburtstag(app_commands.Group):
             except Exception:
                 await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültige Zeitzone. Beispiele: `Europe/Berlin`, `Europe/Vienna`, `Europe/Zurich`.", ephemeral=True); return
 
-        # Upsert + selektive Updates
+        # Upsert (Alias-Technik, kein VALUES() im UPDATE) + selektive Updates
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "INSERT INTO birthday_settings (guild_id, channel_id, message_template, send_hour, send_minute, tz_name, use_embed) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s) "
-                    "ON DUPLICATE KEY UPDATE guild_id=guild_id",
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s) AS new "
+                    "ON DUPLICATE KEY UPDATE "
+                    "channel_id=COALESCE(new.channel_id, channel_id), "
+                    "message_template=IF(new.message_template='', message_template, new.message_template), "
+                    "send_hour=new.send_hour, send_minute=new.send_minute, "
+                    "tz_name=IFNULL(new.tz_name, tz_name), use_embed=IFNULL(new.use_embed, use_embed)",
                     (gid, channel.id if channel else None, "", 9, 0, FALLBACK_TZ, 1)
                 )
                 if channel is not None:
@@ -315,15 +352,15 @@ class Geburtstag(app_commands.Group):
                 if tz_to_set is not None:
                     await cur.execute("UPDATE birthday_settings SET tz_name=%s WHERE guild_id=%s", (tz_to_set, gid))
 
-                # Aktuelle Werte holen
                 await cur.execute(
-                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0), COALESCE(tz_name,%s), COALESCE(use_embed,1) "
+                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9), "
+                    "COALESCE(send_minute,0), COALESCE(tz_name,%s), COALESCE(use_embed,1) "
                     "FROM birthday_settings WHERE guild_id=%s",
                     (FALLBACK_TZ, gid)
                 )
                 ch_id, tpl, hour, minute, tz_name, use_embed = await cur.fetchone()
 
-        # Recalculate alle next_epoch dieser Guild sofort
+        # Recalculate alle next_epoch dieser Guild
         tz = _safe_tz(tz_name)
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -370,7 +407,7 @@ class Geburtstag(app_commands.Group):
 
         gid = interaction.guild.id
 
-        # Aktuelle Vorlage/Modus laden
+        # Bestehendes Template/Modus
         current_tpl = ""
         current_use_embed = 1
         async with self.bot.pool.acquire() as conn:
@@ -409,8 +446,9 @@ class Geburtstag(app_commands.Group):
                 async with self.bot.pool.acquire() as conn2:
                     async with conn2.cursor() as cur2:
                         await cur2.execute(
-                            "INSERT INTO birthday_settings (guild_id, message_template, use_embed) VALUES (%s,%s,%s) "
-                            "ON DUPLICATE KEY UPDATE message_template=VALUES(message_template), use_embed=VALUES(use_embed)",
+                            "INSERT INTO birthday_settings (guild_id, message_template, use_embed) "
+                            "VALUES (%s,%s,%s) AS new "
+                            "ON DUPLICATE KEY UPDATE message_template=new.message_template, use_embed=new.use_embed",
                             (modal_interaction.guild.id, tpl_val, use_embed)
                         )
                 preview = tpl_val or STD_MSG
