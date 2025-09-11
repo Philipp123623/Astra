@@ -1,6 +1,6 @@
 # geburtstag_system.py
 import asyncio
-from typing import Optional
+from typing import Optional, Tuple
 
 import discord
 from discord.ext import commands
@@ -14,26 +14,41 @@ STD_MSG = "Lasst uns {mention} zum Geburtstag gratulieren! 🎉"
 
 # ========== Utils ==========
 
-def _calc_next_epoch(day: int, month: int, ref: Optional[datetime], hour: int) -> int:
+def _parse_hhmm(s: str) -> Optional[Tuple[int, int]]:
+    try:
+        s = s.strip()
+        if len(s) != 5 or s[2] != ":":
+            return None
+        hh = int(s[:2])
+        mm = int(s[3:])
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return hh, mm
+        return None
+    except Exception:
+        return None
+
+def _calc_next_epoch(day: int, month: int, ref: Optional[datetime], hour: int, minute: int) -> int:
     now = ref or datetime.now(TZ)
-    y = now.year
     hour = max(0, min(23, int(hour)))
+    minute = max(0, min(59, int(minute)))
+    y = now.year
     while True:
         try:
-            cand = datetime(y, month, day, hour, 0, tzinfo=TZ)
+            cand = datetime(y, month, day, hour, minute, tzinfo=TZ)
             if cand <= now:
                 y += 1
                 continue
             return int(cand.timestamp())
         except ValueError:
-            y += 1  # 29.02 etc.
+            # 29.02 etc.
+            y += 1
 
 # ========== Cog: Ticker/Versand ==========
 
 class Birthday(commands.Cog):
     """
     Prüft minütlich auf fällige Geburtstage (next_epoch) und postet in den
-    pro Guild konfigurierten Channel mit Vorlage & Stunde.
+    pro Guild konfigurierten Channel mit Vorlage & Uhrzeit.
     """
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -66,15 +81,15 @@ class Birthday(commands.Cog):
                         async with conn.cursor() as cur:
                             await cur.execute(
                                 "SELECT guild_id, COALESCE(channel_id,0), "
-                                "COALESCE(message_template,''), COALESCE(send_hour,9) "
+                                "COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0) "
                                 "FROM birthday_settings"
                             )
-                            for g_id, ch_id, tpl, hr in await cur.fetchall():
-                                settings[int(g_id)] = (int(ch_id), tpl or "", int(hr))
+                            for g_id, ch_id, tpl, hr, mn in await cur.fetchall():
+                                settings[int(g_id)] = (int(ch_id), tpl or "", int(hr), int(mn))
 
                     for user_id, birth_str, d, m, y, next_epoch in rows:
                         for guild in list(self.bot.guilds):
-                            ch_id, tpl, _ = settings.get(guild.id, (0, "", 9))
+                            ch_id, tpl, _hr, _mn = settings.get(guild.id, (0, "", 9, 0))
                             if not ch_id:
                                 continue
                             ch = guild.get_channel(ch_id)
@@ -84,10 +99,11 @@ class Birthday(commands.Cog):
                             if not member:
                                 continue
 
-                            msg = (tpl.strip() or STD_MSG).replace("{mention}", member.mention)\
-                                                         .replace("{user_id}", str(member.id))\
-                                                         .replace("{tag}", str(member))\
-                                                         .replace("{name}", member.display_name)
+                            msg = (tpl.strip() or STD_MSG)\
+                                .replace("{mention}", member.mention)\
+                                .replace("{user_id}", str(member.id))\
+                                .replace("{tag}", str(member))\
+                                .replace("{name}", member.display_name)
 
                             embed = discord.Embed(
                                 title="🎂 Geburtstag heute!",
@@ -107,13 +123,13 @@ class Birthday(commands.Cog):
                             except Exception:
                                 pass
 
-                        # next_epoch auf nächste Fälligkeit (erste Guild-Stunde, falls vorhanden)
-                        send_hour = 9
+                        # next_epoch neu setzen (erste Guild, in der der User ist, bestimmt Zeit)
+                        send_hour, send_minute = 9, 0
                         for guild in list(self.bot.guilds):
                             if guild.get_member(int(user_id)) and guild.id in settings:
-                                send_hour = settings[guild.id][2]
+                                _, _, send_hour, send_minute = settings[guild.id]
                                 break
-                        new_epoch = _calc_next_epoch(d, m, datetime.now(TZ), send_hour)
+                        new_epoch = _calc_next_epoch(d, m, datetime.now(TZ), send_hour, send_minute)
                         async with self.bot.pool.acquire() as conn:
                             async with conn.cursor() as cur:
                                 await cur.execute(
@@ -135,7 +151,7 @@ class Geburtstag(app_commands.Group):
         super().__init__(name="geburtstag", description="Geburtstag einrichten/anzeigen & Server-Setup")
         self.bot = bot
 
-    # -------- User: setzen/anzeigen/löschen (ohne Modals) --------
+    # -------- User: setzen/anzeigen/löschen --------
 
     @app_commands.command(name="setzen", description="Dein Geburtsdatum speichern (TT.MM.JJJJ)")
     @app_commands.describe(datum="Format: TT.MM.JJJJ (z. B. 11.08.2005)")
@@ -151,20 +167,20 @@ class Geburtstag(app_commands.Group):
             return
 
         d, m, y = born.day, born.month, born.year
-        # Stunde der Guild oder 9
-        send_hour = 9
+        # Uhrzeit der Guild oder 09:00
+        send_hour, send_minute = 9, 0
         if interaction.guild:
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(
-                        "SELECT COALESCE(send_hour,9) FROM birthday_settings WHERE guild_id=%s",
+                        "SELECT COALESCE(send_hour,9), COALESCE(send_minute,0) FROM birthday_settings WHERE guild_id=%s",
                         (interaction.guild.id,)
                     )
                     row = await cur.fetchone()
                     if row:
-                        send_hour = int(row[0])
+                        send_hour, send_minute = int(row[0]), int(row[1])
 
-        next_epoch = _calc_next_epoch(d, m, datetime.now(TZ), send_hour)
+        next_epoch = _calc_next_epoch(d, m, datetime.now(TZ), send_hour, send_minute)
 
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -220,19 +236,19 @@ class Geburtstag(app_commands.Group):
             ephemeral=True
         )
 
-    # -------- Admin-Setup: channel/stunde/nachricht --------
+    # -------- Admin-Setup: channel/uhrzeit/nachricht --------
 
-    @app_commands.command(name="setup", description="Admin: Channel, Stunde (0–23) und Nachrichtenvorlage setzen/anzeigen")
+    @app_commands.command(name="setup", description="Admin: Channel, Uhrzeit (HH:mm) & Nachrichtenvorlage setzen/anzeigen")
     @app_commands.describe(
         channel="Discord-Textkanal für Glückwünsche",
-        stunde="Sendezeit (0–23, Serverzeit)",
+        uhrzeit="Uhrzeit im Format HH:mm (Serverzeit)",
         nachricht="Vorlage mit Platzhaltern {mention}, {user_id}, {tag}, {name}"
     )
     async def setup(
         self,
         interaction: discord.Interaction,
         channel: Optional[discord.TextChannel] = None,
-        stunde: Optional[int] = None,
+        uhrzeit: Optional[str] = None,
         nachricht: Optional[str] = None
     ):
         if not interaction.guild:
@@ -243,42 +259,49 @@ class Geburtstag(app_commands.Group):
             return
 
         gid = interaction.guild.id
-        # Werte clampen/aufbereiten
-        if stunde is not None:
-            if stunde < 0 or stunde > 23:
-                await interaction.response.send_message("<:Astra_x:1141303954555289600> `stunde` muss zwischen 0 und 23 liegen.", ephemeral=True)
+
+        # Uhrzeit parsen (optional)
+        parsed_time = None
+        if uhrzeit is not None:
+            parsed_time = _parse_hhmm(uhrzeit)
+            if parsed_time is None:
+                await interaction.response.send_message(
+                    "<:Astra_x:1141303954555289600> Ungültige Uhrzeit. Bitte **HH:mm** (z. B. `09:00` oder `18:30`).",
+                    ephemeral=True
+                )
                 return
 
-        # upsert
+        # Upsert + selektive Updates
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # stelle sicher, dass ein Datensatz existiert
+                # sicherstellen, dass es einen Datensatz gibt
                 await cur.execute(
-                    "INSERT INTO birthday_settings (guild_id, channel_id, message_template, send_hour) "
-                    "VALUES (%s, %s, %s, %s) "
+                    "INSERT INTO birthday_settings (guild_id, channel_id, message_template, send_hour, send_minute) "
+                    "VALUES (%s, %s, %s, %s, %s) "
                     "ON DUPLICATE KEY UPDATE guild_id=guild_id",
-                    (gid, channel.id if channel else None, nachricht or "", stunde if stunde is not None else 9)
+                    (gid, channel.id if channel else None, nachricht or "", 9, 0)
                 )
-                # selektiv Felder aktualisieren
                 if channel is not None:
                     await cur.execute("UPDATE birthday_settings SET channel_id=%s WHERE guild_id=%s", (channel.id, gid))
-                if stunde is not None:
-                    await cur.execute("UPDATE birthday_settings SET send_hour=%s WHERE guild_id=%s", (int(stunde), gid))
+                if parsed_time is not None:
+                    hh, mm = parsed_time
+                    await cur.execute("UPDATE birthday_settings SET send_hour=%s, send_minute=%s WHERE guild_id=%s", (hh, mm, gid))
                 if nachricht is not None:
                     await cur.execute("UPDATE birthday_settings SET message_template=%s WHERE guild_id=%s", (nachricht, gid))
                 # aktuelle Werte holen
                 await cur.execute(
-                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9) "
+                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0) "
                     "FROM birthday_settings WHERE guild_id=%s",
                     (gid,)
                 )
-                ch_id, tpl, hour = await cur.fetchone()
+                ch_id, tpl, hour, minute = await cur.fetchone()
 
         ch_mention = f"<#{ch_id}>" if ch_id else "—"
         tpl_eff = tpl or STD_MSG
+        hhmm = f"{int(hour):02d}:{int(minute):02d}"
         embed = discord.Embed(title="🎛️ Geburtstag-Setup", colour=discord.Colour.blurple())
         embed.add_field(name="Channel", value=ch_mention, inline=True)
-        embed.add_field(name="Stunde", value=str(hour), inline=True)
+        embed.add_field(name="Uhrzeit", value=hhmm, inline=True)
         embed.add_field(name="Nachrichtenvorlage", value=f"`{tpl_eff}`", inline=False)
         embed.set_footer(text="Platzhalter: {mention}, {user_id}, {tag}, {name}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
