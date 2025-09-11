@@ -99,6 +99,7 @@ class Astra(commands.Bot):
         self.task2 = False
         self.pool = None  # Pool-Objekt hier zentral gespeichert
         self.initial_extensions = [
+            "cogs.birthday",
             "cogs.giveaway",
             "cogs.errors",
             "cogs.notifier",
