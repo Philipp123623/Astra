@@ -1,4 +1,4 @@
-# geburtstag_system.py  — per-Guild Zeitzonen + HH:mm + Recalculate
+# geburtstag_system.py — per-Guild Zeitzonen + HH:mm + Recalculate + Modal (Embed ja/nein)
 import asyncio
 from typing import Optional, Tuple, List
 
@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 STD_MSG = "Lasst uns {mention} zum Geburtstag gratulieren! 🎉"
 FALLBACK_TZ = "Europe/Berlin"
 
-# Kuratierte Liste für Autocomplete (deutschsprachiger Fokus + ein paar EU/US)
+# Kurze, kuratierte TZ-Liste (D-A-CH + ein paar EU/US für Expat-Server)
 ALLOWED_TZS: List[str] = [
     "Europe/Berlin", "Europe/Vienna", "Europe/Zurich",
     "Europe/Luxembourg", "Europe/Brussels", "Europe/Amsterdam",
@@ -20,7 +20,7 @@ ALLOWED_TZS: List[str] = [
     "America/New_York"
 ]
 
-# ========== Utils ==========
+# ================= Utils =================
 
 def _parse_hhmm(s: str) -> Optional[Tuple[int, int]]:
     try:
@@ -54,12 +54,12 @@ def _calc_next_epoch(day: int, month: int, tz: ZoneInfo, hour: int, minute: int,
         except ValueError:
             y += 1  # z. B. 29.02.
 
-# ========== Cog: Ticker/Versand (per Guild) ==========
+# ================= Cog: Versandticker (per Guild) =================
 
 class Birthday(commands.Cog):
     """
     Prüft minütlich auf fällige Geburtstage (next_epoch) und postet in den je Guild
-    konfigurierten Channel — gemäß deren HH:mm und Zeitzone.
+    konfigurierten Channel — gemäß deren HH:mm, Zeitzone & Embedding.
     Tabellen: birthdays_guild, birthday_settings
     """
     def __init__(self, bot: commands.Bot):
@@ -76,11 +76,12 @@ class Birthday(commands.Cog):
                 await cur.execute(
                     "SELECT guild_id, COALESCE(channel_id,0), "
                     "COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0), "
-                    "COALESCE(tz_name,%s) FROM birthday_settings",
+                    "COALESCE(tz_name,%s), COALESCE(use_embed,1) "
+                    "FROM birthday_settings",
                     (FALLBACK_TZ,)
                 )
-                for g_id, ch_id, tpl, hr, mn, tz_name in await cur.fetchall():
-                    settings[int(g_id)] = (int(ch_id), tpl or "", int(hr), int(mn), tz_name or FALLBACK_TZ)
+                for g_id, ch_id, tpl, hr, mn, tz_name, use_embed in await cur.fetchall():
+                    settings[int(g_id)] = (int(ch_id), tpl or "", int(hr), int(mn), tz_name or FALLBACK_TZ, int(use_embed))
         return settings
 
     async def _ticker(self):
@@ -107,7 +108,7 @@ class Birthday(commands.Cog):
 
                 for g_id, user_id, birth_str, d, m, y, next_epoch in rows:
                     g_id = int(g_id); user_id = int(user_id)
-                    ch_id, tpl, hr, mn, tz_name = settings.get(g_id, (0, "", 9, 0, FALLBACK_TZ))
+                    ch_id, tpl, hr, mn, tz_name, use_embed = settings.get(g_id, (0, "", 9, 0, FALLBACK_TZ, 1))
                     guild = self.bot.get_guild(g_id)
                     if not guild or not ch_id:
                         continue
@@ -124,25 +125,35 @@ class Birthday(commands.Cog):
                         .replace("{tag}", str(member))\
                         .replace("{name}", member.display_name)
 
-                    embed = discord.Embed(
-                        title="🎂 Geburtstag heute!",
-                        description=msg,
-                        colour=discord.Colour.green(),
-                        timestamp=datetime.now(_safe_tz(tz_name)),
-                    )
-                    embed.add_field(name="Geburtsdatum", value=birth_str, inline=True)
-                    embed.add_field(name="Feierzeit", value=f"<t:{next_epoch}:D>", inline=True)
-                    embed.set_footer(text="Alles Gute!")
-                    try:
-                        await channel.send(
-                            embed=embed,
-                            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)
+                    tz = _safe_tz(tz_name)
+                    if use_embed:
+                        embed = discord.Embed(
+                            title="🎂 Geburtstag heute!",
+                            description=msg,
+                            colour=discord.Colour.green(),
+                            timestamp=datetime.now(tz),
                         )
-                    except Exception:
-                        pass
+                        embed.add_field(name="Geburtsdatum", value=birth_str, inline=True)
+                        embed.add_field(name="Feierzeit", value=f"<t:{next_epoch}:D>", inline=True)
+                        embed.set_footer(text="Alles Gute!")
+                        try:
+                            await channel.send(
+                                embed=embed,
+                                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        # Nur Text
+                        try:
+                            await channel.send(
+                                msg,
+                                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False)
+                            )
+                        except Exception:
+                            pass
 
                     # Nächsten Termin in Guild-Zeitzone planen
-                    tz = _safe_tz(tz_name)
                     new_epoch = _calc_next_epoch(d, m, tz, hr, mn)
                     async with self.bot.pool.acquire() as conn:
                         async with conn.cursor() as cur:
@@ -157,7 +168,7 @@ class Birthday(commands.Cog):
             except Exception as e:
                 print(f"[Birthday] ticker error: {e}")
 
-# ========== Slash-Commands (pro Guild) ==========
+# ================= Slash-Commands (per Guild) =================
 
 @app_commands.guild_only()
 class Geburtstag(app_commands.Group):
@@ -251,12 +262,12 @@ class Geburtstag(app_commands.Group):
             ephemeral=True
         )
 
-    # ---- Admin-Setup: channel / uhrzeit(HH:mm) / zeitzone ----
+    # ---- Admin: Setup (Channel / Uhrzeit(HH:mm) / Zeitzone) ----
 
     @app_commands.command(name="setup", description="Admin: Channel, Uhrzeit (HH:mm) & Zeitzone setzen/anzeigen")
     @app_commands.describe(
         channel="Textkanal für Glückwünsche",
-        uhrzeit="HH:mm (lokal für die gewählte Zeitzone)",
+        uhrzeit="HH:mm (lokal zur Zeitzone)",
         zeitzone="IANA-Zeitzone, z. B. Europe/Berlin"
     )
     async def setup(
@@ -279,11 +290,10 @@ class Geburtstag(app_commands.Group):
             if parsed_time is None:
                 await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültige Uhrzeit. Format **HH:mm** (z. B. `09:00`, `18:30`).", ephemeral=True); return
 
-        # Zeitzone validieren (optional)
         tz_to_set = None
         if zeitzone is not None:
             try:
-                ZoneInfo(zeitzone)  # validate
+                ZoneInfo(zeitzone)
                 tz_to_set = zeitzone
             except Exception:
                 await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültige Zeitzone. Beispiele: `Europe/Berlin`, `Europe/Vienna`, `Europe/Zurich`.", ephemeral=True); return
@@ -292,10 +302,10 @@ class Geburtstag(app_commands.Group):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "INSERT INTO birthday_settings (guild_id, channel_id, message_template, send_hour, send_minute, tz_name) "
-                    "VALUES (%s, %s, %s, %s, %s, %s) "
+                    "INSERT INTO birthday_settings (guild_id, channel_id, message_template, send_hour, send_minute, tz_name, use_embed) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s) "
                     "ON DUPLICATE KEY UPDATE guild_id=guild_id",
-                    (gid, channel.id if channel else None, "", 9, 0, FALLBACK_TZ)
+                    (gid, channel.id if channel else None, "", 9, 0, FALLBACK_TZ, 1)
                 )
                 if channel is not None:
                     await cur.execute("UPDATE birthday_settings SET channel_id=%s WHERE guild_id=%s", (channel.id, gid))
@@ -307,13 +317,13 @@ class Geburtstag(app_commands.Group):
 
                 # Aktuelle Werte holen
                 await cur.execute(
-                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0), COALESCE(tz_name,%s) "
+                    "SELECT COALESCE(channel_id,0), COALESCE(message_template,''), COALESCE(send_hour,9), COALESCE(send_minute,0), COALESCE(tz_name,%s), COALESCE(use_embed,1) "
                     "FROM birthday_settings WHERE guild_id=%s",
                     (FALLBACK_TZ, gid)
                 )
-                ch_id, tpl, hour, minute, tz_name = await cur.fetchone()
+                ch_id, tpl, hour, minute, tz_name, use_embed = await cur.fetchone()
 
-        # Recalculate: alle next_epoch dieser Guild sofort auf neue Zeit/Zone umrechnen
+        # Recalculate alle next_epoch dieser Guild sofort
         tz = _safe_tz(tz_name)
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -339,22 +349,87 @@ class Geburtstag(app_commands.Group):
         ch_mention = f"<#{ch_id}>" if ch_id else "—"
         tpl_eff = tpl or STD_MSG
         hhmm = f"{int(hour):02d}:{int(minute):02d}"
+        mode = "Embed" if int(use_embed) == 1 else "Text"
         embed = discord.Embed(title="🎛️ Geburtstag-Setup", colour=discord.Colour.blurple())
         embed.add_field(name="Channel", value=ch_mention, inline=True)
         embed.add_field(name="Uhrzeit", value=hhmm, inline=True)
         embed.add_field(name="Zeitzone", value=tz_name, inline=True)
         embed.add_field(name="Nachrichtenvorlage", value=f"`{tpl_eff}`", inline=False)
+        embed.add_field(name="Modus", value=mode, inline=True)
         embed.set_footer(text="Platzhalter: {mention}, {user_id}, {tag}, {name}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # ---- Autocomplete für Zeitzone (schlanke Allowlist) ----
+    # ---- Admin: Nachrichtenvorlage per Modal (inkl. Ja/Nein für Embed) ----
+
+    @app_commands.command(name="nachricht", description="Admin: Nachrichtenvorlage setzen (Modal, Embed ja/nein)")
+    async def nachricht(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.", ephemeral=True); return
+        if not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.manage_channels):
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.", ephemeral=True); return
+
+        gid = interaction.guild.id
+
+        # Aktuelle Vorlage/Modus laden
+        current_tpl = ""
+        current_use_embed = 1
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT COALESCE(message_template,''), COALESCE(use_embed,1) FROM birthday_settings WHERE guild_id=%s", (gid,))
+                row = await cur.fetchone()
+                if row:
+                    current_tpl = row[0] or ""
+                    current_use_embed = int(row[1])
+
+        class MsgModal(discord.ui.Modal, title="Nachrichtenvorlage bearbeiten"):
+            text = discord.ui.TextInput(
+                label="Vorlage",
+                style=discord.TextStyle.paragraph,
+                placeholder=current_tpl or STD_MSG,
+                max_length=500,
+                required=False
+            )
+            embed_flag = discord.ui.TextInput(
+                label="Als Embed senden? (ja/nein)",
+                style=discord.TextStyle.short,
+                placeholder="ja" if current_use_embed else "nein",
+                required=False,
+                max_length=5
+            )
+
+            def __init__(self, bot: commands.Bot):
+                super().__init__()
+                self.bot = bot
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                tpl_val = (self.text.value or "").strip()
+                flag = (self.embed_flag.value or ("ja" if current_use_embed else "nein")).strip().lower()
+                use_embed = 1 if flag in ("ja", "j", "yes", "y") else 0
+
+                async with self.bot.pool.acquire() as conn2:
+                    async with conn2.cursor() as cur2:
+                        await cur2.execute(
+                            "INSERT INTO birthday_settings (guild_id, message_template, use_embed) VALUES (%s,%s,%s) "
+                            "ON DUPLICATE KEY UPDATE message_template=VALUES(message_template), use_embed=VALUES(use_embed)",
+                            (modal_interaction.guild.id, tpl_val, use_embed)
+                        )
+                preview = tpl_val or STD_MSG
+                mode = "Embed" if use_embed else "Text"
+                await modal_interaction.response.send_message(
+                    f"<:Astra_accept:1141303821176422460> Nachrichtenvorlage aktualisiert ({mode}-Modus):\n```{preview}```",
+                    ephemeral=True
+                )
+
+        await interaction.response.send_modal(MsgModal(self.bot))
+
+    # ---- Autocomplete: Zeitzone ----
     @setup.autocomplete("zeitzone")
     async def tz_autocomplete(self, interaction: discord.Interaction, current: str):
         current_lower = (current or "").lower()
         choices = [tz for tz in ALLOWED_TZS if current_lower in tz.lower()]
         return [app_commands.Choice(name=tz, value=tz) for tz in choices[:25]]
 
-# ========== Bot-Hooks ==========
+# ================= Bot-Hooks =================
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Birthday(bot))
