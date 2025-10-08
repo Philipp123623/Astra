@@ -1,6 +1,6 @@
 # geburtstag_system.py — exakt HH:mm:00, Multi-{mention}, schlichtes Embed, Alias-UPSERT, Modal (Embed ja/nein), Status (AN/AUS)
 import asyncio
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Literal
 
 import discord
 from discord.ext import commands
@@ -256,7 +256,7 @@ class Geburtstag(app_commands.Group):
 
     # ---- User: setzen/anzeigen/löschen ----
 
-    @app_commands.command(name="setzen", description="Dein Geburtsdatum speichern (TT.MM.JJJJ) – pro Server")
+    @app_commands.command(name="setzen", description="Trage deinen Geburtstag ein.")
     @app_commands.describe(datum="Format: TT.MM.JJJJ (z. B. 11.08.2005)")
     async def setzen(self, interaction: discord.Interaction, datum: str):
         uid = interaction.user.id
@@ -303,7 +303,7 @@ class Geburtstag(app_commands.Group):
         embed.set_footer(text=f"Gespeichert von {interaction.user}", icon_url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="anzeigen", description="Zeigt deinen gespeicherten Geburtstag (dieser Server)")
+    @app_commands.command(name="anzeigen", description="Zeigt deinen gespeicherten Geburtstag an.")
     async def anzeigen(self, interaction: discord.Interaction):
         uid = interaction.user.id
         gid = interaction.guild.id
@@ -328,7 +328,7 @@ class Geburtstag(app_commands.Group):
         embed.set_footer(text=f"Angefragt von {interaction.user}", icon_url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="löschen", description="Löscht deinen Geburtstagseintrag (dieser Server)")
+    @app_commands.command(name="löschen", description="Löscht deinen Geburtstagseintrag.")
     async def loeschen(self, interaction: discord.Interaction):
         uid = interaction.user.id
         gid = interaction.guild.id
@@ -342,7 +342,7 @@ class Geburtstag(app_commands.Group):
 
     # ---- Admin: Setup (Channel / Uhrzeit(HH:mm) / Zeitzone) ----
 
-    @app_commands.command(name="setup", description="Admin: Channel, Uhrzeit (HH:mm) & Zeitzone setzen/anzeigen")
+    @app_commands.command(name="setup", description="Channel, Uhrzeit & Zeitzone setzen/anzeigen.")
     @app_commands.describe(
         channel="Textkanal für Glückwünsche",
         uhrzeit="HH:mm (lokal zur Zeitzone)",
@@ -445,7 +445,7 @@ class Geburtstag(app_commands.Group):
 
     # ---- Admin: Nachrichtenvorlage per Modal (inkl. Ja/Nein für Embed) ----
 
-    @app_commands.command(name="nachricht", description="Admin: Nachrichtenvorlage setzen (Modal, Embed ja/nein)")
+    @app_commands.command(name="nachricht", description="Eigene Geburtstagsnachricht setzen.")
     async def nachricht(self, interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.", ephemeral=True); return
@@ -507,24 +507,24 @@ class Geburtstag(app_commands.Group):
 
         await interaction.response.send_modal(MsgModal(self.bot))
 
-    # ---- NEU: Admin: Status (AN/AUS) ----
 
-    @app_commands.command(name="status", description="Admin: Geburtstagssystem AN/AUS schalten")
-    @app_commands.describe(modus="AN = aktiv, AUS = pausiert")
-    @app_commands.choices(modus=[
-        app_commands.Choice(name="AN (aktiviert)", value="an"),
-        app_commands.Choice(name="AUS (deaktiviert)", value="aus"),
-    ])
-    async def status(self, interaction: discord.Interaction, modus: app_commands.Choice[str]):
+    @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Geburtstagssystem.")
+    @app_commands.describe(modus="Wähle 'an' um zu aktivieren oder 'aus' um zu pausieren.")
+    async def status(self, interaction: discord.Interaction, modus: Literal["Einschalten", "Ausschalten"]):
         if not interaction.guild:
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.", ephemeral=True); return
+            await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.",
+                                                    ephemeral=True)
+            return
         if not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.manage_channels):
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.", ephemeral=True); return
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.",
+                ephemeral=True)
+            return
 
         gid = interaction.guild.id
-        new_enabled = 1 if (modus.value or "").lower() == "an" else 0
+        new_enabled = 1 if modus == "Einschalten" else 0
 
-        # Upsert enabled-Flag
+        # Upsert enabled-Flag in birthday_settings
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -541,19 +541,24 @@ class Geburtstag(app_commands.Group):
                 )
                 ch_id, hour, minute, tz_name, use_embed, enabled, tpl = await cur.fetchone()
 
-        status_txt = "AN ✅" if int(enabled) == 1 else "AUS ⛔"
+        status_txt = "✅ Aktiviert" if int(enabled) == 1 else "⛔ Deaktiviert"
         ch_mention = f"<#{ch_id}>" if ch_id else "—"
         hhmm = f"{int(hour):02d}:{int(minute):02d}"
         mode_txt = "Embed" if int(use_embed) == 1 else "Text"
         tpl_eff = tpl or STD_MSG
 
-        embed = discord.Embed(title="⚙️ Geburtstagssystem – Status geändert", colour=discord.Colour.green() if enabled else discord.Colour.red())
+        embed = discord.Embed(
+            title="⚙️ Geburtstagssystem – Status geändert",
+            colour=discord.Colour.green() if enabled else discord.Colour.red(),
+            description=f"Das Geburtstagssystem wurde **{status_txt.lower()}**."
+        )
         embed.add_field(name="Status", value=status_txt, inline=True)
         embed.add_field(name="Channel", value=ch_mention, inline=True)
         embed.add_field(name="Uhrzeit", value=hhmm, inline=True)
         embed.add_field(name="Zeitzone", value=tz_name, inline=True)
         embed.add_field(name="Modus", value=mode_txt, inline=True)
         embed.add_field(name="Vorlage", value=f"`{tpl_eff}`", inline=False)
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # ---- Autocomplete: Zeitzone ----
