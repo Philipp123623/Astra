@@ -580,6 +580,89 @@ class Benachrichtigung(app_commands.Group):
         super().__init__(name="benachrichtigung", description="Benachrichtigungen für YouTube & Twitch")
         self.bot = bot
 
+    @app_commands.command(name="info", description="Zeigt Informationen und aktive Benachrichtigungen an")
+    async def info(self, interaction: discord.Interaction):
+        """Zeigt alle aktiven YouTube- und Twitch-Abos dieses Servers."""
+        cog: Optional[Notifier] = interaction.client.get_cog("Notifier")  # type: ignore
+        if not cog:
+            return await interaction.response.send_message(
+                embed=astra_embed(
+                    title="❌ Notifier nicht bereit",
+                    description="Bitte versuche es gleich erneut.",
+                    author=interaction.user,
+                    guild=interaction.guild,
+                ),
+                ephemeral=True,
+            )
+
+        # --- Datenbankabfrage: alle Subscriptions dieses Servers holen
+        async with cog.pool.acquire() as conn, conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT platform, content_id, discord_channel_id, ping_role_id, last_item_id, last_sent_at
+                  FROM subscriptions
+                 WHERE guild_id=%s
+                """,
+                (str(interaction.guild_id),),
+            )
+            subs = await cur.fetchall()
+
+        # --- Embed vorbereiten
+        desc = (
+            "Dieser Notifier überprüft regelmäßig Twitch-Streams und YouTube-Kanäle "
+            "und sendet automatisch eine Nachricht, wenn jemand live geht oder ein neues Video hochlädt.\n\n"
+            "🔔 **Befehle:**\n"
+            "• `/benachrichtigung twitch` – Twitch-Kanäle hinzufügen oder entfernen\n"
+            "• `/benachrichtigung youtube` – YouTube-Kanäle hinzufügen oder entfernen\n\n"
+            "Hier siehst du alle aktuell aktiven Benachrichtigungen:"
+        )
+
+        embed = astra_embed(
+            title="📢 Astra Notifier Info",
+            description=desc,
+            color=discord.Colour.blurple(),
+            author=interaction.user,
+            guild=interaction.guild,
+        )
+
+        if not subs:
+            embed.add_field(
+                name="Keine aktiven Benachrichtigungen",
+                value="🚫 Es sind momentan keine YouTube- oder Twitch-Kanäle abonniert.",
+                inline=False,
+            )
+        else:
+            twitch_list = []
+            yt_list = []
+            for platform, content_id, ch_id, role_id, last_item, last_sent in subs:
+                channel_mention = f"<#{ch_id}>"
+                ping_text = f"<@&{role_id}>" if role_id else "—"
+                last_line = f"🕒 {last_sent:%Y-%m-%d %H:%M}" if last_sent else "—"
+                line = f"**{content_id}** → {channel_mention}\n🔔 Ping: {ping_text}\nZuletzt gesendet: {last_line}"
+
+                if platform == "twitch":
+                    twitch_list.append(line)
+                elif platform == "youtube":
+                    yt_list.append(line)
+
+            if yt_list:
+                embed.add_field(
+                    name="📺 YouTube-Abos",
+                    value="\n\n".join(yt_list),
+                    inline=False,
+                )
+            if twitch_list:
+                embed.add_field(
+                    name="🟣 Twitch-Abos",
+                    value="\n\n".join(twitch_list),
+                    inline=False,
+                )
+
+        embed.set_footer(text="Astra Notifier • Statusübersicht")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
     @app_commands.command(name="youtube", description="YouTube-Kanal hinzufügen oder entfernen")
     @app_commands.describe(
         aktion="Hinzufügen oder Entfernen",
