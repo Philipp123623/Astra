@@ -5,7 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/cogs/birthday.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -266,6 +265,10 @@
       <workItem from="1756590283127" duration="9088000" />
       <workItem from="1756767159107" duration="6812000" />
       <workItem from="1757203359735" duration="2000" />
+      <workItem from="1757625710639" duration="5949000" />
+      <workItem from="1758886397726" duration="593000" />
+      <workItem from="1759334746160" duration="1433000" />
+      <workItem from="1759925299262" duration="716000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />

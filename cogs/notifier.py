@@ -2,6 +2,7 @@ import logging
 import os
 import html
 import re
+import io  # NEW
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, Optional, Literal
 
@@ -16,7 +17,9 @@ load_dotenv(dotenv_path="/root/Astra/.env")
 
 POLL_INTERVAL_MINUTES = 1
 WEBHOOK_NAME = "Astra-Notifier"
-WEBHOOK_AVATAR_PATH = "/assets/Profilbilder/Idee_2_blau.jpg"
+
+# CHANGED: Wir nutzen eine feste Avatar-URL (deine Vorgabe)
+WEBHOOK_AVATAR_URL = "https://cdn.discordapp.com/attachments/1141116983358804117/1425456237230821467/Idee_2_blau2_-_Kopie_512x512.jpg?ex=68e7a712&is=68e65592&hm=fffdefc8e53072f0c967bfedb0353c9b7a6f3c9b87b80de31b2121a45253094f"
 
 YOUTUBE_USE_RSS = False
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
@@ -124,23 +127,17 @@ def _format_ts_utc_with_relative(iso: Optional[str]) -> str:
         return iso.replace("T", " ").replace("Z", " UTC")
 
 def _clean_youtube_description(desc: str) -> str:
-    """Normalisiert Zeilenumbrüche, entpackt HTML-Entities und entfernt überflüssige Leerzeilen."""
     if not desc:
         return ""
     s = html.unescape(desc)
     s = s.replace("\r\n", "\n").replace("\r", "\n")
-    s = re.sub(r"\n{3,}", "\n\n", s)  # max. 1 Leerzeile
+    s = re.sub(r"\n{3,}", "\n\n", s)
     s = "\n".join(line.rstrip() for line in s.split("\n")).strip()
     return s
 
 def _fit_description_for_embed(embed_title: str, description: str, fields: Dict[str, str]) -> str:
-    """
-    Kürzt description so, dass Discord-Limits (4096 pro description, 6000 gesamt pro Embed) eingehalten werden.
-    Hängt '...' an, wenn gekürzt wurde.
-    """
     MAX_TOTAL = 6000
     MAX_DESC = 4096
-    # Ungefähre Restberechnung: Titel + Summe Feldnamen/-werte + Footer-Text
     FOOTER_TEXT = "Astra Notifier • Jetzt reinschauen!"
     other_len = len(embed_title or "") + len(FOOTER_TEXT)
     for k, v in (fields or {}).items():
@@ -184,7 +181,6 @@ class Notifier(commands.Cog):
         ping_role_id: Optional[int] = None,
     ):
         async with self.pool.acquire() as conn, conn.cursor() as cur:
-            # Wenn content_id sich ändert, last_item_id/last_sent_at zurücksetzen
             await cur.execute(
                 """
                 INSERT INTO subscriptions
@@ -340,7 +336,7 @@ class Notifier(commands.Cog):
                 pub_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
                 if pub_dt > published_after:
                     parsed.append((pub_dt.isoformat().replace("+00:00", "Z"), vid, title))
-            parsed.sort(key=lambda t: t[0])  # älteste zuerst
+            parsed.sort(key=lambda t: t[0])
             for published_at, vid, title in parsed:
                 items.append({
                     "id": {"videoId": vid},
@@ -361,12 +357,12 @@ class Notifier(commands.Cog):
             async with self.http.get(YOUTUBE_SEARCH_URL, params=params) as resp:
                 data = await resp.json()
             items = data.get("items", [])
-            items.sort(key=lambda it: it["snippet"].get("publishedAt", ""))  # älteste zuerst
+            items.sort(key=lambda it: it["snippet"].get("publishedAt", ""))
 
         for item in items:
             vid = item["id"]["videoId"]
             if last_item_id and vid == last_item_id:
-                continue  # bereits gemeldet
+                continue
             snip = item["snippet"]
             title = snip.get("title", "Neues Video")
             raw_desc = snip.get("description", "")
@@ -381,13 +377,13 @@ class Notifier(commands.Cog):
                 "Aufrufe": _format_int(details.get("views", "—")),
             }
 
-            # Beschreibung hübsch machen und so lang wie möglich zeigen
             embed_title = f"🎥 Neues Video: {title}"
             cleaned = _clean_youtube_description(raw_desc or "Ein neues Video ist online!")
             desc = _fit_description_for_embed(embed_title, cleaned, fields)
 
             thumb = snip.get("thumbnails", {}).get("high", snip.get("thumbnails", {}).get("default", {})).get("url", "")
 
+            # (Optional) Du kannst auch YouTube-Thumbnails als Attachment senden – hier belasse ich es bei URL.
             await self._send_webhook(
                 channel,
                 title=embed_title,
@@ -401,7 +397,7 @@ class Notifier(commands.Cog):
                 button_label="Zum Video",
             )
             await self._update_last_sent(guild_id, "youtube", target_channel_id, yt_channel_id, vid)
-            break  # nur ein neues pro Durchlauf
+            break
 
     # ---------- Twitch ----------
     async def _check_twitch(self, login: str, guild_id: int, target_channel_id: int, ping_role_id: Optional[int], last_item_id: Optional[str]):
@@ -426,18 +422,28 @@ class Notifier(commands.Cog):
 
         s = streams[0]
         stream_id = s.get("id")
-        if stream_id and last_item_id and stream_id == last_item_id:
-            return  # bereits gemeldet
+        if stream_id and last_item_id and str(stream_id) == str(last_item_id):
+            return
 
         title = s.get("title", f"{login} ist live!")
-        # Thumbnail + Cache-Buster (gegen Twitch/Discord Caching)
-        thumb = s["thumbnail_url"].replace("{width}", "1920").replace("{height}", "1080")
+
+        # CHANGED: Thumbnail laden und als Attachment senden (gegen Discord Cache)
+        thumb = s["thumbnail_url"].replace("{width}", "1280").replace("{height}", "720")
         stream_id_str = str(s.get("id", ""))
-        started_at = str(s.get("started_at", ""))  # e.g. "2025-08-30T10:20:03Z"
+        started_at = str(s.get("started_at", ""))
         started_digits = "".join(ch for ch in started_at if ch.isdigit())
         cb = f"{stream_id_str}{started_digits}" or str(int(datetime.now(timezone.utc).timestamp()))
         sep = "&" if "?" in thumb else "?"
         thumb = f"{thumb}{sep}cb={cb}"
+
+        # Bild herunterladen
+        async with self.http.get(thumb) as r:
+            if r.status != 200:
+                logging.info(f"[Notifier] Konnte Twitch-Thumbnail nicht laden: {r.status}")
+                return
+            img_bytes = await r.read()
+        filename = f"twitch_{login}_{cb}.jpg"
+        file = discord.File(io.BytesIO(img_bytes), filename=filename)
 
         fields = {
             "Spiel": s.get("game_name") or "—",
@@ -449,13 +455,14 @@ class Notifier(commands.Cog):
             channel,
             title=f"🟣 {login} ist jetzt LIVE",
             description=title,
-            thumbnail=thumb,
+            thumbnail=f"attachment://{filename}",  # CHANGED
             url=TWITCH_CHANNEL_URL.format(login=login),
             color=TWITCH_COLOR,
             ping_role_id=ping_role_id,
             author=(login, None),
             fields=fields,
             button_label="Zum Stream",
+            file=file,  # CHANGED
         )
         if stream_id_str:
             await self._update_last_sent(guild_id, "twitch", target_channel_id, login, stream_id_str)
@@ -474,13 +481,14 @@ class Notifier(commands.Cog):
         author: Optional[Tuple[str, Optional[str]]] = None,
         fields: Optional[Dict[str, str]] = None,
         button_label: Optional[str] = None,
+        file: Optional[discord.File] = None,  # NEW
     ):
         webhook = await self._get_or_create_webhook(channel.guild.id, channel.id)
 
         e = discord.Embed(title=title, description=(description or "")[:4096], url=url, color=color)
         e.timestamp = datetime.now(timezone.utc)
         if thumbnail:
-            e.set_image(url=thumbnail)
+            e.set_image(url=thumbnail)  # funktioniert auch mit "attachment://filename"
         if author:
             name, icon = author
             if name:
@@ -508,6 +516,7 @@ class Notifier(commands.Cog):
             allowed_mentions=allowed,
             username=WEBHOOK_NAME,
             view=view,
+            file=file,  # NEW
         )
 
     async def _get_or_create_webhook(self, guild_id: int, channel_id: int):
@@ -519,7 +528,7 @@ class Notifier(commands.Cog):
         channel = guild.get_channel(channel_id) or await guild.fetch_channel(channel_id)
         for wh in await channel.webhooks():
             if wh.name == WEBHOOK_NAME:
-                await self._ensure_webhook_avatar(wh)
+                await self._ensure_webhook_avatar(wh)  # CHANGED: Avatar aktualisieren
                 self._webhook_cache[key] = wh
                 return wh
 
@@ -529,10 +538,17 @@ class Notifier(commands.Cog):
         return wh
 
     async def _ensure_webhook_avatar(self, webhook: discord.Webhook):
+        """Setzt/aktualisiert das Avatar für bestehende/neu erstellte Webhooks mit hartem Cache-Refresh."""
         try:
-            if WEBHOOK_AVATAR_PATH and os.path.isfile(WEBHOOK_AVATAR_PATH):
-                with open(WEBHOOK_AVATAR_PATH, "rb") as f:
-                    avatar_bytes = f.read()
+            if WEBHOOK_AVATAR_URL:
+                # Bild laden
+                async with self.http.get(WEBHOOK_AVATAR_URL) as r:
+                    if r.status != 200:
+                        logging.info(f"[Notifier] Konnte Webhook-Avatar nicht laden: {r.status}")
+                        return
+                    avatar_bytes = await r.read()
+                # harter Refresh (Cache umgehen)
+                await webhook.edit(avatar=None, reason="Reset webhook avatar cache")
                 await webhook.edit(name=WEBHOOK_NAME, avatar=avatar_bytes, reason="Set webhook avatar")
         except Exception as e:
             logging.info(f"[Notifier] Konnte Webhook-Avatar nicht setzen: {e}")
