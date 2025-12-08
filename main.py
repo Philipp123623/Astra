@@ -507,6 +507,7 @@ async def on_dbl_test(data):
         try:
             votedata = await bot.topggpy.get_bot_info()
             total_votes = int(votedata.get("monthly_points", 0))
+            print("Top.gg API response:", votedata)
         except Exception:
             pass
     except topgg.errors.NotFound as e:
