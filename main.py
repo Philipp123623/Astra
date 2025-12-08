@@ -367,11 +367,12 @@ class VoteView(discord.ui.View):
 @bot.event
 async def on_dbl_vote(data):
     logging.info(f"on_dbl_vote ausgelöst für User: {data.get('user')}")
+
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
             # Test-Hook früh raus
             if data.get("type") == "test":
-                return bot.dispatch('dbl_test', data)
+                return bot.dispatch("dbl_test", data)
 
             # --- User/Guild/Objekte ---
             user_id = int(data["user"])
@@ -399,14 +400,19 @@ async def on_dbl_vote(data):
             vote_increase = 2 if now_utc.weekday() in [4, 5, 6] else 1  # Fr/Sa/So doppelt
 
             # --- DB: topgg lesen/aktualisieren (nur diese Tabelle) ---
-            await cur.execute("SELECT count, last_reset FROM topgg WHERE userID=%s", (user_id,))
+            await cur.execute(
+                "SELECT count, last_reset FROM topgg WHERE userID = %s",
+                (user_id,)
+            )
             row = await cur.fetchone()
 
             if not row:
                 member_votes = vote_increase
                 await cur.execute(
-                    "INSERT INTO topgg (userID, count, last_reset, last_vote, last_vote_epoch, next_vote_epoch) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    """
+                    INSERT INTO topgg (userID, count, last_reset, last_vote, last_vote_epoch, next_vote_epoch)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
                     (user_id, member_votes, this_month, now_utc, now_ts, next_vote_ts)
                 )
             else:
@@ -415,18 +421,25 @@ async def on_dbl_vote(data):
                     count = 0
                 member_votes = count + vote_increase
                 await cur.execute(
-                    "UPDATE topgg SET count=%s, last_reset=%s, last_vote=%s, last_vote_epoch=%s, next_vote_epoch=%s "
-                    "WHERE userID=%s",
+                    """
+                    UPDATE topgg
+                    SET count = %s,
+                        last_reset = %s,
+                        last_vote = %s,
+                        last_vote_epoch = %s,
+                        next_vote_epoch = %s
+                    WHERE userID = %s
+                    """,
                     (member_votes, this_month, now_utc, now_ts, next_vote_ts, user_id)
                 )
 
-    # --- (Optional) aktuelle Monatsvotes von top.gg ---
-    total_votes = 0
-    try:
-        votedata = await bot.topggpy.get_bot_info()
-        total_votes = int(votedata.get("monthly_points", 0))
-    except Exception:
-        pass
+            # --- Gesamtvotes für aktuellen Monat aus eigener DB ---
+            await cur.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM topgg WHERE last_reset = %s",
+                (this_month,)
+            )
+            row = await cur.fetchone()
+            total_votes = row[0] if row and row[0] is not None else 0
 
     # --- Channel-Embed für den Vote ---
     embed = discord.Embed(
@@ -477,6 +490,7 @@ async def on_dbl_vote(data):
     return None
 
 
+
 @bot.event
 async def on_dbl_test(data):
     """An event that is called whenever someone tests the webhook system for your bot on Top.gg."""
@@ -500,19 +514,18 @@ async def on_dbl_test(data):
     # Bot (Astra)
     astra = bot.get_user(int(data.get("bot", bot.user.id)))
 
-    # Votes von Top.gg holen – aber Fehler abfangen
-    votes = 0
-    try:
-        total_votes = 0
-        try:
-            votedata = await bot.topggpy.get_bot_info()
-            total_votes = int(votedata.get("monthly_points", 0))
-        except Exception:
-            pass
-    except topgg.errors.NotFound as e:
-        logging.warning(f"Top.gg NotFound in on_dbl_test (404) – Bot nicht gefunden: {e}")
-    except Exception as e:
-        logging.exception(f"Unerwarteter Fehler bei get_bot_info() in on_dbl_test: {e!r}")
+    # Gesamtvotes aus eigener DB für aktuellen Monat
+    now_utc = datetime.now(timezone.utc)
+    this_month = now_utc.date().replace(day=1)
+
+    async with bot.pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM topgg WHERE last_reset = %s",
+                (this_month,)
+            )
+            row = await cur.fetchone()
+            total_votes = row[0] if row and row[0] is not None else 0
 
     embed = discord.Embed(
         title="Test Vote Erfolgreich",
@@ -522,7 +535,7 @@ async def on_dbl_test(data):
             "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/1113403511045107773/vote)** voten."
         ),
         colour=discord.Colour.red(),
-        timestamp=datetime.now(timezone.utc)
+        timestamp=now_utc
     )
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
@@ -536,8 +549,7 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     if heart:
         await msg.add_reaction(heart)
-        votedata = await bot.topggpy.get_bot_info()
-        logging.info("Top.gg API response:", votedata)
+
 
 def all_app_commands(bot):
     global_commands = bot.tree.get_commands()
