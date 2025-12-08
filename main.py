@@ -480,22 +480,58 @@ async def on_dbl_vote(data):
 @bot.event
 async def on_dbl_test(data):
     """An event that is called whenever someone tests the webhook system for your bot on Top.gg."""
-    user = bot.get_user(int(data["user"]))
+    logging.info(f"on_dbl_test ausgelöst: {data!r}")
+
     guild = bot.get_guild(1141116981697859736)
-    data2 = await bot.topggpy.get_bot_info()
-    votes = int(data2["monthly_points"])
+    if guild is None:
+        logging.error("Guild 1141116981697859736 nicht gefunden")
+        return
+
     channel = guild.get_channel(1361006871753789532)
-    astra = bot.get_user(int(data['bot']))
-    embed = discord.Embed(title="Test Vote Erfolgreich",
-                          description=f"<:Astra_boost:1141303827107164270> ``{user}({user.id})`` hat für {astra} gevoted.\nWir haben nun ``{votes}`` Votes diesen Monat.\n\nDu kannst alle 12 Stunden **[hier](https://top.gg/bot/811733599509544962/vote)** voten.",
-                          colour=discord.Colour.red(), timestamp=datetime.now(timezone.utc))
+    if channel is None:
+        logging.error("Channel 1361006871753789532 nicht gefunden")
+        return
+
+    # User
+    user_id = int(data.get("user", 0))
+    user = bot.get_user(user_id)
+    user_display = f"{user}({user.id})" if user else f"Unbekannt ({user_id})"
+
+    # Bot (Astra)
+    astra = bot.get_user(int(data.get("bot", bot.user.id)))
+
+    # Votes von Top.gg holen – aber Fehler abfangen
+    votes = 0
+    try:
+        votedata = await bot.topggpy.get_bot_info()
+        votes = int(votedata.get("monthly_points", 0))
+    except topgg.errors.NotFound as e:
+        logging.warning(f"Top.gg NotFound in on_dbl_test (404) – Bot nicht gefunden: {e}")
+    except Exception as e:
+        logging.exception(f"Unerwarteter Fehler bei get_bot_info() in on_dbl_test: {e!r}")
+
+    embed = discord.Embed(
+        title="Test Vote Erfolgreich",
+        description=(
+            f"<:Astra_boost:1141303827107164270> `{user_display}` hat für {astra} gevotet.\n"
+            f"Wir haben nun `{votes}` Votes diesen Monat.\n\n"
+            "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/1113403511045107773/vote)** voten."
+        ),
+        colour=discord.Colour.red(),
+        timestamp=datetime.now(timezone.utc)
+    )
     embed.set_thumbnail(
-        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
-    embed.set_footer(text="Danke für deinen Support",
-                     icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg")
+        url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+    )
+    embed.set_footer(
+        text="Danke für deinen Support",
+        icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
+    )
+
     msg = await channel.send(embed=embed)
     heart = bot.get_emoji(1361007251434901664)
-    await msg.add_reaction(heart)
+    if heart:
+        await msg.add_reaction(heart)
 
 def all_app_commands(bot):
     global_commands = bot.tree.get_commands()
