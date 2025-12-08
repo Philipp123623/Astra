@@ -503,8 +503,12 @@ async def on_dbl_test(data):
     # Votes von Top.gg holen – aber Fehler abfangen
     votes = 0
     try:
-        votedata = await bot.topggpy.get_bot_info()
-        votes = int(votedata.get("monthly_points", 0))
+        total_votes = 0
+        try:
+            votedata = await bot.topggpy.get_bot_info()
+            total_votes = int(votedata.get("monthly_points", 0))
+        except Exception:
+            pass
     except topgg.errors.NotFound as e:
         logging.warning(f"Top.gg NotFound in on_dbl_test (404) – Bot nicht gefunden: {e}")
     except Exception as e:
@@ -514,7 +518,7 @@ async def on_dbl_test(data):
         title="Test Vote Erfolgreich",
         description=(
             f"<:Astra_boost:1141303827107164270> `{user_display}` hat für {astra} gevotet.\n"
-            f"Wir haben nun `{votes}` Votes diesen Monat.\n\n"
+            f"Wir haben nun `{total_votes}` Votes diesen Monat.\n\n"
             "Du kannst alle 12 Stunden **[hier](https://top.gg/bot/1113403511045107773/vote)** voten."
         ),
         colour=discord.Colour.red(),
