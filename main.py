@@ -507,7 +507,6 @@ async def on_dbl_test(data):
         try:
             votedata = await bot.topggpy.get_bot_info()
             total_votes = int(votedata.get("monthly_points", 0))
-            logging.info("Top.gg API response:", votedata)
         except Exception:
             pass
     except topgg.errors.NotFound as e:
@@ -537,6 +536,8 @@ async def on_dbl_test(data):
     heart = bot.get_emoji(1361007251434901664)
     if heart:
         await msg.add_reaction(heart)
+        votedata = await bot.topggpy.get_bot_info()
+        logging.info("Top.gg API response:", votedata)
 
 def all_app_commands(bot):
     global_commands = bot.tree.get_commands()
