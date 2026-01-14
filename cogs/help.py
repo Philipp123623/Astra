@@ -261,8 +261,8 @@ class HelpCog(commands.Cog):
             self._view_registered = True
         print(f"✅ Help command IDs cached: {len(self.command_ids)}")
         embed = await self.all_commands_embed()
-        guild = self.bot.fetch_guild(1141116981697859736)
-        channel = self.bot.fetch_channel(1141116983358804118)
+        guild = await self.bot.fetch_guild(1141116981697859736)
+        channel = await self.bot.fetch_channel(1141116983358804118)
         await channel.send(embed=embed)
 
     def _build_pages(self):
