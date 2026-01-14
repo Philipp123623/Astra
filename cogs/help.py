@@ -191,6 +191,65 @@ class HelpCog(commands.Cog):
 
         return "Keine Beschreibung vorhanden."
 
+    def _usage(self, name: str, options: list | None) -> str:
+        if not options:
+            return f"/{name}"
+
+        args = []
+        for o in options:
+            if o["type"] in (1, 2):
+                continue
+            arg = f"<{o['name']}>" if o.get("required") else f"[{o['name']}]"
+            args.append(arg)
+
+        return f"/{name} " + " ".join(args)
+
+    def _walk(self, data: dict, prefix=""):
+        out = []
+        name = f"{prefix} {data['name']}".strip()
+
+        out.append({
+            "name": name,
+            "description": data.get("description") or "Keine Beschreibung",
+            "options": data.get("options", [])
+        })
+
+        for o in data.get("options", []):
+            if o["type"] in (1, 2):
+                out.extend(self._walk(o, name))
+
+        return out
+
+    async def all_commands_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title="📘 Alle Commands",
+            colour=discord.Colour.blue()
+        )
+
+        cmds = await self.bot.tree.fetch_commands()
+        text = ""
+
+        for cmd in cmds:
+            for c in self._walk(cmd.to_dict()):
+                usage = self._usage(c["name"], c["options"])
+                block = (
+                    f"**/{c['name']}**\n"
+                    f"> {c['description']}\n"
+                    f"`{usage}`\n\n"
+                )
+
+                if len(text) + len(block) > 3500:
+                    embed.add_field(name="Commands", value=text, inline=False)
+                    text = ""
+
+                text += block
+
+        if text:
+            embed.add_field(name="Commands", value=text, inline=False)
+
+        embed.set_footer(text="Astra Development ©2025")
+        return embed
+
     @commands.Cog.listener()
     async def on_ready(self):
         await self.on_ready_cache_ids()
@@ -201,6 +260,10 @@ class HelpCog(commands.Cog):
             self.bot.add_view(HelpView(self))
             self._view_registered = True
         print(f"✅ Help command IDs cached: {len(self.command_ids)}")
+        embed = await self.all_commands_embed()
+        guild = self.bot.fetch_guild(1141116981697859736)
+        channel = self.bot.fetch_channel(1141116983358804118)
+        await channel.send(embed=embed)
 
     def _build_pages(self):
         self.pages = {
