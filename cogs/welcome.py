@@ -26,9 +26,9 @@ def random_color():
 def strip_emojis(text: str) -> str:
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"  # Emoticons
-        "\U0001F300-\U0001F5FF"  # Symbole & Piktogramme
-        "\U0001F680-\U0001F6FF"  # Transport & Karten
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
         "\U0001F700-\U0001F77F"
         "\U0001F780-\U0001F7FF"
         "\U0001F800-\U0001F8FF"
@@ -67,7 +67,6 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     base = Image.open(WELCOME_BANNER_PATH).convert("RGBA")
     draw = ImageDraw.Draw(base)
 
-    # ---------- AVATAR (ANTI-ALIASING FIX, TYP-KORREKT) ----------
     async with aiohttp.ClientSession() as session:
         async with session.get(member.display_avatar.url) as resp:
             avatar_buffer: io.BytesIO = io.BytesIO(await resp.read())
@@ -82,34 +81,28 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     )
 
     mask = Image.new("L", (big_size, big_size), 0)
-    ImageDraw.Draw(mask).ellipse(
-        (0, 0, big_size, big_size),
-        fill=255
-    )
+    ImageDraw.Draw(mask).ellipse((0, 0, big_size, big_size), fill=255)
     avatar.putalpha(mask)
 
-    avatar = avatar.resize(
-        (FINAL_SIZE, FINAL_SIZE),
-        Resampling.LANCZOS
-    )
-
-    # Position: links & oben gleich, rechts & unten +1px durch Größe
+    avatar = avatar.resize((FINAL_SIZE, FINAL_SIZE), Resampling.LANCZOS)
     base.paste(avatar, (29, 31), avatar)
 
-    # ---------- FONTS ----------
     font_title = ImageFont.truetype(FONT_PATH, 30)
     font_desc = ImageFont.truetype(FONT_PATH, 22)
     font_count = ImageFont.truetype(FONT_PATH, 30)
 
     guild_name = strip_emojis(member.guild.name)
-    subtitle = strip_emojis(subtitle) if subtitle else ""
 
-    # ---------- DESCRIPTION BOX (EXAKT MITTIG) ----------
+    # 🔧 FIX: %name im Banner
+    subtitle = strip_emojis(subtitle) if subtitle else ""
+    subtitle = subtitle.replace("%name", member.display_name)
+
     DESC_X = 400
     DESC_Y = 135
     DESC_WIDTH = 588
     DESC_HEIGHT = 160
     LINE_HEIGHT = 26
+    TITLE_MARGIN = 12
 
     title_text = f"Willkommen auf {guild_name}"
     title_width = draw.textlength(title_text, font=font_title)
@@ -118,10 +111,9 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     max_lines = (DESC_HEIGHT // LINE_HEIGHT) - 1
     lines = lines[:max_lines]
 
-    total_height = LINE_HEIGHT + len(lines) * LINE_HEIGHT
+    total_height = LINE_HEIGHT + TITLE_MARGIN + len(lines) * LINE_HEIGHT
     start_y = DESC_Y + (DESC_HEIGHT - total_height) // 2
 
-    # Titel zentriert
     draw.text(
         (DESC_X + (DESC_WIDTH - title_width) // 2, start_y),
         title_text,
@@ -129,32 +121,25 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
         fill=(255, 255, 255)
     )
 
-    # Beschreibung zentriert
     for i, line in enumerate(lines):
         line_width = draw.textlength(line, font=font_desc)
         draw.text(
             (
                 DESC_X + (DESC_WIDTH - line_width) // 2,
-                start_y + LINE_HEIGHT + i * LINE_HEIGHT
+                start_y + LINE_HEIGHT + TITLE_MARGIN + i * LINE_HEIGHT
             ),
             line,
             font=font_desc,
             fill=(220, 220, 220)
         )
 
-    # ---------- MEMBERCOUNT ----------
     count_text = f"#{member.guild.member_count}"
     count_width = draw.textlength(count_text, font=font_count)
 
     COUNT_X = 832 + ((158 - count_width) // 2)
     COUNT_Y = 63
 
-    draw.text(
-        (COUNT_X, COUNT_Y),
-        count_text,
-        font=font_count,
-        fill=(255, 255, 255)
-    )
+    draw.text((COUNT_X, COUNT_Y), count_text, font=font_count, fill=(255, 255, 255))
 
     out = io.BytesIO()
     base.save(out, format="PNG")
@@ -174,8 +159,9 @@ class EmbedModal(discord.ui.Modal, title="Set Embed Welcome Message"):
     text = discord.ui.TextInput(
         label="Embed Text",
         style=discord.TextStyle.long,
-        placeholder="%mention Willkommen auf %guild!",
-        required=True
+        placeholder="%mention Willkommen %name auf %guild!",
+        required=True,
+        max_length=1000
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -192,7 +178,6 @@ class EmbedModal(discord.ui.Modal, title="Set Embed Welcome Message"):
                     """,
                     (interaction.guild.id, self.channel.id, self.text.value)
                 )
-
         await interaction.response.send_message("✅ Embed Welcome gesetzt.", ephemeral=True)
 
 
@@ -204,10 +189,10 @@ class BannerModal(discord.ui.Modal, title="Banner Welcome konfigurieren"):
         self.channel = channel
 
     subtitle = discord.ui.TextInput(
-        label="Beschreibung (passt garantiert ins Banner)",
+        label="Banner Text (%name verfügbar)",
         style=discord.TextStyle.short,
-        placeholder="Schön, dass du da bist!",
-        max_length=120,
+        placeholder="Schön, dass du da bist %name!",
+        max_length=160,
         required=False
     )
 
@@ -227,7 +212,6 @@ class BannerModal(discord.ui.Modal, title="Banner Welcome konfigurieren"):
                     """,
                     (interaction.guild.id, self.channel.id, subtitle_text)
                 )
-
         await interaction.response.send_message("✅ Banner Welcome aktiviert.", ephemeral=True)
 
 
@@ -269,53 +253,15 @@ class welcome(commands.Cog):
                 .replace("%guild", member.guild.name)
                 .replace("%usercount", str(member.guild.member_count))
             )
-            embed = discord.Embed(description=text, color=random_color())
-            await channel.send(embed=embed)
+            await channel.send(embed=discord.Embed(description=text, color=random_color()))
 
     @app_commands.command(name="testjoin", description="Teste die Welcome Nachricht")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def testjoin(self, interaction: discord.Interaction):
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT channelID, message, mode FROM welcome WHERE guildID=%s",
-                    (interaction.guild.id,)
-                )
-                data = await cursor.fetchone()
-
-        if not data:
-            await interaction.response.send_message("❌ Kein Welcome aktiv.", ephemeral=True)
-            return
-
-        channel_id, message, mode = data
-        channel = interaction.guild.get_channel(channel_id)
         member = interaction.user
-
-        if mode == "banner":
-            card = await generate_banner(member, message)
-            await channel.send(file=discord.File(card, "welcome.png"))
-            await interaction.response.send_message(
-                f"✅ Test-Banner gesendet in {channel.mention}",
-                ephemeral=True
-            )
-
-        elif mode == "embed":
-            text = (
-                message
-                .replace("%member", str(member))
-                .replace("%name", member.display_name)
-                .replace("%mention", member.mention)
-                .replace("%guild", member.guild.name)
-                .replace("%usercount", str(member.guild.member_count))
-            )
-            embed = discord.Embed(description=text, color=random_color())
-            embed.set_footer(text=f"Testjoin von {member}")
-            await channel.send(embed=embed)
-            await interaction.response.send_message(
-                f"✅ Test-Embed gesendet in {channel.mention}",
-                ephemeral=True
-            )
+        await self.on_member_join(member)
+        await interaction.response.send_message("✅ Testjoin ausgeführt.", ephemeral=True)
 
     @app_commands.command(name="joinmsg")
     @app_commands.guild_only()
@@ -331,7 +277,6 @@ class welcome(commands.Cog):
             if not channel:
                 await interaction.response.send_message("❌ Kanal fehlt.", ephemeral=True)
                 return
-
             if mode == "embed":
                 await interaction.response.send_modal(EmbedModal(self.bot, channel))
             else:
@@ -360,8 +305,10 @@ class welcome(commands.Cog):
                 return
 
             ch = interaction.guild.get_channel(data[0])
+            msg = data[1] or "—"
+
             await interaction.response.send_message(
-                f"📢 Kanal: {ch.mention}\n🎨 Modus: **{data[2]}**",
+                f"📢 Kanal: {ch.mention}\n🎨 Modus: **{data[2]}**\n📝 Text:\n```{msg}```",
                 ephemeral=True
             )
 
