@@ -242,7 +242,12 @@ class welcome(commands.Cog):
 
         if mode == "banner":
             card = await generate_banner(member, message)
-            await channel.send(file=discord.File(card, "welcome.png"))
+
+            file = discord.File(card, filename="welcome.png")
+            embed = discord.Embed(color=discord.Color.blurple())
+            embed.set_image(url="attachment://welcome.png")
+
+            await channel.send(embed=embed, file=file)
 
         elif mode == "embed":
             text = (
