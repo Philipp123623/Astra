@@ -21,23 +21,29 @@ def random_color():
 
 # ================== BANNER GENERATOR ==================
 
-async def generate_banner(member: discord.Member) -> io.BytesIO:
+async def generate_banner(member: discord.Member, subtitle: str | None) -> io.BytesIO:
     base = Image.open(WELCOME_BANNER_PATH).convert("RGBA")
     draw = ImageDraw.Draw(base)
 
+    # Avatar laden
     async with aiohttp.ClientSession() as session:
         async with session.get(member.display_avatar.url) as resp:
             avatar_bytes = await resp.read()
 
     avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((260, 260))
+
+    # Kreis-Maske
     mask = Image.new("L", avatar.size, 0)
     ImageDraw.Draw(mask).ellipse((0, 0, 260, 260), fill=255)
     avatar.putalpha(mask)
+
     base.paste(avatar, (60, 50), avatar)
 
     font_big = ImageFont.truetype(FONT_PATH, 38)
     font_small = ImageFont.truetype(FONT_PATH, 28)
+    font_sub = ImageFont.truetype(FONT_PATH, 22)
 
+    # Haupttexte
     draw.text(
         (360, 135),
         f"Willkommen auf {member.guild.name}",
@@ -52,6 +58,16 @@ async def generate_banner(member: discord.Member) -> io.BytesIO:
         fill=(220, 220, 220)
     )
 
+    # Subtitle (optional, sicher im Layout)
+    if subtitle:
+        draw.text(
+            (360, 220),
+            subtitle[:40],
+            font=font_sub,
+            fill=(200, 200, 200)
+        )
+
+    # Membercount
     draw.text(
         (820, 40),
         f"#{member.guild.member_count}",
@@ -75,8 +91,9 @@ class EmbedModal(discord.ui.Modal, title="Set Embed Welcome Message"):
         self.channel = channel
 
     text = discord.ui.TextInput(
-        label="Text",
+        label="Embed Text",
         style=discord.TextStyle.long,
+        placeholder="%mention Willkommen auf %guild!",
         required=True
     )
 
@@ -88,38 +105,55 @@ class EmbedModal(discord.ui.Modal, title="Set Embed Welcome Message"):
                     INSERT INTO welcome (guildID, channelID, message, mode)
                     VALUES (%s,%s,%s,'embed')
                     ON DUPLICATE KEY UPDATE
-                    channelID=VALUES(channelID),
-                    message=VALUES(message),
-                    mode='embed'
+                        channelID=VALUES(channelID),
+                        message=VALUES(message),
+                        mode='embed'
                     """,
                     (interaction.guild.id, self.channel.id, self.text.value)
                 )
 
-        await interaction.response.send_message("✅ Embed Welcome gesetzt.", ephemeral=True)
+        await interaction.response.send_message(
+            "✅ Embed Welcome gesetzt.",
+            ephemeral=True
+        )
 
 
-class BannerModal(discord.ui.Modal, title="Banner Welcome aktivieren"):
+class BannerModal(discord.ui.Modal, title="Banner Welcome konfigurieren"):
 
     def __init__(self, bot, channel):
         super().__init__()
         self.bot = bot
         self.channel = channel
 
+    subtitle = discord.ui.TextInput(
+        label="Kurzer Begrüßungstext (optional)",
+        style=discord.TextStyle.short,
+        placeholder="Schön, dass du da bist!",
+        max_length=40,
+        required=False
+    )
+
     async def on_submit(self, interaction: discord.Interaction):
+        subtitle_text = self.subtitle.value.strip() if self.subtitle.value else None
+
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
                     """
-                    INSERT INTO welcome (guildID, channelID, mode)
-                    VALUES (%s,%s,'banner')
+                    INSERT INTO welcome (guildID, channelID, message, mode)
+                    VALUES (%s,%s,%s,'banner')
                     ON DUPLICATE KEY UPDATE
-                    channelID=VALUES(channelID),
-                    mode='banner'
+                        channelID=VALUES(channelID),
+                        message=VALUES(message),
+                        mode='banner'
                     """,
-                    (interaction.guild.id, self.channel.id)
+                    (interaction.guild.id, self.channel.id, subtitle_text)
                 )
 
-        await interaction.response.send_message("✅ Banner Welcome aktiviert.", ephemeral=True)
+        await interaction.response.send_message(
+            "✅ Banner Welcome aktiviert.",
+            ephemeral=True
+        )
 
 
 # ================== COG ==================
@@ -150,7 +184,7 @@ class welcome(commands.Cog):
             return
 
         if mode == "banner":
-            card = await generate_banner(member)
+            card = await generate_banner(member, message)
             await channel.send(file=discord.File(card, "welcome.png"))
 
         elif mode == "embed":
@@ -190,7 +224,7 @@ class welcome(commands.Cog):
         member = interaction.user
 
         if mode == "banner":
-            card = await generate_banner(member)
+            card = await generate_banner(member, message)
             await channel.send(file=discord.File(card, "welcome.png"))
             await interaction.response.send_message(
                 f"✅ Test-Banner gesendet in {channel.mention}",
@@ -227,13 +261,20 @@ class welcome(commands.Cog):
     ):
         if argument == "Einschalten":
             if not channel:
-                await interaction.response.send_message("❌ Kanal fehlt.", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ Kanal fehlt.",
+                    ephemeral=True
+                )
                 return
 
             if mode == "embed":
-                await interaction.response.send_modal(EmbedModal(self.bot, channel))
+                await interaction.response.send_modal(
+                    EmbedModal(self.bot, channel)
+                )
             else:
-                await interaction.response.send_modal(BannerModal(self.bot, channel))
+                await interaction.response.send_modal(
+                    BannerModal(self.bot, channel)
+                )
 
         elif argument == "Ausschalten":
             async with self.bot.pool.acquire() as conn:
