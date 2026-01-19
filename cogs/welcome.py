@@ -51,62 +51,78 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     base = Image.open(WELCOME_BANNER_PATH).convert("RGBA")
     draw = ImageDraw.Draw(base)
 
-    # ---------- AVATAR (EXAKT NACH DEINEN MESSWERTEN) ----------
+    # ---------- AVATAR (links & oben gleich, rechts & unten +1px) ----------
     async with aiohttp.ClientSession() as session:
         async with session.get(member.display_avatar.url) as resp:
             avatar_bytes = await resp.read()
 
-    avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((303, 303))
+    avatar_size = 304  # +1px rechts & unten
+    avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((avatar_size, avatar_size))
 
-    mask = Image.new("L", (303, 303), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, 303, 303), fill=255)
+    mask = Image.new("L", (avatar_size, avatar_size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
     avatar.putalpha(mask)
 
-    # Position: (29, 31)
+    # Position bleibt unverändert
     base.paste(avatar, (29, 31), avatar)
 
     # ---------- FONTS ----------
-    font_title = ImageFont.truetype(FONT_PATH, 38)
-    font_name = ImageFont.truetype(FONT_PATH, 30)
+    font_title = ImageFont.truetype(FONT_PATH, 30)
     font_desc = ImageFont.truetype(FONT_PATH, 22)
+    font_count = ImageFont.truetype(FONT_PATH, 30)
 
     guild_name = strip_emojis(member.guild.name)
-    username = strip_emojis(member.display_name)
-    subtitle = strip_emojis(subtitle) if subtitle else None
+    subtitle = strip_emojis(subtitle) if subtitle else ""
 
-    # ---------- TITEL ----------
-    draw.text((400, 95), "Willkommen", font=font_title, fill=(255, 255, 255))
-    draw.text((400, 135), f"Willkommen auf {guild_name}", font=font_name, fill=(230, 230, 230))
-
-    # ---------- DESCRIPTION BOX ----------
+    # ---------- DESCRIPTION BOX (EXAKT MITTIG) ----------
     DESC_X = 400
-    DESC_Y = 165
+    DESC_Y = 135
     DESC_WIDTH = 588
     DESC_HEIGHT = 160
     LINE_HEIGHT = 26
-    MAX_LINES = DESC_HEIGHT // LINE_HEIGHT
 
-    if subtitle:
-        lines = wrap_text(draw, subtitle, font_desc, DESC_WIDTH)[:MAX_LINES]
-        for i, line in enumerate(lines):
-            draw.text(
-                (DESC_X, DESC_Y + i * LINE_HEIGHT),
-                line,
-                font=font_desc,
-                fill=(200, 200, 200)
-            )
+    title_text = f"Willkommen auf {guild_name}"
+    title_width = draw.textlength(title_text, font=font_title)
 
-    # ---------- MEMBERCOUNT BOX ----------
+    lines = wrap_text(draw, subtitle, font_desc, DESC_WIDTH)
+    max_lines = (DESC_HEIGHT // LINE_HEIGHT) - 1
+    lines = lines[:max_lines]
+
+    total_height = LINE_HEIGHT + len(lines) * LINE_HEIGHT
+    start_y = DESC_Y + (DESC_HEIGHT - total_height) // 2
+
+    # Titel zentriert
+    draw.text(
+        (DESC_X + (DESC_WIDTH - title_width) // 2, start_y),
+        title_text,
+        font=font_title,
+        fill=(255, 255, 255)
+    )
+
+    # Beschreibung zentriert
+    for i, line in enumerate(lines):
+        line_width = draw.textlength(line, font=font_desc)
+        draw.text(
+            (
+                DESC_X + (DESC_WIDTH - line_width) // 2,
+                start_y + LINE_HEIGHT + i * LINE_HEIGHT
+            ),
+            line,
+            font=font_desc,
+            fill=(220, 220, 220)
+        )
+
+    # ---------- MEMBERCOUNT ----------
     count_text = f"#{member.guild.member_count}"
-    text_width = draw.textlength(count_text, font=font_name)
+    count_width = draw.textlength(count_text, font=font_count)
 
-    COUNT_X = 832 + ((158 - text_width) // 2)
+    COUNT_X = 832 + ((158 - count_width) // 2)
     COUNT_Y = 63
 
     draw.text(
         (COUNT_X, COUNT_Y),
         count_text,
-        font=font_name,
+        font=font_count,
         fill=(255, 255, 255)
     )
 
@@ -114,6 +130,7 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     base.save(out, format="PNG")
     out.seek(0)
     return out
+
 
 
 # ================== MODALS ==================
