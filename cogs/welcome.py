@@ -4,170 +4,238 @@ from discord import app_commands
 from typing import Literal
 import random
 
+WELCOME_BANNER_PATH = "cogs/assets/Welcomecards/Willkommens_banner_fullsize.jpg"
 
-##########
 
 def random_color():
-    return discord.Color.from_rgb(random.randint(1, 255), random.randint(1, 255), random.randint(1, 255))
+    return discord.Color.from_rgb(
+        random.randint(1, 255),
+        random.randint(1, 255),
+        random.randint(1, 255)
+    )
 
+
+# ================== MODAL ==================
 
 class Modal2(discord.ui.Modal, title="Set your Join message!"):
-    def __init__(self, bot: commands.Bot, channel: discord.TextChannel):
+
+    def __init__(self, bot: commands.Bot, channel: discord.TextChannel, mode: str):
         super().__init__()
-        self.channel = channel
         self.bot = bot
+        self.channel = channel
+        self.mode = mode
 
     name = discord.ui.TextInput(
-        label='Text',
+        label="Text",
         style=discord.TextStyle.long,
-        placeholder='%member-Member#0000  | %name-Member  | %mention-@Member | %guild-Severname | %usercount-Memberanzahl',
+        placeholder="%member | %name | %mention | %guild | %usercount",
         required=True,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                try:
-                    await cursor.execute("INSERT INTO welcome (guildID, channelID, msg) VALUES (%s, %s, %s)",
-                                         (interaction.guild.id, self.channel.id, self.name.value))
+                await cursor.execute(
+                    """
+                    INSERT INTO welcome (guildID, channelID, message, mode)
+                    VALUES (%s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                    channelID = VALUES(channelID),
+                    message = VALUES(message),
+                    mode = VALUES(mode)
+                    """,
+                    (
+                        interaction.guild.id,
+                        self.channel.id,
+                        self.name.value,
+                        self.mode
+                    )
+                )
 
-                    embed1 = discord.Embed(title="Willkommens Nachricht wurde gesetzt",
-                                           description=f"Die Willkommens Nachricht findet nun in {self.channel.mention} statt.\nNachricht: {self.name.value}.",
-                                           color=discord.Color.blue())
-                    await interaction.response.send_message(embed=embed1)
-                except:
-                    await cursor.execute(f"SELECT channelID FROM welcome WHERE guildID = {interaction.guild.id}")
-                    wel = await cursor.fetchone()
-                    await cursor.execute(f"SELECT msg FROM welcome WHERE guildID = {interaction.guild.id}")
-                    come = await cursor.fetchone()
+        embed = discord.Embed(
+            title="Willkommens Nachricht wurde gesetzt",
+            description=f"Kanal: {self.channel.mention}\nModus: {self.mode.replace('_',' ')}\n\n{self.name.value}",
+            color=discord.Color.blue()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-                    try:
-                        ch = interaction.guild.get_channel(int(wel[0]))
-                    except:
-                        return
 
-                    embed = discord.Embed(title="WIllkommens Nachricht",
-                                          description=f"Die welcome Message ist bereits aktiv. Um sie zu ändern nutze `/welcome`.",
-                                          color=discord.Color.green())
-                    embed.add_field(name="Kanal", value=ch, inline=False)
-                    embed.add_field(name="Nachricht", value=come[0], inline=False)
-                    await interaction.response.send_message(embed=embed)
-
+# ================== COG ==================
 
 class welcome(commands.Cog):
-    def __init__(self, bot):
+
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
+    # ========== MEMBER JOIN ==========
+
     @commands.Cog.listener()
-    async def on_member_join(self, member):
+    async def on_member_join(self, member: discord.Member):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(f"SELECT channelID FROM welcome WHERE guildID = {member.guild.id}")
-                channel = await cursor.fetchone()
-                await cursor.execute(f"SELECT msg FROM welcome WHERE guildID = {member.guild.id}")
-                message = await cursor.fetchone()
-                if channel is None and message is None:
-                    return
-                else:
-                    try:
-                        ch = member.guild.get_channel(int(channel[0]))
-                    except:
-                        return
-                    finalmsg = message[0].replace("%member", str(member)).replace("%name", str(member.name)).replace(
-                        "%mention", str(member.mention)).replace("%guild", str(member.guild)).replace("%usercount",
-                                                                                                      str(member.guild.member_count))
-                    embed = discord.Embed(description=finalmsg, color=random_color())
-                    try:
-                        await ch.send(embed=embed)
-                    except:
-                        pass
-                    return
+                await cursor.execute(
+                    "SELECT channelID, message, mode FROM welcome WHERE guildID = %s",
+                    (member.guild.id,)
+                )
+                data = await cursor.fetchone()
 
-    @app_commands.command(name="testjoin", description="Schaue ob deine Joinmsg gut funktioniert.")
+        if not data:
+            return
+
+        channel_id, message, mode = data
+        channel = member.guild.get_channel(int(channel_id))
+        if not channel:
+            return
+
+        finalmsg = (
+            message
+            .replace("%member", str(member))
+            .replace("%name", member.name)
+            .replace("%mention", member.mention)
+            .replace("%guild", member.guild.name)
+            .replace("%usercount", str(member.guild.member_count))
+        )
+
+        embed = discord.Embed(description=finalmsg, color=random_color())
+
+        try:
+            if mode == "banner":
+                file = discord.File(WELCOME_BANNER_PATH, filename="welcome.png")
+                await channel.send(file=file)
+
+            elif mode == "banner_embed":
+                file = discord.File(WELCOME_BANNER_PATH, filename="welcome.png")
+                embed.set_image(url="attachment://welcome.png")
+                await channel.send(file=file, embed=embed)
+
+            elif mode == "embed":
+                await channel.send(embed=embed)
+        except:
+            pass
+
+    # ========== TESTJOIN ==========
+
+    @app_commands.command(name="testjoin", description="Teste deine Willkommens Nachricht")
     @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
     async def testjoin(self, interaction: discord.Interaction):
-        """Schaue ob deine Joinmsg gut funktioniert."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                member = interaction.user
-                await cursor.execute(f"SELECT channelID FROM welcome WHERE guildID = {member.guild.id}")
-                channel = await cursor.fetchone()
-                await cursor.execute(f"SELECT msg FROM welcome WHERE guildID = {member.guild.id}")
-                message = await cursor.fetchone()
-                if channel is None and message is None:
-                    embed = discord.Embed(
-                        description=f"Die Willkommens Nachricht ist auf diesem Server deaktiviert. Füge eine hinzu mit `/joinmsg`.",
-                        color=discord.Color.green())
-                    await interaction.response.send_message(embed=embed)
-                    return
-                else:
-                    try:
-                        ch = interaction.guild.get_channel(int(channel[0]))
-                    except:
-                        return
-                    finalmsg = message[0].replace("%member", str(member)).replace("%name", str(member.name)).replace(
-                        "%mention",
-                        str(member.mention)).replace(
-                        "%guild", str(member.guild)).replace("%usercount", str(member.guild.member_count))
-                    embed = discord.Embed(description=finalmsg, color=random_color())
-                    embed.set_footer(text=f"Testjoin von {member}")
-                    try:
-                        await ch.send(embed=embed)
-                        await interaction.response.send_message(f"<:Astra_x:1141303954555289600> **Testjoin Nachricht gesendet in {ch.mention}**")
-                    except:
-                        pass
-                    return
+                await cursor.execute(
+                    "SELECT channelID, message, mode FROM welcome WHERE guildID = %s",
+                    (interaction.guild.id,)
+                )
+                data = await cursor.fetchone()
 
-    @app_commands.command(name="joinmsg", description="Lege eine Nachricht fest für User, die deinem Server joinen.")
+        if not data:
+            await interaction.response.send_message(
+                "❌ Willkommens Nachrichten sind deaktiviert.",
+                ephemeral=True
+            )
+            return
+
+        channel_id, message, mode = data
+        channel = interaction.guild.get_channel(int(channel_id))
+        member = interaction.user
+
+        finalmsg = (
+            message
+            .replace("%member", str(member))
+            .replace("%name", member.name)
+            .replace("%mention", member.mention)
+            .replace("%guild", member.guild.name)
+            .replace("%usercount", str(member.guild.member_count))
+        )
+
+        embed = discord.Embed(description=finalmsg, color=random_color())
+        embed.set_footer(text=f"Testjoin von {member}")
+
+        try:
+            if mode == "banner":
+                file = discord.File(WELCOME_BANNER_PATH, filename="welcome.png")
+                await channel.send(file=file)
+
+            elif mode == "banner_embed":
+                file = discord.File(WELCOME_BANNER_PATH, filename="welcome.png")
+                embed.set_image(url="attachment://welcome.png")
+                await channel.send(file=file, embed=embed)
+
+            elif mode == "embed":
+                await channel.send(embed=embed)
+
+            await interaction.response.send_message(
+                f"✅ Testjoin Nachricht gesendet in {channel.mention}",
+                ephemeral=True
+            )
+        except:
+            pass
+
+    # ========== JOINMSG COMMAND ==========
+
+    @app_commands.command(name="joinmsg", description="Verwalte die Willkommens Nachricht")
     @app_commands.guild_only()
-    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(administrator=True)
-    async def joinmsg(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], channel: discord.TextChannel = None):
-        """Lege eine Nachricht fest für User, die deinem Server joinen."""
+    async def joinmsg(
+        self,
+        interaction: discord.Interaction,
+        argument: Literal["Einschalten", "Ausschalten", "Anzeigen"],
+        channel: discord.TextChannel = None,
+        mode: Literal["banner+embed", "nur banner", "nur embed"] = "nur embed"
+    ):
+        mode_map = {
+            "banner+embed": "banner_embed",
+            "nur banner": "banner",
+            "nur embed": "embed"
+        }
+
         if argument == "Einschalten":
-            await interaction.response.send_modal(Modal2(channel=channel, bot=self.bot))
-        if argument == "Ausschalten":
+            if not channel:
+                await interaction.response.send_message("❌ Bitte Kanal angeben.", ephemeral=True)
+                return
+
+            await interaction.response.send_modal(
+                Modal2(self.bot, channel, mode_map[mode])
+            )
+
+        elif argument == "Ausschalten":
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    await cursor.execute(f"SELECT channelID FROM welcome WHERE guildID = {interaction.guild.id}")
-                    result = await cursor.fetchone()
-                    if result is None:
-                        return
-                    if result is not None:
-                        channelID = result
-                        if (channel.id,) == channelID:
-                            await cursor.execute(
-                                f"DELETE FROM welcome WHERE channelID = {channel.id} AND guildID = {interaction.guild.id}")
-                            await interaction.response.send_message("<:Astra_accept:1141303821176422460> **Die Willkommens Nachricht ist nun für diesen Server deaktiviert.**", ephemeral=True)
-                        else:
-                            await interaction.response.send_message("<:Astra_x:1141303954555289600> **Die Willkommens Nachricht ist bereits für diesen Server deaktiviert.**",
-                                                                    ephemeral=True)
-                            return
-        if argument == "Anzeigen":
+                    await cursor.execute(
+                        "DELETE FROM welcome WHERE guildID = %s",
+                        (interaction.guild.id,)
+                    )
+
+            await interaction.response.send_message(
+                "✅ Willkommens Nachrichten deaktiviert.",
+                ephemeral=True
+            )
+
+        elif argument == "Anzeigen":
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    await cursor.execute(f"SELECT channelID FROM welcome WHERE guildID = {interaction.guild.id}")
-                    wel = await cursor.fetchone()
-                    if not wel:
-                        await interaction.response.send_message("<:Astra_x:1141303954555289600> **Die Willkommensnachrichten sind auf diesem Server zurzeit deaktiviert.**", ephemeral=True)
-                    if result:
-                        await cursor.execute(f"SELECT msg FROM welcome WHERE guildID = {interaction.guild.id}")
-                        come = await cursor.fetchone()
+                    await cursor.execute(
+                        "SELECT channelID, message, mode FROM welcome WHERE guildID = %s",
+                        (interaction.guild.id,)
+                    )
+                    data = await cursor.fetchone()
 
-                        try:
-                            ch = interaction.guild.get_channel(int(wel[0]))
-                        except:
-                            return
+            if not data:
+                await interaction.response.send_message(
+                    "❌ Willkommens Nachrichten sind deaktiviert.",
+                    ephemeral=True
+                )
+                return
 
-                        embed = discord.Embed(title="Willkommens Nachricht",
-                                              description=f"Du kannst sie jederzeit über `/joinsmg` ändern",
-                                              color=discord.Color.green())
-                        embed.add_field(name="Kanal", value=ch, inline=False)
-                        embed.add_field(name="Nachricht", value=come[0], inline=False)
-                        await interaction.response.send_message(embed=embed)
+            channel_id, message, mode = data
+            channel = interaction.guild.get_channel(int(channel_id))
+
+            embed = discord.Embed(title="Willkommens Nachricht", color=discord.Color.green())
+            embed.add_field(name="Kanal", value=channel.mention, inline=False)
+            embed.add_field(name="Modus", value=mode.replace("_", " "), inline=False)
+            embed.add_field(name="Nachricht", value=message, inline=False)
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: commands.Bot):
     await bot.add_cog(welcome(bot))
