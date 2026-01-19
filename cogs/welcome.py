@@ -25,27 +25,33 @@ async def generate_banner(member: discord.Member) -> io.BytesIO:
     base = Image.open(WELCOME_BANNER_PATH).convert("RGBA")
     draw = ImageDraw.Draw(base)
 
-    # Avatar
     async with aiohttp.ClientSession() as session:
         async with session.get(member.display_avatar.url) as resp:
             avatar_bytes = await resp.read()
 
     avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((260, 260))
-
     mask = Image.new("L", avatar.size, 0)
     ImageDraw.Draw(mask).ellipse((0, 0, 260, 260), fill=255)
     avatar.putalpha(mask)
-
     base.paste(avatar, (60, 50), avatar)
 
     font_big = ImageFont.truetype(FONT_PATH, 38)
     font_small = ImageFont.truetype(FONT_PATH, 28)
 
-    # Text
-    draw.text((360, 135), f"Willkommen auf {member.guild.name}", font=font_big, fill=(255, 255, 255))
-    draw.text((360, 185), f"{member.name}#{member.discriminator}", font=font_small, fill=(220, 220, 220))
+    draw.text(
+        (360, 135),
+        f"Willkommen auf {member.guild.name}",
+        font=font_big,
+        fill=(255, 255, 255)
+    )
 
-    # Membercount
+    draw.text(
+        (360, 185),
+        f"{member.name}#{member.discriminator}",
+        font=font_small,
+        fill=(220, 220, 220)
+    )
+
     draw.text(
         (820, 40),
         f"#{member.guild.member_count}",
@@ -81,7 +87,10 @@ class EmbedModal(discord.ui.Modal, title="Set Embed Welcome Message"):
                     """
                     INSERT INTO welcome (guildID, channelID, message, mode)
                     VALUES (%s,%s,%s,'embed')
-                    ON DUPLICATE KEY UPDATE channelID=VALUES(channelID), message=VALUES(message), mode='embed'
+                    ON DUPLICATE KEY UPDATE
+                    channelID=VALUES(channelID),
+                    message=VALUES(message),
+                    mode='embed'
                     """,
                     (interaction.guild.id, self.channel.id, self.text.value)
                 )
@@ -103,7 +112,9 @@ class BannerModal(discord.ui.Modal, title="Banner Welcome aktivieren"):
                     """
                     INSERT INTO welcome (guildID, channelID, mode)
                     VALUES (%s,%s,'banner')
-                    ON DUPLICATE KEY UPDATE channelID=VALUES(channelID), mode='banner'
+                    ON DUPLICATE KEY UPDATE
+                    channelID=VALUES(channelID),
+                    mode='banner'
                     """,
                     (interaction.guild.id, self.channel.id)
                 )
@@ -117,6 +128,8 @@ class welcome(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+
+    # ---------- MEMBER JOIN ----------
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
@@ -151,7 +164,56 @@ class welcome(commands.Cog):
             embed = discord.Embed(description=text, color=random_color())
             await channel.send(embed=embed)
 
-    # ================== COMMAND ==================
+    # ---------- TESTJOIN ----------
+
+    @app_commands.command(name="testjoin", description="Teste die Welcome Nachricht")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def testjoin(self, interaction: discord.Interaction):
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT channelID, message, mode FROM welcome WHERE guildID=%s",
+                    (interaction.guild.id,)
+                )
+                data = await cursor.fetchone()
+
+        if not data:
+            await interaction.response.send_message(
+                "❌ Kein Welcome aktiv.",
+                ephemeral=True
+            )
+            return
+
+        channel_id, message, mode = data
+        channel = interaction.guild.get_channel(channel_id)
+        member = interaction.user
+
+        if mode == "banner":
+            card = await generate_banner(member)
+            await channel.send(file=discord.File(card, "welcome.png"))
+            await interaction.response.send_message(
+                f"✅ Test-Banner gesendet in {channel.mention}",
+                ephemeral=True
+            )
+
+        elif mode == "embed":
+            text = (
+                message
+                .replace("%member", str(member))
+                .replace("%mention", member.mention)
+                .replace("%guild", member.guild.name)
+                .replace("%usercount", str(member.guild.member_count))
+            )
+            embed = discord.Embed(description=text, color=random_color())
+            embed.set_footer(text=f"Testjoin von {member}")
+            await channel.send(embed=embed)
+            await interaction.response.send_message(
+                f"✅ Test-Embed gesendet in {channel.mention}",
+                ephemeral=True
+            )
+
+    # ---------- JOINMSG ----------
 
     @app_commands.command(name="joinmsg")
     @app_commands.guild_only()
@@ -176,8 +238,15 @@ class welcome(commands.Cog):
         elif argument == "Ausschalten":
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    await cursor.execute("DELETE FROM welcome WHERE guildID=%s", (interaction.guild.id,))
-            await interaction.response.send_message("✅ Welcome deaktiviert.", ephemeral=True)
+                    await cursor.execute(
+                        "DELETE FROM welcome WHERE guildID=%s",
+                        (interaction.guild.id,)
+                    )
+
+            await interaction.response.send_message(
+                "✅ Welcome deaktiviert.",
+                ephemeral=True
+            )
 
         elif argument == "Anzeigen":
             async with self.bot.pool.acquire() as conn:
@@ -189,7 +258,10 @@ class welcome(commands.Cog):
                     data = await cursor.fetchone()
 
             if not data:
-                await interaction.response.send_message("❌ Kein Welcome aktiv.", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ Kein Welcome aktiv.",
+                    ephemeral=True
+                )
                 return
 
             ch = interaction.guild.get_channel(data[0])
