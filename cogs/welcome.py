@@ -3,7 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Literal
 import random
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL.Image import Resampling
 import aiohttp
 import io
 import re
@@ -23,7 +24,22 @@ def random_color():
 
 
 def strip_emojis(text: str) -> str:
-    return re.sub(r"[^\x00-\x7F]+", "", text)
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # Emoticons
+        "\U0001F300-\U0001F5FF"  # Symbole & Piktogramme
+        "\U0001F680-\U0001F6FF"  # Transport & Karten
+        "\U0001F700-\U0001F77F"
+        "\U0001F780-\U0001F7FF"
+        "\U0001F800-\U0001F8FF"
+        "\U0001F900-\U0001F9FF"
+        "\U0001FA00-\U0001FAFF"
+        "\U00002700-\U000027BF"
+        "\U00002600-\U000026FF"
+        "]+",
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub("", text)
 
 
 def wrap_text(draw, text, font, max_width):
@@ -51,19 +67,33 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     base = Image.open(WELCOME_BANNER_PATH).convert("RGBA")
     draw = ImageDraw.Draw(base)
 
-    # ---------- AVATAR (links & oben gleich, rechts & unten +1px) ----------
+    # ---------- AVATAR (ANTI-ALIASING FIX, TYP-KORREKT) ----------
     async with aiohttp.ClientSession() as session:
         async with session.get(member.display_avatar.url) as resp:
-            avatar_bytes = await resp.read()
+            avatar_buffer: io.BytesIO = io.BytesIO(await resp.read())
 
-    avatar_size = 304  # +1px rechts & unten
-    avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA").resize((avatar_size, avatar_size))
+    SCALE = 4
+    FINAL_SIZE = 304
+    big_size = FINAL_SIZE * SCALE
 
-    mask = Image.new("L", (avatar_size, avatar_size), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
+    avatar = Image.open(avatar_buffer).convert("RGBA").resize(
+        (big_size, big_size),
+        Resampling.LANCZOS
+    )
+
+    mask = Image.new("L", (big_size, big_size), 0)
+    ImageDraw.Draw(mask).ellipse(
+        (0, 0, big_size, big_size),
+        fill=255
+    )
     avatar.putalpha(mask)
 
-    # Position bleibt unverändert
+    avatar = avatar.resize(
+        (FINAL_SIZE, FINAL_SIZE),
+        Resampling.LANCZOS
+    )
+
+    # Position: links & oben gleich, rechts & unten +1px durch Größe
     base.paste(avatar, (29, 31), avatar)
 
     # ---------- FONTS ----------
@@ -130,7 +160,6 @@ async def generate_banner(member: discord.Member, subtitle: str | None) -> io.By
     base.save(out, format="PNG")
     out.seek(0)
     return out
-
 
 
 # ================== MODALS ==================
