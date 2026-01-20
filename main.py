@@ -73,7 +73,7 @@ intents.message_content = True
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 host = os.getenv('DB_HOST')
-benutzer = os.getenv('DB_USER')
+benutzer = os.getenv('DB_USER_BOT')
 password_db = os.getenv('DB_PASS')
 db_name = os.getenv('DB_NAME')
 dbl_token = os.getenv('DBL_TOKEN')
