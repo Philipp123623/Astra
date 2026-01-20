@@ -5,7 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7067d930-edfe-4aca-9a76-5923c2ec9fb3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/cogs/devlog.py" beforeDir="false" afterPath="$PROJECT_DIR$/cogs/devlog.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cogs/devlog.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -284,7 +284,7 @@
       <workItem from="1768899560173" duration="7113000" />
       <workItem from="1768909486935" duration="668000" />
       <workItem from="1768910727525" duration="1257000" />
-      <workItem from="1768926770805" duration="783000" />
+      <workItem from="1768926770805" duration="1427000" />
     </task>
     <task id="LOCAL-00001" summary="economy cog embed reworks">
       <option name="closed" value="true" />
