@@ -870,7 +870,7 @@ def status():
     return jsonify(online=True)
 
 def run_flask():
-    serve(app, host="0.0.0.0", port=5000)  # produktionsreif, keine Warning
+    serve(app, host="localhost", port=5000)  # produktionsreif, keine Warning
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
