@@ -76,6 +76,9 @@ host = os.getenv('DB_HOST')
 benutzer = os.getenv('DB_USER')
 password_db = os.getenv('DB_PASS')
 db_name = os.getenv('DB_NAME')
+dbl_token = os.getenv('DBL_TOKEN')
+dbl_password = os.getenv('DBL_PASS')
+dbl_port = os.getenv('DBL_PORT')
 
 def convert(time):
     pos = ["s", "m", "h", "d", "w"]
@@ -137,10 +140,9 @@ class Astra(commands.Bot):
 
     async def setup_hook(self):
         try:
-            dbl_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTM0MDM1MTEwNDUxMDc3NzMiLCJib3QiOnRydWUsImlhdCI6MTcwNTU4ODgxNn0.aX0_b94xKLSPLaEweiWojdU2LCOOmbhXQfMH_-3gc_8'  # set this to your bot's Top.gg token
             self.topggpy = topgg.DBLClient(self, dbl_token)
-            bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", "test")
-            await bot.topgg_webhook.run(8082)
+            bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", dbl_password)
+            await bot.topgg_webhook.run(int(dbl_port))
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
