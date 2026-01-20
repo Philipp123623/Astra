@@ -798,6 +798,13 @@ class DevTools(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     owner_id = 789555434201677824
-    # Persistente Views registrieren (CodeScroller braucht nur user_id, kein ctx)
+
+    # Persistente Views
     bot.add_view(CodeScroller(allowed_user_id=owner_id, code_chunks=["Dummy"]))
+
+    # ✅ TRACKING-Cog (DAS FEHLTE)
+    await bot.add_cog(CommandTracking(bot, owner_id))
+
+    # ✅ DEVTOOLS-Cog
     await bot.add_cog(DevTools(bot, owner_id))
+
