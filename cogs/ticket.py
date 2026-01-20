@@ -615,8 +615,8 @@ class TicketButtons(discord.ui.View):
                     f"Geclaimed von: {fmt_user(claimer)} (ID: {claimer.id})" if claimer else "Geclaimed von: Keiner",
                     f"Geschlossen von: {fmt_user(closer)} (ID: {closer.id})",
                 ]
-                if reason_text:
-                    header_lines.append(f"Schließ-Grund: {reason_text}")
+                final_reason = reason_text.strip() or "Kein Grund angegeben"
+                header_lines.append(f"Schließ-Grund: {final_reason}")
                 header_lines += [
                     "============================================================",
                     "",
