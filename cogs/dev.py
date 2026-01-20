@@ -5,11 +5,129 @@ import textwrap
 import traceback
 import sys
 import psutil
+from discord import app_commands
+from collections import defaultdict
 import inspect
 import io
 import asyncio
 import time
 from typing import List, Optional
+
+
+# =========================================================
+# Helper: Command + Subcommand extrahieren
+# =========================================================
+
+def extract_command_path(interaction: discord.Interaction) -> tuple[str, Optional[str]]:
+    """
+    /ticket setup   -> ("ticket", "setup")
+    /ping           -> ("ping", None)
+    """
+    if not interaction.command:
+        return ("unknown", None)
+
+    command_name = interaction.command.name
+    subcommand = None
+
+    if interaction.data and "options" in interaction.data:
+        opts = interaction.data["options"]
+        if opts and opts[0]["type"] in (1, 2):  # SUB_COMMAND / SUB_COMMAND_GROUP
+            subcommand = opts[0]["name"]
+
+    return command_name, subcommand
+
+
+# =========================================================
+# UI: Pagination View (Owner-only)
+# =========================================================
+
+class CommandStatsView(discord.ui.View):
+    def __init__(self, owner_id: int, pages: List[discord.Embed]):
+        super().__init__(timeout=180)
+        self.owner_id = owner_id
+        self.pages = pages
+        self.index = 0
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "Nur der Bot-Owner darf hier interagieren.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, _):
+        if self.index > 0:
+            self.index -= 1
+            await interaction.response.edit_message(
+                embed=self.pages[self.index], view=self
+            )
+        else:
+            await interaction.response.defer()
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, _):
+        if self.index < len(self.pages) - 1:
+            self.index += 1
+            await interaction.response.edit_message(
+                embed=self.pages[self.index], view=self
+            )
+        else:
+            await interaction.response.defer()
+
+
+# =========================================================
+# COG: Command Tracking + Stats
+# =========================================================
+
+class CommandTracking(commands.Cog):
+    def __init__(self, bot: commands.Bot, owner_id: int):
+        self.bot = bot
+        self.owner_id = owner_id
+        self.start_time = time.time()
+
+    # -----------------------------------------------------
+    # OWNER CHECK
+    # -----------------------------------------------------
+    def cog_check(self, ctx: commands.Context) -> bool:
+        return ctx.author.id == self.owner_id
+
+    # -----------------------------------------------------
+    # GLOBAL TRACKER (HIER PASSIERT DAS TRACKING)
+    # -----------------------------------------------------
+    @commands.Cog.listener()
+    async def on_app_command_completion(
+        self,
+        interaction: discord.Interaction,
+        command: app_commands.Command
+    ):
+        if not interaction.guild:
+            return  # DMs ignorieren
+
+        command_name, subcommand = extract_command_path(interaction)
+
+        try:
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        INSERT INTO command_usage (guild_id, user_id, command, subcommand)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (
+                            interaction.guild.id,
+                            interaction.user.id,
+                            command_name,
+                            subcommand,
+                        )
+                    )
+        except Exception as e:
+            # Tracking darf NIE Commands kaputt machen
+            print(f"[CommandTracking] DB-Fehler: {e}")
+
+
 
 PAGE_SIZE = 25  # max. Optionen im Select
 
@@ -351,6 +469,84 @@ class DevTools(commands.Cog):
         if len(output) > 1900:
             return output[:1900] + "\n... (Ausgabe gekürzt)"
         return output
+
+    @commands.command(name="commandstats", aliases=["cmdstats"])
+    @commands.is_owner()
+    async def commandstats(self, ctx: commands.Context):
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    SELECT command, subcommand, COUNT(*) AS uses
+                    FROM command_usage
+                    GROUP BY command, subcommand
+                    ORDER BY uses DESC
+                    """
+                )
+                rows = await cur.fetchall()
+
+        if not rows:
+            await ctx.send("Noch keine Command-Statistiken vorhanden.")
+            return
+
+        # -----------------------------
+        # Daten strukturieren
+        # -----------------------------
+        stats = defaultdict(lambda: {"total": 0, "subs": []})
+        for command, sub, uses in rows:
+            stats[command]["total"] += uses
+            stats[command]["subs"].append((sub, uses))
+
+        total_uses = sum(v["total"] for v in stats.values())
+        unique_commands = len(stats)
+
+        items = list(stats.items())
+        PAGE_SIZE = 5
+        pages: List[discord.Embed] = []
+
+        for i in range(0, len(items), PAGE_SIZE):
+            embed = discord.Embed(
+                title="📊 Command Usage Statistik",
+                description=(
+                    f"**Gesamtausführungen:** `{total_uses}`\n"
+                    f"**Unterschiedliche Commands:** `{unique_commands}`\n"
+                    f"**Uptime:** `{int((time.time() - self.start_time) // 60)} min`\n\n"
+                    "_Automatisch getrackt (Slash Commands + Subcommands)_"
+                ),
+                color=discord.Color.blurple()
+            )
+
+            for command, data in items[i:i + PAGE_SIZE]:
+                lines = []
+                for sub, uses in sorted(
+                        data["subs"], key=lambda x: x[1], reverse=True
+                ):
+                    if sub:
+                        lines.append(f"• `{sub}` → **{uses}x**")
+                    else:
+                        lines.append(f"• *(ohne Subcommand)* → **{uses}x**")
+
+                value = f"**Gesamt:** {data['total']}x\n" + "\n".join(lines)
+                if len(value) > 1024:
+                    value = value[:1000] + "\n…"
+
+                embed.add_field(
+                    name=f"/{command}",
+                    value=value,
+                    inline=False
+                )
+
+            embed.set_footer(
+                text=(
+                    f"Seite {i // PAGE_SIZE + 1}/"
+                    f"{(len(items) - 1) // PAGE_SIZE + 1} • "
+                    f"Bot-Owner: {ctx.author}"
+                )
+            )
+            pages.append(embed)
+
+        view = CommandStatsView(self.owner_id, pages)
+        await ctx.send(embed=pages[0], view=view)
 
     # --- Serverliste (NEU) ---
     @commands.hybrid_command(name="serverlist", aliases=["servers"])
