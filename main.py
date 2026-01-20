@@ -568,6 +568,7 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
+    logging.info("test")
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
