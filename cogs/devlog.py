@@ -96,7 +96,7 @@ class DevLogDashboard(commands.Cog):
 
         embed.set_footer(text="Automatisches Dev-Tagebuch · Astra")
 
-        channel = self.bot.get_channel(self.bot.config["DEVLOG_CHANNEL_ID"])
+        channel = self.bot.get_channel(self.bot.config["1463209410795929914"])
         if channel:
             await channel.send(embed=embed)
 
