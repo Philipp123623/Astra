@@ -39,17 +39,63 @@ class TagCreateModal(discord.ui.Modal, title="Tag erstellen"):
             timestamp=discord.utils.utcnow()
         )
         embed.add_field(name="Name", value=f"a!{self.tagname.value}", inline=False)
-        embed.add_field(
-            name="Inhalt",
-            value=self.tagoutput.value[:1024],
-            inline=False
-        )
-        embed.set_author(
-            name=interaction.user.name,
-            icon_url=interaction.user.avatar
-        )
+        embed.add_field(name="Inhalt", value=self.tagoutput.value[:1024], inline=False)
+        embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# =========================
+# VIEW: TAG PAGINATION
+# =========================
+class TagPaginationView(discord.ui.View):
+    def __init__(self, interaction: discord.Interaction, tags: list[tuple[str, str]]):
+        super().__init__(timeout=120)
+        self.interaction = interaction
+        self.tags = tags
+        self.index = 0
+
+    def create_embed(self) -> discord.Embed:
+        tagname, tagoutput = self.tags[self.index]
+        embed = discord.Embed(
+            title=f"🏷️ a!{tagname}",
+            description=tagoutput,
+            colour=discord.Colour.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(
+            text=f"Tag {self.index + 1} von {len(self.tags)}"
+        )
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.interaction.user.id:
+            await interaction.response.send_message(
+                "❌ Diese Buttons sind nicht für dich.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="⬅️ Zurück", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index = (self.index - 1) % len(self.tags)
+        await interaction.response.edit_message(
+            embed=self.create_embed(),
+            view=self
+        )
+
+    @discord.ui.button(label="➡️ Weiter", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.index = (self.index + 1) % len(self.tags)
+        await interaction.response.edit_message(
+            embed=self.create_embed(),
+            view=self
+        )
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
 
 
 # =========================
@@ -89,10 +135,7 @@ class tags(commands.Cog):
             colour=discord.Colour.blue(),
             timestamp=discord.utils.utcnow()
         )
-        embed.set_author(
-            name=msg.author,
-            icon_url=msg.author.avatar
-        )
+        embed.set_author(name=msg.author, icon_url=msg.author.avatar)
         embed.set_thumbnail(url=msg.guild.icon)
 
         await msg.channel.send(embed=embed)
@@ -121,9 +164,7 @@ class tags(commands.Cog):
         # TAG HINZUFÜGEN → MODAL
         # =========================
         if modus == "Hinzufügen":
-            await interaction.response.send_modal(
-                TagCreateModal(self.bot)
-            )
+            await interaction.response.send_modal(TagCreateModal(self.bot))
             return
 
         async with self.bot.pool.acquire() as conn:
@@ -158,21 +199,13 @@ class tags(commands.Cog):
                         (interaction.guild.id, name)
                     )
 
-                    embed = discord.Embed(
-                        title="🗑️ Tag entfernt",
-                        description=f"Der Tag `{name}` wurde gelöscht.",
-                        colour=discord.Colour.blue(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Name", value=f"a!{name}")
-
                     await interaction.response.send_message(
-                        embed=embed,
+                        f"🗑️ Tag `{name}` wurde entfernt.",
                         ephemeral=True
                     )
 
                 # =========================
-                # TAGS ANZEIGEN
+                # TAGS ANZEIGEN (BUTTONS)
                 # =========================
                 if modus == "Anzeigen":
                     await cursor.execute(
@@ -188,21 +221,11 @@ class tags(commands.Cog):
                         )
                         return
 
-                    embed = discord.Embed(
-                        title="📋 Server-Tags",
-                        description="Alle verfügbaren Tags dieses Servers:",
-                        colour=discord.Colour.blue(),
-                        timestamp=discord.utils.utcnow()
+                    view = TagPaginationView(interaction, result)
+                    await interaction.response.send_message(
+                        embed=view.create_embed(),
+                        view=view
                     )
-
-                    for tagname, tagoutput in result:
-                        embed.add_field(
-                            name=f"a!{tagname}",
-                            value=tagoutput[:1024],
-                            inline=False
-                        )
-
-                    await interaction.response.send_message(embed=embed)
 
 
 # =========================
