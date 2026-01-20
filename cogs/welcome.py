@@ -15,13 +15,6 @@ FONT_PATH = "cogs/fonts/Poppins-SemiBold.ttf"
 
 # ================== UTILS ==================
 
-def random_color():
-    return discord.Color.from_rgb(
-        random.randint(1, 255),
-        random.randint(1, 255),
-        random.randint(1, 255)
-    )
-
 
 def strip_emojis(text: str) -> str:
     emoji_pattern = re.compile(
@@ -258,9 +251,9 @@ class welcome(commands.Cog):
                 .replace("%guild", member.guild.name)
                 .replace("%usercount", str(member.guild.member_count))
             )
-            await channel.send(embed=discord.Embed(description=text, color=random_color()))
+            await channel.send(embed=discord.Embed(description=text, colour=discord.Colour.blue()))
 
-    @app_commands.command(name="testjoin", description="Teste die Welcome Nachricht")
+    @app_commands.command(name="testjoin", description="Simuliert einen Member-Join für das Welcome-System")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def testjoin(self, interaction: discord.Interaction):
@@ -268,7 +261,7 @@ class welcome(commands.Cog):
         await self.on_member_join(member)
         await interaction.response.send_message("✅ Testjoin ausgeführt.", ephemeral=True)
 
-    @app_commands.command(name="joinmsg")
+    @app_commands.command(name="joinmsg", description="Konfiguriere die Willkommensnachricht (Banner oder Embed)")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(administrator=True)
     async def joinmsg(
