@@ -48,7 +48,7 @@ class DevLogDashboard(commands.Cog):
         now = datetime.now()
         week = now.isocalendar().week
 
-        async with self.bot.db_pool.acquire() as conn:
+        async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
                     SELECT category, title
@@ -140,7 +140,7 @@ class DevModal(discord.ui.Modal):
         self.add_item(self.desc_input)
 
     async def on_submit(self, interaction):
-        async with self.bot.db_pool.acquire() as conn:
+        async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
                     "INSERT INTO devlog_entries (category, title, description) VALUES (%s,%s,%s)",
