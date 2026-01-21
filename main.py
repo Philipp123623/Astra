@@ -149,7 +149,7 @@ class Astra(commands.Bot):
             await self.load_cogs()
             self.tree.add_command(Reminder())
             logging.info("Astra ist online!")
-            await asyncio.sleep(3)
+            asyncio.sleep(3)
             logging.info("[PANEL-INFO] Script started!")
             self.keep_alive_task = self.loop.create_task(self.keep_db_alive())
         except Exception as e:
