@@ -143,7 +143,7 @@ class Astra(commands.Bot):
             bot.owner_id = 789555434201677824
             self.topggpy = topgg.DBLClient(self, dbl_token)
             bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", dbl_password)
-            await bot.topgg_webhook.run(int(dbl_port))
+            bot.topgg_webhook.run(int(dbl_port))
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
@@ -364,8 +364,6 @@ class VoteView(discord.ui.View):
                 emoji=discord.PartialEmoji(name="Herz", id=1361007251434901664)
             )
         )
-
-
 
 @bot.event
 async def on_dbl_vote(data):
