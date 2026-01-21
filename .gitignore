@@ -24,3 +24,7 @@ build/
 Thumbs.db
 users.json
 servers.json
+# local / server-only
+dbl_webhook.py
+opt/
+*.save
