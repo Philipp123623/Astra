@@ -143,13 +143,13 @@ class Astra(commands.Bot):
             bot.owner_id = 789555434201677824
             self.topggpy = topgg.DBLClient(self, dbl_token)
             bot.topgg_webhook = topgg.WebhookManager(bot).dbl_webhook("/dblwebhook", dbl_password)
-            bot.topgg_webhook.run(int(dbl_port))
+            await bot.topgg_webhook.run(int(dbl_port))
             await self.connect_db()
             await self.init_tables()
             await self.load_cogs()
             self.tree.add_command(Reminder())
             logging.info("Astra ist online!")
-            asyncio.sleep(3)
+            await asyncio.sleep(3)
             logging.info("[PANEL-INFO] Script started!")
             self.keep_alive_task = self.loop.create_task(self.keep_db_alive())
         except Exception as e:
