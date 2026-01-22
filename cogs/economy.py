@@ -13,7 +13,6 @@ from discord import ui
 # ---------- Slot-Config (balanciert & lohnend) ----------
 WILD = "⭐"
 SCAT = "🔔"
-ARROW_W = 3  # feste Spaltenbreite für Gewinnpfeil
 
 # Reels: 1x ⭐ pro Reel, 1–2x 🔔, mehr Low/Mid, wenige Highs
 REEL_STRIPS = [
@@ -151,22 +150,14 @@ def render_board(board, winline_idxs=None, freespins_left=0):
             s = f"〔{s}〕"
         return _pad_center(s, CELL_W)
 
-    def row_line(r, arrow=" "):
-        arrow_cell = _pad_center(arrow, ARROW_W)
-        return (
-            f"{VERT}{fmt_cell(r, 0)}{VERT}"
-            f"{fmt_cell(r, 1)}{VERT}"
-            f"{fmt_cell(r, 2)}{VERT}"
-            f"{arrow_cell}{VERT}"
-        )
+    def row_line(r):
+        return f"{VERT}{fmt_cell(r,0)}{VERT}{fmt_cell(r,1)}{VERT}{fmt_cell(r,2)}{VERT}"
 
     # Rahmen
     bar = HOR * CELL_W
-    abar = HOR * ARROW_W
-
-    top = f"┌{bar}┬{bar}┬{bar}┬{abar}┐"
-    mid = f"├{bar}┼{bar}┼{bar}┼{abar}┤"
-    bottom = f"└{bar}┴{bar}┴{bar}┴{abar}┘"
+    top    = f"┌{bar}┬{bar}┬{bar}┐"
+    mid    = f"├{bar}┼{bar}┼{bar}┤"
+    bottom = f"└{bar}┴{bar}┴{bar}┘"
 
     # Pfeile für horizontale Gewinne
     arrows = [" ", " ", " "]
@@ -177,11 +168,11 @@ def render_board(board, winline_idxs=None, freespins_left=0):
     lines = [
         "```",
         top,
-        row_line(0, arrows[0]),
+        f"{row_line(0)} {arrows[0]}",
         mid,
-        row_line(1, arrows[1]),
+        f"{row_line(1)} {arrows[1]}",
         mid,
-        row_line(2, arrows[2]),
+        f"{row_line(2)} {arrows[2]}",
         bottom,
         "```"
     ]
