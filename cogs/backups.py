@@ -913,7 +913,7 @@ class Backup(app_commands.Group):
             raise RuntimeError("BackupCog ist nicht geladen.")
         return cog
 
-    @app_commands.command(name="create", description="Erstellt ein Server-Backup.")
+    @app_commands.command(name="erstellen", description="Erstellt ein Server-Backup.")
     @app_commands.checks.has_permissions(administrator=True)
     async def backup_create(self, interaction: discord.Interaction):
         cog = self._cog()
@@ -927,7 +927,7 @@ class Backup(app_commands.Group):
         )
         await interaction.followup.send(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="list", description="Backups – eine Nachricht, schön & ausführlich")
+    @app_commands.command(name="liste", description="Backups – eine Nachricht, schön & ausführlich")
     @app_commands.checks.has_permissions(administrator=True)
     async def backup_list(self, interaction: discord.Interaction):
         cog = self._cog()
@@ -1080,7 +1080,7 @@ class Backup(app_commands.Group):
         view = BackupListView(entries, build_embed)
         await interaction.response.send_message(embed=build_embed(entries[0], 0, total), view=view, ephemeral=True)
 
-    @app_commands.command(name="load", description="Stellt ein Backup mithilfe eines Codes wieder her.")
+    @app_commands.command(name="laden", description="Stellt ein Backup mithilfe eines Codes wieder her.")
     @is_guild_owner()
     @app_commands.describe(code="Der Backup-Code, der wiederhergestellt werden soll.")
     async def backup_load(self, interaction: discord.Interaction, code: str):
@@ -1110,7 +1110,7 @@ class Backup(app_commands.Group):
             ephemeral=True
         )
 
-    @app_commands.command(name="undo", description="Stellt den Stand vor der letzten Wiederherstellung wieder her.")
+    @app_commands.command(name="zurücksetzen", description="Stellt den Stand vor der letzten Wiederherstellung wieder her.")
     @is_guild_owner()
     async def backup_undo(self, interaction: discord.Interaction):
         cog = self._cog()
@@ -1162,7 +1162,7 @@ class Backup(app_commands.Group):
         )
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
-    @app_commands.command(name="delete", description="Lösche ältere Backups.")
+    @app_commands.command(name="löschen", description="Lösche ältere Backups.")
     @is_guild_owner()
     @app_commands.describe(code="Der Backup-Code, der gelöscht werden soll.")
     async def backup_delete(self, interaction: discord.Interaction, code: str):
@@ -1213,7 +1213,7 @@ class Backup(app_commands.Group):
             ephemeral=True
         )
 
-    @app_commands.command(name="export", description="Exportiert ein Backup als Datei (.zst.json oder .gz.json).")
+    @app_commands.command(name="exportieren", description="Exportiert ein Backup als Datei (.zst.json oder .gz.json).")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(code="Backup-Code, der exportiert werden soll.")
     async def backup_export(self, interaction: discord.Interaction, code: str):
@@ -1241,7 +1241,7 @@ class Backup(app_commands.Group):
         )
         await interaction.response.send_message(embed=emb, file=file, ephemeral=True)
 
-    @app_commands.command(name="import", description="Importiert ein Backup aus einer Datei (.txt/.json/.zst.json/.gz.json) in die DB.")
+    @app_commands.command(name="importieren", description="Importiert ein Backup aus einer Datei (.txt/.json/.zst.json/.gz.json) in die DB.")
     @is_guild_owner()
     @app_commands.describe(file="Die Export-Datei (oder .txt mit JSON/Payload)", overwrite="Vorhandenen Code überschreiben?")
     async def backup_import(self, interaction: discord.Interaction, file: discord.Attachment, overwrite: bool = False):
