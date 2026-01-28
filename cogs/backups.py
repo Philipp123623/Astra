@@ -5,7 +5,7 @@ import time
 import typing as T
 import uuid
 import io
-
+import zstandard as zstd
 import aiohttp
 import aiomysql
 import discord
