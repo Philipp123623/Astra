@@ -268,6 +268,8 @@ def build_vertical_list_mentions(guild: discord.Guild, names: list[str], *, pref
     if rest:
         text += f"\n… **+{rest} weitere**"
     return text
+
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 # =====================================================================
 # Cog: DB, Worker, Restore/Undo-Logik, Fortschritt & Aufräumen
 # =====================================================================
@@ -460,7 +462,15 @@ class BackupCog(commands.Cog):
             if not row:
                 raise commands.UserInputError("Backup nicht gefunden.")
         blob = row["data_blob"]
-        raw = zstd.ZstdDecompressor().decompress(blob) if _HAS_ZSTD else gzip.decompress(blob)  # type: ignore
+        buf = memoryview(blob)
+
+        if buf[:4] == ZSTD_MAGIC:
+            raw = zstd.ZstdDecompressor().decompress(buf)
+        elif buf[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(buf)
+        else:
+            raw = blob
+
         return loads(raw), row
 
     async def _fetch_latest_code(self, guild_id: int) -> str | None:
@@ -501,16 +511,23 @@ class BackupCog(commands.Cog):
 
     def _try_decompress_any(self, data: bytes) -> list[bytes]:
         raws: list[bytes] = []
+        buf = memoryview(data)
 
-        for fmt in BACKUP_EXPORT_FORMATS.values():
-            dec = fmt.get("decompress")
-            if not dec:
-                continue
+        # zstd (Magic Bytes)
+        if buf[:4] == ZSTD_MAGIC:
             try:
-                raws.append(dec(data))
+                raws.append(zstd.ZstdDecompressor().decompress(buf))
             except Exception:
                 pass
 
+        # gzip (1F 8B)
+        if buf[:2] == b"\x1f\x8b":
+            try:
+                raws.append(gzip.decompress(buf))
+            except Exception:
+                pass
+
+        # plain
         raws.append(data)
         return raws
 
@@ -530,14 +547,14 @@ class BackupCog(commands.Cog):
         includes = (row.get("includes") or compute_includes(data))
 
         blob_db: bytes = row["data_blob"]
-        try:
-            # Falls in DB ZSTD liegt
-            _ = zstd.ZstdDecompressor().decompress(blob_db)  # type: ignore
-            blob_should = zstd.ZstdCompressor(level=12).compress(payload_raw)  # type: ignore
-        except Exception:
-            # sonst gzip
-            _ = gzip.decompress(blob_db)
-            blob_should = gzip.compress(payload_raw)  # type: ignore
+        buf = memoryview(blob_db)
+
+        if buf[:4] == ZSTD_MAGIC:
+            blob_should = zstd.ZstdCompressor(level=12).compress(payload_raw)
+        elif buf[:2] == b"\x1f\x8b":
+            blob_should = gzip.compress(payload_raw)
+        else:
+            blob_should = gzip.compress(payload_raw)
 
         needs_update = False
         fields: dict[str, T.Any] = {}
@@ -581,14 +598,14 @@ class BackupCog(commands.Cog):
         raw_candidates: list[bytes] = []
 
         # zst / gz / weitere Formate aus BACKUP_EXPORT_FORMATS
-        for fmt in BACKUP_EXPORT_FORMATS.values():
-            dec = fmt.get("decompress")
-            if not dec:
-                continue
-            try:
-                raw_candidates.append(dec(file_bytes))
-            except Exception:
-                pass
+        buf = memoryview(file_bytes)
+
+        if buf[:4] == ZSTD_MAGIC:
+            raw_candidates.append(zstd.ZstdDecompressor().decompress(buf))
+        elif buf[:2] == b"\x1f\x8b":
+            raw_candidates.append(gzip.decompress(buf))
+        else:
+            raw_candidates.append(file_bytes)
 
         # plain bytes als UTF-8 (json / txt)
         if not raw_candidates:
@@ -1022,7 +1039,15 @@ class Backup(app_commands.Group):
         entries: list[dict] = []
         for r in rows:
             blob = r["data_blob"]
-            raw = zstd.ZstdDecompressor().decompress(blob) if _HAS_ZSTD else gzip.decompress(blob)  # type: ignore
+            buf = memoryview(blob)
+
+            if buf[:4] == ZSTD_MAGIC:
+                raw = zstd.ZstdDecompressor().decompress(buf)
+            elif buf[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(buf)
+            else:
+                raw = blob
+
             data = loads(raw)
 
             roles = data.get("roles", []) or []
