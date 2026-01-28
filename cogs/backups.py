@@ -10,7 +10,34 @@ import aiohttp
 import aiomysql
 import discord
 from discord import app_commands
+import gzip
 from discord.ext import commands
+
+class BackupFileFormat(T.TypedDict):
+    ext: str
+    compress: T.Callable[[bytes], bytes]
+    decompress: T.Callable[[bytes], bytes] | None
+
+
+BACKUP_EXPORT_FORMATS: dict[str, BackupFileFormat] = {
+    "zst": {
+        "ext": "zst.json",
+        "compress": lambda b: zstd.ZstdCompressor(level=12).compress(b),
+        "decompress": lambda b: zstd.ZstdDecompressor().decompress(b),
+    },
+    "gz": {
+        "ext": "gz.json",
+        "compress": gzip.compress,
+        "decompress": gzip.decompress,
+    },
+    "json": {
+        "ext": "json",
+        "compress": lambda b: b,
+        "decompress": None,
+    },
+}
+
+
 
 def is_guild_owner():
     async def predicate(interaction: discord.Interaction) -> bool:
@@ -457,21 +484,35 @@ class BackupCog(commands.Cog):
             "backup_version": int(row["version"]),
             "code": row["code"],
             "guild_id": int(row["guild_id"]),
-            "includes": (row.get("includes") or compute_includes(data)),
-            "hash": (row["hash"].hex() if isinstance(row["hash"], (bytes, bytearray)) else str(row["hash"])),
+            "includes": row.get("includes") or compute_includes(data),
+            "hash": row["hash"].hex() if isinstance(row["hash"], (bytes, bytearray)) else str(row["hash"]),
             "payload": data,
         }
+
         raw = dumps(doc)
 
-        if _HAS_ZSTD:
-            out = zstd.ZstdCompressor(level=12).compress(raw)
-            ext = "zst.json"
-        else:
-            out = gzip.compress(raw)  # type: ignore
-            ext = "gz.json"
+        fmt_def = BACKUP_EXPORT_FORMATS.get(fmt)
+        if not fmt_def:
+            raise commands.UserInputError("Unbekanntes Export-Format.")
 
-        filename = f"astra-backup_{row['code']}_v{row['version']}.{ext}"
+        out = fmt_def["compress"](raw)
+        filename = f"astra-backup_{row['code']}_v{row['version']}.{fmt_def['ext']}"
         return filename, out
+
+    def _try_decompress_any(self, data: bytes) -> list[bytes]:
+        raws: list[bytes] = []
+
+        for fmt in BACKUP_EXPORT_FORMATS.values():
+            dec = fmt.get("decompress")
+            if not dec:
+                continue
+            try:
+                raws.append(dec(data))
+            except Exception:
+                pass
+
+        raws.append(data)
+        return raws
 
     async def _verify_and_fix_db_entry(self, code: str) -> None:
         """
@@ -539,20 +580,17 @@ class BackupCog(commands.Cog):
         # 1) Versuche dekomprimieren → JSON parsen
         raw_candidates: list[bytes] = []
 
-        # zstd
-        try:
-            raw_candidates.append(zstd.ZstdDecompressor().decompress(file_bytes))  # type: ignore
-        except Exception:
-            pass
-
-        # gzip
-        if not raw_candidates:
+        # zst / gz / weitere Formate aus BACKUP_EXPORT_FORMATS
+        for fmt in BACKUP_EXPORT_FORMATS.values():
+            dec = fmt.get("decompress")
+            if not dec:
+                continue
             try:
-                raw_candidates.append(gzip.decompress(file_bytes))  # type: ignore
+                raw_candidates.append(dec(file_bytes))
             except Exception:
                 pass
 
-        # plain bytes als UTF-8
+        # plain bytes als UTF-8 (json / txt)
         if not raw_candidates:
             try:
                 raw_candidates.append(file_bytes)
@@ -594,7 +632,9 @@ class BackupCog(commands.Cog):
                     continue
 
         if not isinstance(doc, dict):
-            raise commands.UserInputError(f"Ungültige Backup-Datei (.txt/.json): {last_err or 'keine lesbaren Daten'}")
+            raise commands.UserInputError(
+                f"Ungültige Backup-Datei (.txt/.json/.zst/.gz): {last_err or 'keine lesbaren Daten'}"
+            )
 
         # 2) Validieren / Defaults setzen
         if doc.get("format") != "astra-backup":
@@ -611,7 +651,9 @@ class BackupCog(commands.Cog):
                     "payload": doc,
                 }
             else:
-                raise commands.UserInputError("Ungültiges Format. Erwartet 'astra-backup' oder rohen payload (roles/channels).")
+                raise commands.UserInputError(
+                    "Ungültiges Format. Erwartet 'astra-backup' oder rohen payload (roles/channels)."
+                )
 
         payload = doc.get("payload")
         if not isinstance(payload, dict):
@@ -626,7 +668,11 @@ class BackupCog(commands.Cog):
         includes = compute_includes(payload)
 
         # 4) DB upsert (mit korrekter Kompression)
-        blob = zstd.ZstdCompressor(level=12).compress(payload_raw) if _HAS_ZSTD else gzip.compress(payload_raw)  # type: ignore
+        blob = (
+            zstd.ZstdCompressor(level=12).compress(payload_raw)
+            if _HAS_ZSTD
+            else gzip.compress(payload_raw)
+        )  # type: ignore
 
         async with self.pool.acquire() as conn, conn.cursor() as cur:
             await cur.execute("SELECT 1 FROM backups WHERE code=%s", (code_in_file,))
@@ -640,8 +686,14 @@ class BackupCog(commands.Cog):
                 await cur.execute(
                     """
                     UPDATE backups
-                    SET guild_id=%s, includes=%s, version=%s, size_bytes=%s, `hash`=%s, data_blob=%s, created_at=NOW()
-                    WHERE code=%s
+                    SET guild_id=%s,
+                        includes=%s,
+                        version=%s,
+                        size_bytes=%s,
+                        `hash`=%s,
+                        data_blob=%s,
+                        created_at=NOW()
+                    WHERE code = %s
                     """,
                     (guild_id, includes, version, len(blob), digest, blob, code)
                 )
@@ -649,7 +701,7 @@ class BackupCog(commands.Cog):
                 await cur.execute(
                     """
                     INSERT INTO backups (code, guild_id, includes, version, size_bytes, `hash`, data_blob)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (code, guild_id, includes, version, len(blob), digest, blob)
                 )
@@ -658,7 +710,6 @@ class BackupCog(commands.Cog):
         # 5) Sicherheit: gleich verifizieren/ggf. korrigieren
         await self._verify_and_fix_db_entry(code)
         return code
-
 
     # ---------- Snapshot ----------
     async def _snapshot_guild(self, guild: discord.Guild) -> dict:
@@ -1216,6 +1267,13 @@ class Backup(app_commands.Group):
     @app_commands.command(name="exportieren", description="Exportiert ein Backup als Datei (.zst.json oder .gz.json).")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(code="Backup-Code, der exportiert werden soll.")
+    @app_commands.choices(
+        format=[
+            app_commands.Choice(name="zst (empfohlen)", value="zst"),
+            app_commands.Choice(name="gz", value="gz"),
+            app_commands.Choice(name="json (unkomprimiert)", value="json"),
+        ]
+    )
     async def backup_export(self, interaction: discord.Interaction, code: str):
         cog = self._cog()
         try:
