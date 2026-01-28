@@ -13,31 +13,6 @@ from discord import app_commands
 import gzip
 from discord.ext import commands
 
-class BackupFileFormat(T.TypedDict):
-    ext: str
-    compress: T.Callable[[bytes], bytes]
-    decompress: T.Callable[[bytes], bytes] | None
-
-
-BACKUP_EXPORT_FORMATS: dict[str, BackupFileFormat] = {
-    "zst": {
-        "ext": "zst.json",
-        "compress": lambda b: zstd.ZstdCompressor(level=12).compress(b),
-        "decompress": lambda b: zstd.ZstdDecompressor().decompress(b),
-    },
-    "gz": {
-        "ext": "gz.json",
-        "compress": gzip.compress,
-        "decompress": gzip.decompress,
-    },
-    "json": {
-        "ext": "json",
-        "compress": lambda b: b,
-        "decompress": None,
-    },
-}
-
-
 
 def is_guild_owner():
     async def predicate(interaction: discord.Interaction) -> bool:
@@ -64,6 +39,31 @@ try:
 except ImportError:
     import gzip
     _HAS_ZSTD = False
+
+class BackupFileFormat(T.TypedDict):
+    ext: str
+    compress: T.Callable[[bytes], bytes]
+    decompress: T.Callable[[bytes], bytes] | None
+
+
+BACKUP_EXPORT_FORMATS: dict[str, BackupFileFormat] = {
+    "zst": {
+        "ext": "zst.json",
+        "compress": lambda b: zstd.ZstdCompressor(level=12).compress(b),
+        "decompress": lambda b: zstd.ZstdDecompressor().decompress(b),
+    },
+    "gz": {
+        "ext": "gz.json",
+        "compress": gzip.compress,
+        "decompress": gzip.decompress,
+    },
+    "json": {
+        "ext": "json",
+        "compress": lambda b: b,
+        "decompress": None,
+    },
+}
+
 
 # ---------------- Einstellungen ----------------
 BACKUP_VERSION = 1
@@ -470,7 +470,7 @@ class BackupCog(commands.Cog):
             return row[0] if row else None
 
     # ---------- Export/Import (Datei <-> DB) ----------
-    async def _export_backup_bytes(self, code: str) -> tuple[str, bytes]:
+    async def _export_backup_bytes(self, code: str, *, fmt: str = "zst") -> tuple[str, bytes]:
         """
         Exportiert einen bestehenden DB-Backup-Datensatz als Datei.
         WICHTIG: DB-Eintrag bleibt bestehen (kein Delete).
@@ -1268,16 +1268,16 @@ class Backup(app_commands.Group):
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(code="Backup-Code, der exportiert werden soll.")
     @app_commands.choices(
-        format=[
+        dateiformat=[
             app_commands.Choice(name="zst (empfohlen)", value="zst"),
             app_commands.Choice(name="gz", value="gz"),
             app_commands.Choice(name="json (unkomprimiert)", value="json"),
         ]
     )
-    async def backup_export(self, interaction: discord.Interaction, code: str):
+    async def backup_export(self, interaction: discord.Interaction, code: str, dateiformat: str = "gz"):
         cog = self._cog()
         try:
-            filename, file_bytes = await cog._export_backup_bytes(code)
+            filename, file_bytes = await cog._export_backup_bytes(code, fmt=dateiformat)
         except commands.UserInputError:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Ungültiger Backup-Code.",
                                                     ephemeral=True)
