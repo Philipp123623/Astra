@@ -38,7 +38,7 @@ class autoreact(commands.Cog):
     @app_commands.command(name="autoreact")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.describe(channel="Textchannel", emoji="Emoji")
     async def add(self, interaction: discord.Interaction, modus: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], channel: discord.TextChannel, emoji: str):
         """Richte Auto Reaktionen in Channels ein."""

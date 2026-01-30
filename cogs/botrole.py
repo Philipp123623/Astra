@@ -60,7 +60,7 @@ class botrole(commands.Cog):
     @app_commands.command(name="botrole")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.describe(argument="Möchtest Botrollen hinzufügem, entfernen oder Anzeigen lassen.", role="Role")
     async def botrole(self, interaction: discord.Interaction,
                        argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'],

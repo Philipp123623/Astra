@@ -664,6 +664,7 @@ class Benachrichtigung(app_commands.Group):
 
 
     @app_commands.command(name="youtube", description="YouTube-Kanal hinzufügen oder entfernen")
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",
@@ -707,6 +708,7 @@ class Benachrichtigung(app_commands.Group):
             )
 
     @app_commands.command(name="twitch", description="Twitch-Kanal hinzufügen oder entfernen")
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
         aktion="Hinzufügen oder Entfernen",
         channel="Discord-Kanal für Benachrichtigungen",

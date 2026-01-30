@@ -20,7 +20,7 @@ class Automod(app_commands.Group):
     @app_commands.command(name="hinzufügen", description="Richte die Automoderation für deinen Server ein.")
     @app_commands.describe(warns="Anzahl der Verwarnungen, bei der eine Aktion ausgelöst wird.", action="Die auszuführende Aktion bei Erreichen der Verwarnungen.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def add(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], action: Literal['Kick', 'Ban', 'Timeout']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
@@ -49,7 +49,7 @@ class Automod(app_commands.Group):
 
     @app_commands.command(name="entfernen", description="Richte die Automoderation für deinen Server ein.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def remove(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
@@ -63,7 +63,7 @@ class Automod(app_commands.Group):
 
     @app_commands.command(name="anzeigen", description="Richte die Automoderation für deinen Server ein.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def show(self, interaction: discord.Interaction):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
@@ -95,7 +95,7 @@ class Warn(commands.Cog):
     @app_commands.command(name="warn", description="Warne einen User.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def warn(self, interaction: discord.Interaction, member: discord.Member, reason: str):
         """Warne einen User."""
         async with self.bot.pool.acquire() as conn:
@@ -294,7 +294,7 @@ class Warn(commands.Cog):
     @app_commands.command(name="unwarn", description="Entferne Warns von einem User.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def unwarn(self, interaction: discord.Interaction, member: discord.Member, warnid: int):
         """Entferne Warns von einem User.."""
         async with self.bot.pool.acquire() as conn:
@@ -318,7 +318,7 @@ class Warn(commands.Cog):
     @app_commands.command(name="warns", description="Erhalte eine Liste mit allen Warns eines Users.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(moderate_members=True)
     async def warns(self, interaction: discord.Interaction, member: discord.Member):
         """Erhalte eine Liste mit allen Warns eines Users."""
         async with self.bot.pool.acquire() as conn:

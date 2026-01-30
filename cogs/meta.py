@@ -222,7 +222,7 @@ class meta(commands.Cog):
     @app_commands.describe(titel="Titel der Umfrage.")
     @app_commands.describe(optionen="Kommagetrennte Liste der Optionen (z. B. Rot, Blau, Grün).")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_messages=True)
     @app_commands.checks.cooldown(1, 3, key=lambda i: (i.guild_id, i.user.id))
     async def poll(self, interaction: discord.Interaction, titel: str, optionen: str):
         """Erstelle eine Umfrage."""

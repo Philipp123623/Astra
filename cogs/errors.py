@@ -17,6 +17,7 @@ def _safe(o):
     except Exception:
         return repr(o)
 
+
 def _shorten_path(p: str) -> str:
     try:
         return str(Path(p).resolve()).replace(PROJECT_ROOT + "/", "")

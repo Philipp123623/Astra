@@ -255,7 +255,7 @@ class welcome(commands.Cog):
 
     @app_commands.command(name="testjoin", description="Simuliert einen Member-Join für das Welcome-System")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def testjoin(self, interaction: discord.Interaction):
         member = interaction.user
         await self.on_member_join(member)
@@ -263,7 +263,7 @@ class welcome(commands.Cog):
 
     @app_commands.command(name="joinmsg", description="Konfiguriere die Willkommensnachricht (Banner oder Embed)")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def joinmsg(
         self,
         interaction: discord.Interaction,

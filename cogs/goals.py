@@ -226,7 +226,7 @@ class GoalModalPage2(discord.ui.Modal, title="Community Goal erstellen (2/2)"):
         await interaction.response.edit_message(embed=embed, view=FertigButton(self.setup_state, cond_lines, ends_ts, reward_text))
 
 @app_commands.guild_only()
-@commands.is_owner()
+@app_commands.checks.has_permissions(manage_events=True)
 class CommunityGoalsGroup(app_commands.Group):
     def __init__(self, cog):
         super().__init__(name="communitygoals", description="Communityziele!")

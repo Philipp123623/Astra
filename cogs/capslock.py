@@ -99,7 +99,7 @@ class capslock(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.describe(argument="Soll der capslock check an oder aus sein?", percent="Bei wie viel % Capslock, soll eine Action passieren?")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_messages=True)
     async def capslock(self, interaction: discord.Interaction,
                        argument: Literal['Einschalten', 'Ausschalten'],
                        percent: Literal['10', '20', '30', '40', '50', '60', '70', '80', '90', '100'] = None):

@@ -852,7 +852,7 @@ class Ticket(app_commands.Group):
         super().__init__(name="ticket", description="Alles rund ums Ticketsystem.")
 
     @app_commands.command(name="setup", description="Starte den Setup-Wizard für ein Ticket-Panel.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
         view = SetupWizardView(self.bot, interaction.user)
@@ -860,7 +860,7 @@ class Ticket(app_commands.Group):
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_list(self, interaction: discord.Interaction):
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
@@ -880,7 +880,7 @@ class Ticket(app_commands.Group):
     # Panel löschen
     @app_commands.command(name="löschen", description="Lösche ein Ticket-Panel.")
     @app_commands.describe(channel="Kanal mit dem Ticket-Panel")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_delete(self, interaction: discord.Interaction, channel: discord.TextChannel):
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
@@ -891,7 +891,7 @@ class Ticket(app_commands.Group):
     # Ticket-Log konfigurieren
     @app_commands.command(name="log", description="Richte einen Ticket-Log-Kanal ein/aus.")
     @app_commands.describe(argument="Einschalten oder Ausschalten.", channel="Log-Kanal")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def ticketlog(self, interaction: discord.Interaction, argument: Literal["Einschalten", "Ausschalten"], channel: Optional[discord.TextChannel] = None):
         async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
             async with conn.cursor() as cur:
@@ -909,7 +909,7 @@ class Ticket(app_commands.Group):
     # Konfiguration: Auto-Close & Reminder & Reopen
     @app_commands.command(name="config", description="Zeigt oder ändert Ticket-Einstellungen.")
     @app_commands.describe(modus="Was möchtest du tun?")
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_config(
             self,
             interaction: discord.Interaction,

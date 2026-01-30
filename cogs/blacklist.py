@@ -46,7 +46,7 @@ class blacklist(commands.Cog):
     @app_commands.command(name="blacklist", description="Blackliste Nachrichten, Wörter, Entferne sie von der Blacklist oder lass sie dir anzeigen")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_messages=True)
     @app_commands.describe(argument="Willst du Nachrichten/Wörter Hinzufügemn, Entfernen oder dir eine Liste aller geblacklisteten Wörter anzeigen lassen", word="Word")
     async def blacklist(self, interaction: discord.Interaction, argument: Literal['Hinzufügen', 'Entfernen', 'Anzeigen'],
                         word: str = None):

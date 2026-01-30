@@ -343,6 +343,7 @@ class Geburtstag(app_commands.Group):
     # ---- Admin: Setup (Channel / Uhrzeit(HH:mm) / Zeitzone) ----
 
     @app_commands.command(name="setup", description="Channel, Uhrzeit & Zeitzone setzen/anzeigen.")
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
         channel="Textkanal für Glückwünsche",
         uhrzeit="HH:mm (lokal zur Zeitzone)",
@@ -357,8 +358,6 @@ class Geburtstag(app_commands.Group):
     ):
         if not interaction.guild:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.", ephemeral=True); return
-        if not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.manage_channels):
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.", ephemeral=True); return
 
         gid = interaction.guild.id
 
@@ -446,11 +445,10 @@ class Geburtstag(app_commands.Group):
     # ---- Admin: Nachrichtenvorlage per Modal (inkl. Ja/Nein für Embed) ----
 
     @app_commands.command(name="nachricht", description="Eigene Geburtstagsnachricht setzen.")
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def nachricht(self, interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.", ephemeral=True); return
-        if not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.manage_channels):
-            await interaction.response.send_message("<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.", ephemeral=True); return
 
         gid = interaction.guild.id
 
@@ -509,16 +507,12 @@ class Geburtstag(app_commands.Group):
 
 
     @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Geburtstagssystem.")
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(modus="Wähle 'an' um zu aktivieren oder 'aus' um zu pausieren.")
     async def status(self, interaction: discord.Interaction, modus: Literal["Einschalten", "Ausschalten"]):
         if not interaction.guild:
             await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur in Servern verfügbar.",
                                                     ephemeral=True)
-            return
-        if not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.manage_channels):
-            await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> Dir fehlen Rechte: `Server verwalten` oder `Kanäle verwalten`.",
-                ephemeral=True)
             return
 
         gid = interaction.guild.id

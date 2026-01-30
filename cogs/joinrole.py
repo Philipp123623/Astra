@@ -60,7 +60,7 @@ class joinrole(commands.Cog):
     @app_commands.command(name="joinrole", description="Verwalte die Joinrolle für neue Mitglieder auf diesem Server.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     @app_commands.describe(argument="Aktion auswählen: 'Einschalten', 'Ausschalten' oder 'Anzeigen'.", role="Die Rolle, die neuen Mitgliedern automatisch zugewiesen werden soll (nur bei 'Einschalten' nötig).")
     async def joinrole(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], role: discord.Role = None):
         """Lege eine Joinrolle für deinen Server fest."""

@@ -349,7 +349,7 @@ class modlog(commands.Cog):
     @app_commands.describe(channel="Kanal für Modlog-Einträge (nur bei 'Add' erforderlich).")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def modlog(self, interaction: discord.Interaction, argument: Literal['Add', 'Delete', 'Show'], channel: discord.TextChannel = None):
         """Setup a Modlog for your Server!"""
         async with self.bot.pool.acquire() as conn:

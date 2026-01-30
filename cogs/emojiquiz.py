@@ -290,7 +290,7 @@ class emojiquiz(commands.Cog):
     @app_commands.command(name="emojiquiz", description="Emojiquiz in einem Kanal ein- oder ausschalten")
     @app_commands.describe(status="Legt fest, ob das Quiz eingeschaltet ('An') oder ausgeschaltet ('Aus') wird.", channel="Der Kanal, in dem das Quiz angezeigt werden soll (nur bei 'An').")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_server=True)
     async def emojiquiz(self, interaction: discord.Interaction, status: Literal['An', 'Aus'],
                         channel: discord.TextChannel):
         async with self.bot.pool.acquire() as conn:

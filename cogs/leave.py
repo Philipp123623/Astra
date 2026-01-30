@@ -85,7 +85,7 @@ class leave(commands.Cog):
     @app_commands.command(name="testleave", description="Simuliere, dass du den Server verlässt, um Leave-Nachrichten oder Logs zu testen.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def testleave(self, interaction: discord.Interaction):
         """Schaue ob deine Leavemsg gut funktioniert."""
         async with self.bot.pool.acquire() as conn:
@@ -122,7 +122,7 @@ class leave(commands.Cog):
     @app_commands.command(name="leavemsg", description="Lege eine Nachricht fest für User, die den Server verlassen.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(argument="Aktion auswählen: 'Einschalten', 'Ausschalten' oder 'Anzeigen'.", channel="Kanal, in dem die Nachricht gesendet werden soll (nur bei 'Einschalten' nötig).")
     async def leavemsg(self, interaction: discord.Interaction, argument: Literal['Einschalten', 'Ausschalten', 'Anzeigen'], channel: discord.TextChannel = None):
         """Legt fest, ob und wo eine Nachricht beim Serververlassen eines Mitglieds gesendet wird."""

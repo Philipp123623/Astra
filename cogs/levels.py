@@ -329,7 +329,7 @@ class Level(app_commands.Group):
 
     @app_commands.command(name="rank", description="Zeigt dir dein aktuelles Level")
     @app_commands.describe(user="Das Mitglied, dessen Levelkarte angezeigt werden soll (Standard: du selbst).")
-    @commands.cooldown(1, 3, commands.BucketType.user)
+    @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.guild_only()
     async def rank(self, interaction: discord.Interaction, user: discord.User | None = None):
         user = user or interaction.user
@@ -556,7 +556,7 @@ class Level(app_commands.Group):
 
     @app_commands.command(name="status", description="Aktiviere oder deaktiviere das Levelsystem.")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def status(self, interaction: discord.Interaction, arg: Literal['Einschalten', 'Ausschalten']):
 
         """Lege einen Kanal fest, in den die Level Up Nachrichten gesendet werden."""
@@ -1118,7 +1118,7 @@ class levelsystem(commands.Cog):
 
     @app_commands.command(name="xpboost", description="Aktiviere oder deaktiviere den XP-Boost für deinen Server.")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def levelsystem_xpboost(self, interaction: discord.Interaction, status: Literal['Aktivieren(x2)', 'Deaktivieren(x1)']):
         """Aktiviere den XP-Boost für deinen Server."""
         async with self.bot.pool.acquire() as conn:
@@ -1155,7 +1155,7 @@ class levelsystem(commands.Cog):
 
     @app_commands.command(name="setlevel", description="Setze das Level eines Mitglieds auf deinem Server.")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def levelsystem_setlevel(self, interaction: discord.Interaction, member: discord.Member, level: int):
         """Set the level from a user on your server."""
         async with self.bot.pool.acquire() as conn:
@@ -1193,7 +1193,7 @@ class levelsystem(commands.Cog):
 
     @app_commands.command(name="setxp", description="Setze die XP eines Mitglieds innerhalb seines aktuellen Levels.")
     @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def levelsystem_setxp(self, interaction: discord.Interaction, member: discord.Member, xp: int):
         """Setzt die XP eines Users innerhalb seines aktuellen Levels."""
         # Negatives/Null sofort abfangen
