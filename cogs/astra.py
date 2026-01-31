@@ -191,7 +191,7 @@ class astra(commands.Cog):
         async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     try:
-                        await guild.owner.send("**Danke fürs Einladen von Astra!**\n\nAstra verwaltet Ihren Server – Sie können folgende System zum verwalten ihres Servers nutzen:\nAdministration, Levelsystem, Tempchannels, Willkommen Nachrichten,\nund vieles mehr.\n\n **Funktionen**\n\nAstra bringt außerdem folgende Funktionen mit sich: Fun,\nGiveaway, Reactionrole, Utility\nInformationen und Joinrole\n\n**Wichtige Links**\n\nWebsite: https://astra-bot.de/ --> Aktuell nicht in Betrieb\n[Support Server](https://discord.gg/vwh2raq2Xu)\n[Bot Invite](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)\n")
+                        await guild.owner.send("**Danke fürs Einladen von Astra!**\n\nAstra verwaltet Ihren Server – Sie können folgende System zum verwalten ihres Servers nutzen:\nAdministration, Levelsystem, Tempchannels, Willkommen Nachrichten,\nund vieles mehr.\n\n **Funktionen**\n\nAstra bringt außerdem folgende Funktionen mit sich: Fun,\nGiveaway, Reactionrole, Utility\nInformationen und Joinrole\n\n**Wichtige Links**\n\nWebsite: https://astra-bot.de/ --> Aktuell nicht in Betrieb\n[Support Server](https://astra-bot.de/support)\n[Bot Invite](https://astra-bot.de/invite)\n[Website](https://astra-bot.de/)\n")
                     except:
                         pass
                     try:
