@@ -305,7 +305,7 @@ class HelpCog(commands.Cog):
             description=(
                 "<:Astra_info:1141303860556738620> **Wichtige Informationen**\n"
                 "Hier findest du alle Commands.\n"
-                "Falls du Hilfe brauchst, komm auf unseren [Support Server ➚](https://discord.gg/eatdJPfjWc).\n\n"
+                "Falls du Hilfe brauchst, komm auf unseren [Support Server ➚](https://astra-bot.de/support).\n\n"
                 f"**Uptime:** {days}d {hours}h {minutes}m {seconds}s\n"
                 f"**Ping:** {self.bot.latency * 1000:.0f} ms\n\n"
             )
@@ -314,8 +314,9 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="Über Astra",
             value=(
-                "> <:Astra_support:1141303923752325210> Astra ist ein vielseitiger Discord-Bot mit Moderation, Minigames, "
-                "Economy, Levelsystem und mehr – entwickelt, um deinen Server zu verwalten und zu beleben.\n"
+                "> <:Astra_support:1141303923752325210> Astra ist ein leistungsstarker Discord-Bot für **Moderation und Sicherheit**. "
+                "Mit Automod, Logs und **Server-Backups** behältst du jederzeit die Kontrolle – "
+                "ergänzt durch Levelsystem, Tickets, Economy, Minigames und mehr.\n"
             ),
             inline=False,
         )
@@ -335,8 +336,8 @@ class HelpCog(commands.Cog):
             name="Links",
             value=(
                 "[Einladen](https://astra-bot.de/invite)"
-                " | [Support](https://discord.gg/eatdJPfjWc)"
-                " | [Voten](https://top.gg/bot/XXXXXXXXXXXX/vote)"
+                " | [Support](https://astra-bot.de/support)"
+                " | [Voten](https://top.gg/bot/1113403511045107773/vote)"
             ),
             inline=False
         )
