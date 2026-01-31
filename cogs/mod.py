@@ -303,6 +303,9 @@ class mod(commands.Cog):
     ):
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         remaining = amount
+        total = amount  # FIX: Gesamtziel (ändert sich nie)
+        deleted = 0  # FIX: echte Löschungen
+
         last_message = None
         backoff = 0.0
         checkpoint = 0  # für DB
@@ -326,6 +329,7 @@ class mod(commands.Cog):
                 try:
                     await msg.delete()  # kein reason bei PartialMessage
                     remaining -= 1
+                    deleted += 1  # ← DAS FEHLTE
                     checkpoint += 1
                     ui_counter += 1
 
@@ -335,8 +339,8 @@ class mod(commands.Cog):
                             await progress_message.edit(
                                 embed=build_clear_progress_embed(
                                     channel=channel,
-                                    step=amount - remaining,
-                                    total=amount,
+                                    step=deleted,
+                                    total=total,
                                     status="Lösche alte Nachrichten …"
                                 )
                             )
@@ -380,8 +384,8 @@ class mod(commands.Cog):
                 await progress_message.edit(
                     embed=build_clear_progress_embed(
                         channel=channel,
-                        step=amount - remaining,
-                        total=amount,
+                        step=deleted,
+                        total=total,
                         status="Fertig ✅",
                         finished=True
                     )
@@ -389,7 +393,7 @@ class mod(commands.Cog):
             except Exception:
                 pass
 
-        return amount - remaining
+        return deleted
 
     # ---------------- Commands ----------------
 
