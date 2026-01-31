@@ -183,33 +183,33 @@ class mod(commands.Cog):
                 await evt.wait()
                 continue
 
-            # Channel holen
+            # Kanal holen
             channel = self.bot.get_channel(channel_id)
             if channel is None:
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
-                    # Kanal nicht erreichbar → Job entsorgen
                     await self._mark_job_done(job.id)
                     continue
 
-            deleted_count = 0
+            # 🔥 EXISTIERENDES PROGRESS-EMBED HOLEN (kein neues senden!)
             progress_message = None
-
-            # Progress-Embed initial senden
             try:
-                start_embed = build_clear_progress_embed(
-                    channel=channel,
-                    step=0,
-                    total=job.amount,
-                    status="Starte Hintergrund-Löschung …"
-                )
-                progress_message = await channel.send(embed=start_embed)
+                async with self.bot.pool.acquire() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.execute(
+                            "SELECT message_id FROM clear_jobs WHERE id=%s",
+                            (job.id,)
+                        )
+                        row = await cur.fetchone()
+
+                if row and row[0]:
+                    progress_message = await channel.fetch_message(int(row[0]))
             except Exception:
                 progress_message = None
 
             try:
-                # Quick-Check: gibt es überhaupt alte, nicht gepinnte Nachrichten?
+                # Quick-Check: gibt es alte Nachrichten?
                 cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
                 has_old = False
 
@@ -226,6 +226,7 @@ class mod(commands.Cog):
                         progress_message=progress_message
                     )
                 else:
+                    deleted_count = 0
                     if progress_message:
                         await progress_message.edit(
                             embed=build_clear_progress_embed(
@@ -236,19 +237,6 @@ class mod(commands.Cog):
                                 finished=True
                             )
                         )
-
-                # Fertig-Meldung in den Kanal posten
-                embed = discord.Embed(
-                    colour=discord.Colour.green(),
-                    description=(
-                        f"✅ **Hintergrund-Löschung abgeschlossen** – "
-                        f"{deleted_count} alte Nachricht"
-                        f"{'' if deleted_count == 1 else 'en'} wurden entfernt."
-                    )
-                )
-                embed.set_author(name=job.requested_by)
-                await channel.send(embed=embed)
-
 
             except Exception as e:
                 logging.exception(e)
@@ -509,54 +497,65 @@ class mod(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True, read_message_history=True)
     async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
-        """Automatisch: Bulk für ≤14 Tage, ältere als persistente Jobs im Hintergrund."""
+
         if amount <= 0:
             return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
-        if amount > 300:
-            embed = discord.Embed(
-                colour=discord.Colour.red(),
-                description="❌ Deine Zahl darf nicht größer als 300 sein."
-            )
-            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
-            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        await interaction.response.defer(ephemeral=True)
+        if amount > 300:
+            return await interaction.response.send_message(
+                "❌ Maximal **300 Nachrichten**.", ephemeral=True
+            )
+
+        await interaction.response.defer()
 
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
-        total_deleted = 0
-        try:
-            # 1) Bulk (≤14 Tage)
-            deleted_bulk = await channel.purge(
-                limit=amount,
-                after=cutoff,
-                bulk=True,
-                reason=f"/clear von {interaction.user} ({amount})",
-                check=lambda m: not m.pinned and not m.author.bot
+
+        # 1️⃣ Bulk Delete
+        deleted_bulk = await channel.purge(
+            limit=amount,
+            after=cutoff,
+            bulk=True,
+            check=lambda m: not m.pinned and not m.author.bot,
+            reason=f"/clear von {interaction.user}"
+        )
+
+        bulk_count = len(deleted_bulk)
+        remaining = amount - bulk_count
+
+        # 2️⃣ Embed ERSTELLEN (DAS EINE!)
+        embed = discord.Embed(
+            title="🧹 Clear – Hintergrund-Löschung",
+            color=discord.Colour.orange(),
+            description=(
+                f"✅ **{bulk_count}** Nachricht(en) sofort gelöscht (≤14 Tage)\n"
+                f"🕒 **{remaining}** weitere werden im Hintergrund gelöscht"
+                if remaining > 0 else
+                f"✅ **{bulk_count}** Nachricht(en) gelöscht"
             )
+        )
+        embed.add_field(name="Status", value="Starte …", inline=False)
+        embed.add_field(name="Fortschritt", value=f"{bulk_count} / {amount}", inline=False)
+        embed.set_footer(text=f"Kanal: #{channel.name}")
+        embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
 
-            total_deleted += len(deleted_bulk)
-            remaining = amount - total_deleted
+        message = await interaction.followup.send(embed=embed)
 
-            scheduled = 0
-            if remaining > 0:
-                # 2) Ältere Nachrichten als Job persistieren & Worker wecken
-                await self._enqueue_job(channel.id, remaining, str(interaction.user))
-                scheduled = remaining
-                await self._ensure_worker(channel.id)
-                self._wake_events[channel.id].set()
+        # 3️⃣ Hintergrund-Job
+        if remaining > 0:
+            job_id = await self._enqueue_job(channel.id, remaining, str(interaction.user))
+            await self._ensure_worker(channel.id)
 
-            # Antwort
-            lines = [
-                f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."
-            ]
-            if scheduled > 0:
-                lines.append(f"🕒 {scheduled} weitere (älter als 14 Tage) werden im Hintergrund sicher gelöscht.")
-            embed = discord.Embed(colour=discord.Colour.green(), description="\n".join(lines))
-            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            # 🔥 WICHTIG: Message-ID merken
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        "UPDATE clear_jobs SET message_id=%s WHERE id=%s",
+                        (message.id, job_id)
+                    )
+                    await conn.commit()
 
-        except Exception as e:
-            await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
+            self._wake_events[channel.id].set()
+        return None
 
     @app_commands.command(name="embedfy", description="Erstelle ein schönes Embed.")
     @app_commands.describe(color="Optional: Farbnamen wie Rot, Orange, Gelb, Grün, Blau oder Blurple.")
