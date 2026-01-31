@@ -14,6 +14,78 @@ import time
 from typing import List, Optional
 
 
+class CommandLogView(discord.ui.View):
+    def __init__(self, ctx, rows, pages):
+        super().__init__(timeout=180)
+        self.ctx = ctx
+        self.rows = rows
+        self.pages = pages
+        self.page = 0
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message(
+                "Nur der Bot-Owner darf hier klicken.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    def make_embed(self):
+        start = self.page * PAGE_SIZE
+        end = start + PAGE_SIZE
+        chunk = self.rows[start:end]
+
+        embed = discord.Embed(
+            title="📊 Command Usage (letzte 7 Tage)",
+            color=discord.Color.blurple()
+        )
+
+        for guild_id, user_id, cmd, sub, used_at in chunk:
+            guild = self.ctx.bot.get_guild(guild_id)
+            user = self.ctx.bot.get_user(user_id)
+
+            cmd_name = f"/{cmd}" + (f" {sub}" if sub else "")
+            time_str = used_at.strftime("%d.%m.%Y %H:%M:%S")
+
+            embed.add_field(
+                name=cmd_name,
+                value=(
+                    f"👤 **User:** {user} (`{user_id}`)\n"
+                    f"🏠 **Server:** {guild.name if guild else guild_id}\n"
+                    f"🕒 **Zeit:** `{time_str}`"
+                ),
+                inline=False
+            )
+
+        embed.set_footer(text=f"Seite {self.page + 1}/{self.pages}")
+        return embed
+
+    @discord.ui.button(emoji="⬅️", style=discord.ButtonStyle.secondary)
+    async def prev(self, interaction: discord.Interaction, _):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(
+                embed=self.make_embed(), view=self
+            )
+        else:
+            await interaction.response.defer()
+
+    @discord.ui.button(emoji="➡️", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, _):
+        if self.page < self.pages - 1:
+            self.page += 1
+            await interaction.response.edit_message(
+                embed=self.make_embed(), view=self
+            )
+        else:
+            await interaction.response.defer()
+
+    @discord.ui.button(label="❌", style=discord.ButtonStyle.danger)
+    async def close(self, interaction: discord.Interaction, _):
+        await interaction.message.delete()
+        self.stop()
+
 # =========================================================
 # Helper: Command + Subcommand extrahieren
 # =========================================================
@@ -467,6 +539,33 @@ class DevTools(commands.Cog):
         if len(output) > 1900:
             return output[:1900] + "\n... (Ausgabe gekürzt)"
         return output
+
+    @commands.command(name="cmdlog")
+    @commands.is_owner()
+    async def cmdlog(self, ctx: commands.Context):
+        """Zeigt Command-Nutzung der letzten 7 Tage."""
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    SELECT guild_id, user_id, command, subcommand, used_at
+                    FROM command_usage
+                    WHERE used_at >= NOW() - INTERVAL 7 DAY
+                    ORDER BY used_at DESC
+                    """
+                )
+                rows = await cur.fetchall()
+
+        if not rows:
+            return await ctx.send("Keine Command-Daten der letzten 7 Tage gefunden.")
+
+        pages = ceil(len(rows) / PAGE_SIZE)
+        view = CommandLogView(ctx, rows, pages)
+
+        await ctx.send(
+            embed=view.make_embed(),
+            view=view
+        )
 
     @commands.command(name="commandstats", aliases=["cmdstats"])
     @commands.is_owner()
