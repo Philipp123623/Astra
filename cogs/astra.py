@@ -180,9 +180,9 @@ class astra(commands.Cog):
                     channels = sum(1 for g in self.bot.guilds for _ in g.channels)
                     servers = len(self.bot.guilds)
                     users = len(self.bot.users)
-                    commands = len(len(self.bot.tree.get_commands()))
+                    commands = len(self.bot.tree.get_commands())
                     embed = discord.Embed(colour=discord.Colour.blurple(), title=f"✨ ASTRA ✨",
-                                          description=f"Hallo, mein Name ist Astra und ich bin hier, um diesen Server zu verbessern!\nIch bin aktuell auf **{len(self.bot.guilds)}** Servern!")
+                                          description=f"Hallo, mein Name ist Astra und ich bin hier, um diesen Server zu verbessern!\nIch bin aktuell auf **{servers}** Servern!")
                     embed.add_field(name="Zum Starten",
                                     value=f"Prefix: `/`",
                                     inline=False)
