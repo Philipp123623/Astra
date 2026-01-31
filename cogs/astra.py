@@ -18,6 +18,36 @@ from PIL import Image
 import asyncio
 import tempfile
 
+
+async def get_best_join_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    me = guild.me
+    if not me:
+        return None
+
+    # 1️⃣ System Channel (wenn sendbar)
+    ch = guild.system_channel
+    if ch and ch.permissions_for(me).send_messages:
+        return ch
+
+    # 2️⃣ Bevorzugte Kanalnamen
+    preferred = (
+        "general", "allgemein", "chat", "welcome",
+        "start", "server", "hauptchat"
+    )
+
+    for name in preferred:
+        for ch in guild.text_channels:
+            if name in ch.name.lower() and ch.permissions_for(me).send_messages:
+                return ch
+
+    # 3️⃣ Erster Textkanal mit Send-Rechten
+    for ch in guild.text_channels:
+        perms = ch.permissions_for(me)
+        if perms.send_messages and perms.view_channel:
+            return ch
+
+    return None
+
 # ------------------------------------------------------------
 #  CPU & RAM Helpers
 # ------------------------------------------------------------
@@ -140,6 +170,8 @@ def convert(time):
     return val * time_dict[unit]
 
 
+
+
 class testbutton(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -177,24 +209,109 @@ class astra(commands.Cog):
                         await channels.send(embed=embed)
                     except:
                         pass
-                    channels = sum(1 for g in self.bot.guilds for _ in g.channels)
                     servers = len(self.bot.guilds)
-                    users = len(self.bot.users)
-                    commands = len(self.bot.tree.get_commands())
-                    embed = discord.Embed(colour=discord.Colour.blurple(), title=f"✨ ASTRA ✨",
-                                          description=f"Hallo, mein Name ist Astra und ich bin hier, um diesen Server zu verbessern!\nIch bin aktuell auf **{servers}** Servern!")
-                    embed.add_field(name="Zum Starten",
-                                    value=f"Prefix: `/`",
-                                    inline=False)
-                    embed.add_field(name="Links",
-                                    value="**[Support server](https://discord.gg/eatdJPfjWc) | [Invite](https://discord.com/oauth2/authorize?client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)**",
-                                    inline=False)
-                    embed.set_footer(text=guild.name, icon_url=guild.icon)
-                    embed.set_author(name="TDanke fürs Einladen!",
-                                     icon_url="https://cdn.discordapp.com/emojis/823981604752982077.gif")
-                    for channel in guild.text_channels:
+
+                    embed = discord.Embed(
+                        colour=discord.Colour.blurple(),
+                        title="✨ ASTRA ✨",
+                        description=(
+                            "Hallo! Ich bin **Astra** – ein modularer Discord-Bot für "
+                            "**Moderation, Organisation und Community-Features**.\n\n"
+                            "Ich helfe dabei, Server **sauber**, **strukturiert** und "
+                            "**angenehm** zu halten – ohne unnötigen Overhead."
+                        )
+                    )
+
+                    # =====================
+                    # CORE FEATURES
+                    # =====================
+
+                    embed.add_field(
+                        name="🛡️ Moderation & Sicherheit",
+                        value=(
+                            "• Warn- & Automod-System\n"
+                            "• Blacklists & Caps-Filter\n"
+                            "• Mod-Logs & Audit-Übersicht\n"
+                            "• Tickets & Support-Workflows"
+                        ),
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="⚙️ Server-Management",
+                        value=(
+                            "• Rollen- & Join-Systeme\n"
+                            "• Willkommens- & Leave-Nachrichten\n"
+                            "• Counting- & Minigames\n"
+                            "• Backup- & Wiederherstellung"
+                        ),
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="📊 Community & Extras",
+                        value=(
+                            "• Level- & XP-System\n"
+                            "• Giveaways & Events\n"
+                            "• Economy & Fun-Commands\n"
+                            "• YouTube / Twitch Benachrichtigungen"
+                        ),
+                        inline=False
+                    )
+
+                    # =====================
+                    # QUICK START
+                    # =====================
+
+                    embed.add_field(
+                        name="🚀 Schnellstart",
+                        value=(
+                            "• `/help` – Alle Befehle\n"
+                            "• `/about` – Infos zu Astra\n"
+                            "• `/ticket setup` – Support-System starten\n"
+                            "• `/automod` – Automoderation konfigurieren"
+                        ),
+                        inline=False
+                    )
+
+                    # =====================
+                    # STATS & LINKS
+                    # =====================
+
+                    embed.add_field(
+                        name="📈 Status",
+                        value=f"Aktiv auf **{servers}** Servern",
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="🔗 Links",
+                        value=(
+                            "**[Support-Server](https://discord.gg/eatdJPfjWc)**\n"
+                            "**[Bot einladen](https://discord.com/oauth2/authorize?"
+                            "client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)**"
+                        ),
+                        inline=False
+                    )
+
+                    # =====================
+                    # BRANDING
+                    # =====================
+
+                    embed.set_footer(
+                        text="Astra • Modular • Transparent • Server-fokussiert",
+                        icon_url=self.bot.user.display_avatar.url
+                    )
+
+                    embed.set_author(
+                        name="Danke fürs Einladen!",
+                        icon_url="https://cdn.discordapp.com/emojis/823981604752982077.gif"
+                    )
+
+                    try:
                         await channel.send(embed=embed)
-                        break
+                    except discord.Forbidden:
+                        pass
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
