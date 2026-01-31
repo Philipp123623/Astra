@@ -13,35 +13,6 @@ from discord.ui import View
 
 logging.getLogger("discord.http").setLevel(logging.ERROR)
 
-def progress_bar(step: int, total: int, width: int = 20) -> str:
-    if total <= 0:
-        return "—" * width
-    filled = int(width * step / max(1, total))
-    return "█" * filled + "░" * (width - filled)
-
-
-def build_clear_progress_embed(
-    *,
-    channel: discord.TextChannel,
-    step: int,
-    total: int,
-    status: str,
-    finished: bool = False
-) -> discord.Embed:
-    pct = 0 if total == 0 else min(100, int(step * 100 / max(1, total)))
-    color = discord.Colour.green() if finished else discord.Colour.orange()
-
-    emb = discord.Embed(
-        title="🧹 Clear – Hintergrund-Löschung",
-        description=f"{progress_bar(step, total)}  **{pct}%**",
-        color=color
-    )
-    emb.add_field(name="Status", value=status, inline=False)
-    emb.add_field(name="Fortschritt", value=f"{step} / {total} Nachrichten", inline=False)
-    emb.set_footer(text=f"Kanal: #{channel.name}")
-    return emb
-
-
 
 # --- Tuning ---
 BULK_CUTOFF_DAYS = 14            # Bulk delete für <= 14 Tage
@@ -183,41 +154,25 @@ class mod(commands.Cog):
                 await evt.wait()
                 continue
 
-            # Kanal holen
+            # Channel holen
             channel = self.bot.get_channel(channel_id)
             if channel is None:
                 try:
                     channel = await self.bot.fetch_channel(channel_id)
                 except Exception:
+                    # Kanal nicht erreichbar → Job entsorgen
                     await self._mark_job_done(job.id)
                     continue
 
-            # 🔥 EXISTIERENDES PROGRESS-EMBED HOLEN (kein neues senden!)
-            progress_message = None
-            try:
-                async with self.bot.pool.acquire() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute(
-                            "SELECT message_id FROM clear_jobs WHERE id=%s",
-                            (job.id,)
-                        )
-                        row = await cur.fetchone()
-
-                if row and row[0]:
-                    progress_message = await channel.fetch_message(int(row[0]))
-            except Exception:
-                progress_message = None
+            deleted_count = 0
 
             try:
-                # Quick-Check: gibt es alte Nachrichten?
+                # Quick-Check: gibt es überhaupt alte, nicht gepinnte Nachrichten?
                 cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
                 has_old = False
 
-                has_old = False
-                async for msg in channel.history(limit=200):
-                    if msg.pinned:
-                        continue
-                    if msg.created_at < cutoff:
+                async for msg in channel.history(limit=50):
+                    if not msg.pinned and msg.created_at < cutoff:
                         has_old = True
                         break
 
@@ -225,21 +180,21 @@ class mod(commands.Cog):
                     deleted_count = await self._process_old_deletes(
                         channel,
                         job.amount,
-                        job_id=job.id,
-                        progress_message=progress_message
+                        job_id=job.id
                     )
-                else:
-                    deleted_count = 0
-                    if progress_message:
-                        await progress_message.edit(
-                            embed=build_clear_progress_embed(
-                                channel=channel,
-                                step=0,
-                                total=job.amount,
-                                status="Keine alten Nachrichten gefunden ✅",
-                                finished=True
-                            )
-                        )
+
+                # Fertig-Meldung in den Kanal posten
+                embed = discord.Embed(
+                    colour=discord.Colour.green(),
+                    description=(
+                        f"✅ **Hintergrund-Löschung abgeschlossen** – "
+                        f"{deleted_count} alte Nachricht"
+                        f"{'' if deleted_count == 1 else 'en'} wurden entfernt."
+                    )
+                )
+                embed.set_author(name=job.requested_by)
+                await channel.send(embed=embed)
+
 
             except Exception as e:
                 logging.exception(e)
@@ -297,27 +252,17 @@ class mod(commands.Cog):
                 return int(job_id)
 
     # ---------------- Löschlogik (>14 Tage, gedrosselt) ----------------
-    async def _process_old_deletes(
-            self,
-            channel: discord.TextChannel,
-            amount: int,
-            job_id: Optional[int] = None,
-            progress_message: Optional[discord.Message] = None
-    ):
+    async def _process_old_deletes(self, channel: discord.TextChannel, amount: int, job_id: Optional[int] = None):
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         remaining = amount
-        total = amount  # FIX: Gesamtziel (ändert sich nie)
-        deleted = 0  # FIX: echte Löschungen
-
         last_message = None
         backoff = 0.0
-        checkpoint = 0  # für DB
-        ui_counter = 0  # nur für Progress-Embed
+        checkpoint = 0  # seit letztem DB-Update gelöschte Anzahl
 
         while remaining > 0:
             found_any = False
             async for msg in channel.history(
-                limit=MAX_HISTORY_FETCH,
+                limit=min(remaining * 2, MAX_HISTORY_FETCH),
                 before=last_message,
                 oldest_first=False
             ):
@@ -332,24 +277,7 @@ class mod(commands.Cog):
                 try:
                     await msg.delete()  # kein reason bei PartialMessage
                     remaining -= 1
-                    deleted += 1  # ← DAS FEHLTE
                     checkpoint += 1
-                    ui_counter += 1
-
-                    # Progress-Embed aktualisieren (alle 5 Deletes)
-                    if progress_message and ui_counter % 5 == 0:
-                        try:
-                            await progress_message.edit(
-                                embed=build_clear_progress_embed(
-                                    channel=channel,
-                                    step=deleted,
-                                    total=total,
-                                    status="Lösche alte Nachrichten …"
-                                )
-                            )
-                        except Exception:
-                            pass
-
                     backoff = 0.0
 
                     # alle 10 Deletes Fortschritt persistieren
@@ -382,21 +310,7 @@ class mod(commands.Cog):
         if job_id and checkpoint > 0:
             await self._decrement_job_amount(job_id, checkpoint)
 
-        if progress_message:
-            try:
-                await progress_message.edit(
-                    embed=build_clear_progress_embed(
-                        channel=channel,
-                        step=deleted,
-                        total=total,
-                        status="Fertig ✅",
-                        finished=True
-                    )
-                )
-            except Exception:
-                pass
-
-        return deleted
+        return amount - remaining
 
     # ---------------- Commands ----------------
 
@@ -504,65 +418,54 @@ class mod(commands.Cog):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_messages=True, read_message_history=True)
     async def clear(self, interaction: discord.Interaction, channel: discord.TextChannel, amount: int):
-
+        """Automatisch: Bulk für ≤14 Tage, ältere als persistente Jobs im Hintergrund."""
         if amount <= 0:
             return await interaction.response.send_message("Die Anzahl muss > 0 sein.", ephemeral=True)
-
         if amount > 300:
-            return await interaction.response.send_message(
-                "❌ Maximal **300 Nachrichten**.", ephemeral=True
+            embed = discord.Embed(
+                colour=discord.Colour.red(),
+                description="❌ Deine Zahl darf nicht größer als 300 sein."
             )
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
-
-        # 1️⃣ Bulk Delete
-        deleted_bulk = await channel.purge(
-            limit=amount,
-            after=cutoff,
-            bulk=True,
-            check=lambda m: not m.pinned and not m.author.bot,
-            reason=f"/clear von {interaction.user}"
-        )
-
-        bulk_count = len(deleted_bulk)
-        remaining = amount - bulk_count
-
-        # 2️⃣ Embed ERSTELLEN (DAS EINE!)
-        embed = discord.Embed(
-            title="🧹 Clear – Hintergrund-Löschung",
-            color=discord.Colour.orange(),
-            description=(
-                f"✅ **{bulk_count}** Nachricht(en) sofort gelöscht (≤14 Tage)\n"
-                f"🕒 **{remaining}** weitere werden im Hintergrund gelöscht"
-                if remaining > 0 else
-                f"✅ **{bulk_count}** Nachricht(en) gelöscht"
+        total_deleted = 0
+        try:
+            # 1) Bulk (≤14 Tage)
+            deleted_bulk = await channel.purge(
+                limit=amount,
+                after=cutoff,
+                bulk=True,
+                reason=f"/clear von {interaction.user} ({amount})",
+                check=lambda m: not m.pinned  # ⬅️ pinned Nachrichten werden übersprungen
             )
-        )
-        embed.add_field(name="Status", value="Starte …", inline=False)
-        embed.add_field(name="Fortschritt", value=f"{bulk_count} / {amount}", inline=False)
-        embed.set_footer(text=f"Kanal: #{channel.name}")
-        embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
 
-        message = await interaction.followup.send(embed=embed)
+            total_deleted += len(deleted_bulk)
+            remaining = amount - total_deleted
 
-        # 3️⃣ Hintergrund-Job
-        if remaining > 0:
-            job_id = await self._enqueue_job(channel.id, remaining, str(interaction.user))
-            await self._ensure_worker(channel.id)
+            scheduled = 0
+            if remaining > 0:
+                # 2) Ältere Nachrichten als Job persistieren & Worker wecken
+                await self._enqueue_job(channel.id, remaining, str(interaction.user))
+                scheduled = remaining
+                await self._ensure_worker(channel.id)
+                self._wake_events[channel.id].set()
 
-            # 🔥 WICHTIG: Message-ID merken
-            async with self.bot.pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        "UPDATE clear_jobs SET message_id=%s WHERE id=%s",
-                        (message.id, job_id)
-                    )
-                    await conn.commit()
+            # Antwort
+            lines = [
+                f"✅ {total_deleted} Nachricht{'' if total_deleted == 1 else 'en'} sofort gelöscht (≤14 Tage)."
+            ]
+            if scheduled > 0:
+                lines.append(f"🕒 {scheduled} weitere (älter als 14 Tage) werden im Hintergrund sicher gelöscht.")
+            embed = discord.Embed(colour=discord.Colour.green(), description="\n".join(lines))
+            embed.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
-            self._wake_events[channel.id].set()
-        return None
+        except Exception as e:
+            await interaction.followup.send(f"❌ Fehler beim Löschen: {e}", ephemeral=True)
 
     @app_commands.command(name="embedfy", description="Erstelle ein schönes Embed.")
     @app_commands.describe(color="Optional: Farbnamen wie Rot, Orange, Gelb, Grün, Blau oder Blurple.")
