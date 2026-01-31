@@ -210,96 +210,55 @@ class astra(commands.Cog):
                     except:
                         pass
                     servers = len(self.bot.guilds)
+                    users = len(self.bot.users)
+                    commands = len(self.bot.tree.get_commands())
+                    channel = await get_best_join_channel(guild)
+                    if not channel:
+                        return
 
                     embed = discord.Embed(
                         colour=discord.Colour.blurple(),
                         title="✨ ASTRA ✨",
                         description=(
                             "Hallo! Ich bin **Astra** – ein modularer Discord-Bot für "
-                            "**Moderation, Organisation und Community-Features**.\n\n"
-                            "Ich helfe dabei, Server **sauber**, **strukturiert** und "
-                            "**angenehm** zu halten – ohne unnötigen Overhead."
+                            "Moderation, Organisation und Community-Features.\n\n"
+                            "Alle Systeme sind **optional**, **server-spezifisch** "
+                            "und lassen sich individuell konfigurieren."
                         )
                     )
-
-                    # =====================
-                    # CORE FEATURES
-                    # =====================
-
-                    embed.add_field(
-                        name="🛡️ Moderation & Sicherheit",
-                        value=(
-                            "• Warn- & Automod-System\n"
-                            "• Blacklists & Caps-Filter\n"
-                            "• Mod-Logs & Audit-Übersicht\n"
-                            "• Tickets & Support-Workflows"
-                        ),
-                        inline=False
-                    )
-
-                    embed.add_field(
-                        name="⚙️ Server-Management",
-                        value=(
-                            "• Rollen- & Join-Systeme\n"
-                            "• Willkommens- & Leave-Nachrichten\n"
-                            "• Counting- & Minigames\n"
-                            "• Backup- & Wiederherstellung"
-                        ),
-                        inline=False
-                    )
-
-                    embed.add_field(
-                        name="📊 Community & Extras",
-                        value=(
-                            "• Level- & XP-System\n"
-                            "• Giveaways & Events\n"
-                            "• Economy & Fun-Commands\n"
-                            "• YouTube / Twitch Benachrichtigungen"
-                        ),
-                        inline=False
-                    )
-
-                    # =====================
-                    # QUICK START
-                    # =====================
 
                     embed.add_field(
                         name="🚀 Schnellstart",
                         value=(
-                            "• `/help` – Alle Befehle\n"
-                            "• `/about` – Infos zu Astra\n"
-                            "• `/ticket setup` – Support-System starten\n"
+                            "• `/help` – Alle Befehle & Kategorien\n"
+                            "• `/ticket setup` – Support-System einrichten\n"
                             "• `/automod` – Automoderation konfigurieren"
                         ),
                         inline=False
                     )
 
-                    # =====================
-                    # STATS & LINKS
-                    # =====================
-
                     embed.add_field(
-                        name="📈 Status",
-                        value=f"Aktiv auf **{servers}** Servern",
+                        name="🧩 Module (Auswahl)",
+                        value=(
+                            "Moderation • Tickets • Levelsystem\n"
+                            "Reaction Roles • Giveaways • Economy\n"
+                            "Willkommen & Benachrichtigungen"
+                        ),
                         inline=False
                     )
 
                     embed.add_field(
                         name="🔗 Links",
                         value=(
-                            "**[Support-Server](https://discord.gg/eatdJPfjWc)**\n"
-                            "**[Bot einladen](https://discord.com/oauth2/authorize?"
-                            "client_id=1113403511045107773&permissions=1899359446&scope=bot%20applications.commands)**"
+                            "**[Support-Server](https://astra-bot.de/support)**\n"
+                            "**[Astra einladen](https://astra-bot.de/invite)**\n"
+                            "**[Website](https://astra-bot.de/)**"
                         ),
                         inline=False
                     )
 
-                    # =====================
-                    # BRANDING
-                    # =====================
-
                     embed.set_footer(
-                        text="Astra • Modular • Transparent • Server-fokussiert",
+                        text="Astra • Klar • Modular • Server-fokussiert",
                         icon_url=self.bot.user.display_avatar.url
                     )
 
