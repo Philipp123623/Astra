@@ -13,7 +13,28 @@ from datetime import datetime, timezone
 
 # Zwischenspeicher für laufende Tempchannels (wird beim Neustart nicht befüllt – ist nur eine Optimierung)
 tempchannels: list[int] = []
-PENDING_TEMPCHANNEL_CREATORS: set[int] = set()
+
+
+async def is_temp_category(bot, channelname) -> bool:
+    if not channelname or not channelname.guild:
+        return False
+
+    async with bot.pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT channel_id FROM tempchannels WHERE guild_id = %s",
+                (channelname.guild.id,)
+            )
+            row = await cur.fetchone()
+            if not row:
+                return False
+
+            joinhub = channelname.guild.get_channel(int(row[0]))
+            if not joinhub or not joinhub.category:
+                return False
+
+            return channelname.category_id == joinhub.category.id
+
 
 
 def isTempChannel(channel: discord.abc.GuildChannel) -> bool:
