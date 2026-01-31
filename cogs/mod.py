@@ -13,6 +13,36 @@ from discord.ui import View
 
 logging.getLogger("discord.http").setLevel(logging.ERROR)
 
+def progress_bar(step: int, total: int, width: int = 20) -> str:
+    if total <= 0:
+        return "—" * width
+    filled = int(width * step / max(1, total))
+    return "█" * filled + "░" * (width - filled)
+
+
+def build_clear_progress_embed(
+    *,
+    channel: discord.TextChannel,
+    step: int,
+    total: int,
+    status: str,
+    finished: bool = False
+) -> discord.Embed:
+    pct = 0 if total == 0 else min(100, int(step * 100 / max(1, total)))
+    color = discord.Colour.green() if finished else discord.Colour.orange()
+
+    emb = discord.Embed(
+        title="🧹 Clear – Hintergrund-Löschung",
+        description=f"{progress_bar(step, total)}  **{pct}%**",
+        color=color
+    )
+    emb.add_field(name="Status", value=status, inline=False)
+    emb.add_field(name="Fortschritt", value=f"{step} / {total} Nachrichten", inline=False)
+    emb.set_footer(text=f"Kanal: #{channel.name}")
+    return emb
+
+
+
 # --- Tuning ---
 BULK_CUTOFF_DAYS = 14            # Bulk delete für <= 14 Tage
 SLEEP_PER_DELETE = 1.2           # stabil für alte Nachrichten
@@ -163,22 +193,66 @@ class mod(commands.Cog):
                     await self._mark_job_done(job.id)
                     continue
 
+            deleted_count = 0
+            progress_message = None
+
+            # Progress-Embed initial senden
             try:
-                deleted_count = await self._process_old_deletes(channel, job.amount, job_id=job.id)
+                start_embed = build_clear_progress_embed(
+                    channel=channel,
+                    step=0,
+                    total=job.amount,
+                    status="Starte Hintergrund-Löschung …"
+                )
+                progress_message = await channel.send(embed=start_embed)
+            except Exception:
+                progress_message = None
+
+            try:
+                # Quick-Check: gibt es überhaupt alte, nicht gepinnte Nachrichten?
+                cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
+                has_old = False
+
+                async for msg in channel.history(limit=50):
+                    if not msg.pinned and msg.created_at < cutoff:
+                        has_old = True
+                        break
+
+                if has_old:
+                    deleted_count = await self._process_old_deletes(
+                        channel,
+                        job.amount,
+                        job_id=job.id,
+                        progress_message=progress_message
+                    )
+                else:
+                    if progress_message:
+                        await progress_message.edit(
+                            embed=build_clear_progress_embed(
+                                channel=channel,
+                                step=0,
+                                total=job.amount,
+                                status="Keine alten Nachrichten gefunden ✅",
+                                finished=True
+                            )
+                        )
 
                 # Fertig-Meldung in den Kanal posten
-                try:
-                    embed = discord.Embed(
-                        colour=discord.Colour.green(),
-                        description=f"✅ **Hintergrund-Löschung abgeschlossen** – {deleted_count} alte Nachricht"
-                                    f"{'' if deleted_count == 1 else 'en'} wurden entfernt."
+                embed = discord.Embed(
+                    colour=discord.Colour.green(),
+                    description=(
+                        f"✅ **Hintergrund-Löschung abgeschlossen** – "
+                        f"{deleted_count} alte Nachricht"
+                        f"{'' if deleted_count == 1 else 'en'} wurden entfernt."
                     )
-                    embed.set_author(name=job.requested_by)
-                    await channel.send(embed=embed)
-                except Exception:
-                    pass
-            except Exception:
-                pass
+                )
+                embed.set_author(name=job.requested_by)
+                await channel.send(embed=embed)
+
+
+            except Exception as e:
+                logging.exception(e)
+
             finally:
                 await self._mark_job_done(job.id)
 
@@ -232,28 +306,55 @@ class mod(commands.Cog):
                 return int(job_id)
 
     # ---------------- Löschlogik (>14 Tage, gedrosselt) ----------------
-    async def _process_old_deletes(self, channel: discord.TextChannel, amount: int, job_id: Optional[int] = None):
+    async def _process_old_deletes(
+            self,
+            channel: discord.TextChannel,
+            amount: int,
+            job_id: Optional[int] = None,
+            progress_message: Optional[discord.Message] = None
+    ):
         cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
         remaining = amount
         last_message = None
         backoff = 0.0
-        checkpoint = 0  # seit letztem DB-Update gelöschte Anzahl
+        checkpoint = 0  # für DB
+        ui_counter = 0  # nur für Progress-Embed
 
         while remaining > 0:
             found_any = False
             async for msg in channel.history(
-                limit=min(remaining * 2, MAX_HISTORY_FETCH),
+                limit=MAX_HISTORY_FETCH,
                 before=last_message,
                 oldest_first=False
             ):
                 last_message = msg
+                if msg.pinned:
+                    continue
+
                 if msg.created_at >= cutoff:
                     continue
+
                 found_any = True
                 try:
                     await msg.delete()  # kein reason bei PartialMessage
                     remaining -= 1
                     checkpoint += 1
+                    ui_counter += 1
+
+                    # Progress-Embed aktualisieren (alle 5 Deletes)
+                    if progress_message and ui_counter % 5 == 0:
+                        try:
+                            await progress_message.edit(
+                                embed=build_clear_progress_embed(
+                                    channel=channel,
+                                    step=amount - remaining,
+                                    total=amount,
+                                    status="Lösche alte Nachrichten …"
+                                )
+                            )
+                        except Exception:
+                            pass
+
                     backoff = 0.0
 
                     # alle 10 Deletes Fortschritt persistieren
@@ -276,11 +377,29 @@ class mod(commands.Cog):
                         await asyncio.sleep(0.9)
                     continue
             if not found_any:
+                # nichts mehr zu löschen → Job sauber beenden
+                if job_id and remaining > 0:
+                    await self._decrement_job_amount(job_id, remaining)
+                remaining = 0
                 break
 
         # Restlichen Fortschritt verbuchen
         if job_id and checkpoint > 0:
             await self._decrement_job_amount(job_id, checkpoint)
+
+        if progress_message:
+            try:
+                await progress_message.edit(
+                    embed=build_clear_progress_embed(
+                        channel=channel,
+                        step=amount - remaining,
+                        total=amount,
+                        status="Fertig ✅",
+                        finished=True
+                    )
+                )
+            except Exception:
+                pass
 
         return amount - remaining
 
@@ -329,8 +448,8 @@ class mod(commands.Cog):
 
         try:
             await user.send(embed=dm)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.exception(e)
 
         await user.kick(reason=reason)
         await interaction.response.send_message(embed=confirm, ephemeral=False)
@@ -377,8 +496,8 @@ class mod(commands.Cog):
         dm.set_author(name=str(interaction.user), icon_url=interaction.user.display_avatar.url)
         try:
             await user.send(embed=dm)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.exception(e)
 
         await user.ban(reason=reason)
         await interaction.response.send_message(embed=confirm, ephemeral=False)
@@ -412,7 +531,7 @@ class mod(commands.Cog):
                 after=cutoff,
                 bulk=True,
                 reason=f"/clear von {interaction.user} ({amount})",
-                check=lambda m: not m.pinned  # ⬅️ pinned Nachrichten werden übersprungen
+                check=lambda m: not m.pinned and not m.author.bot
             )
 
             total_deleted += len(deleted_bulk)

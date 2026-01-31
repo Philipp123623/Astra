@@ -18,21 +18,21 @@ class Automod(app_commands.Group):
         )
 
     @app_commands.command(name="hinzufügen", description="Richte die Automoderation für deinen Server ein.")
-    @app_commands.describe(warns="Anzahl der Verwarnungen, bei der eine Aktion ausgelöst wird.", action="Die auszuführende Aktion bei Erreichen der Verwarnungen.")
+    @app_commands.describe(verwarnungen="Anzahl der Verwarnungen, bei der eine Aktion ausgelöst wird.", aktion="Die auszuführende Aktion bei Erreichen der Verwarnungen.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def add(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], action: Literal['Kick', 'Ban', 'Timeout']):
+    async def add(self, interaction: discord.Interaction, verwarnungen: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], aktion: Literal['Kick', 'Ban', 'Timeout']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
                     "INSERT INTO automod (guildID, warns, action) VALUES (%s, %s, %s)",
-                    (interaction.guild.id, warns, action)
+                    (interaction.guild.id, verwarnungen, aktion)
                 )
 
                 embed = discord.Embed(
                     title="🤖 Automod Aktion gesetzt",
-                    description=f"Wenn ein User **{warns} Verwarnungen** erreicht, wird **{action}** ausgeführt.",
+                    description=f"Wenn ein User **{verwarnungen} Verwarnungen** erreicht, wird **{aktion}** ausgeführt.",
                     colour=discord.Colour.blue()
                 )
                 await interaction.response.send_message(embed=embed)
@@ -51,26 +51,26 @@ class Automod(app_commands.Group):
                         colour=discord.Colour.green(),
                         timestamp=discord.utils.utcnow()
                     )
-                    log.add_field(name="Verwarnungen", value=warns, inline=True)
-                    log.add_field(name="Aktion", value=action, inline=True)
+                    log.add_field(name="Verwarnungen", value=verwarnungen, inline=True)
+                    log.add_field(name="Aktion", value=aktion, inline=True)
                     log.add_field(name="Moderator", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
                     await channel.send(embed=log)
 
     @app_commands.command(name="entfernen", description="Richte die Automoderation für deinen Server ein.")
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def remove(self, interaction: discord.Interaction, warns: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
+    async def remove(self, interaction: discord.Interaction, verwarnungen: Literal['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']):
         """Richte die Automoderation für deinen Server ein."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
                     "DELETE FROM automod WHERE guildID = (%s) AND warns = (%s)",
-                    (interaction.guild.id, warns)
+                    (interaction.guild.id, verwarnungen)
                 )
 
                 embed = discord.Embed(
                     title="🗑️ Automod entfernt",
-                    description=f"Die Automod-Aktion bei **{warns} Verwarnungen** wurde entfernt.",
+                    description=f"Die Automod-Aktion bei **{verwarnungen} Verwarnungen** wurde entfernt.",
                     colour=discord.Colour.blue()
                 )
                 await interaction.response.send_message(embed=embed)
@@ -89,7 +89,7 @@ class Automod(app_commands.Group):
                         colour=discord.Colour.red(),
                         timestamp=discord.utils.utcnow()
                     )
-                    log.add_field(name="Verwarnungen", value=warns, inline=True)
+                    log.add_field(name="Verwarnungen", value=verwarnungen, inline=True)
                     log.add_field(name="Moderator", value=f"{interaction.user} (`{interaction.user.id}`)", inline=False)
                     await channel.send(embed=log)
 
