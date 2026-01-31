@@ -213,8 +213,11 @@ class mod(commands.Cog):
                 cutoff = utcnow() - timedelta(days=BULK_CUTOFF_DAYS)
                 has_old = False
 
-                async for msg in channel.history(limit=50):
-                    if not msg.pinned and msg.created_at < cutoff:
+                has_old = False
+                async for msg in channel.history(limit=200):
+                    if msg.pinned:
+                        continue
+                    if msg.created_at < cutoff:
                         has_old = True
                         break
 
