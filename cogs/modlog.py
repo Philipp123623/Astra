@@ -37,6 +37,16 @@ async def timeline(seconds):
     return ', '.join(result)
 
 
+async def is_tempchannel_db(bot: commands.Bot, channel: discord.abc.GuildChannel) -> bool:
+    async with bot.pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT 1 FROM usertempchannels WHERE guildID = %s AND channelID = %s LIMIT 1",
+                (channel.guild.id, channel.id)
+            )
+            return await cursor.fetchone() is not None
+
+
 class modlog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -120,6 +130,8 @@ class modlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channelname):
+        if await is_tempchannel_db(self.bot, channelname):
+            return
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
@@ -153,6 +165,8 @@ class modlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channelname):
+        if await is_tempchannel_db(self.bot, channelname):
+            return
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
@@ -186,6 +200,8 @@ class modlog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before, after):
+        if await is_tempchannel_db(self.bot, before) or await is_tempchannel_db(self.bot, after):
+            return
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
