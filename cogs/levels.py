@@ -746,29 +746,85 @@ class Level(app_commands.Group):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 if modus == "Hinzufügen":
-                    await cur.execute(f"SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (interaction.guild.id))
-                    enabled = await cur.fetchone()
-                    if enabled[0] == 0:
-                        await interaction.response.send_message(
-                            "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server bereits deaktiviert.**",
-                            ephemeral=True)
-                    if enabled[0] == 1:
-                        await cur.execute(
-                            "SELECT guildID FROM levelroles WHERE levelreq = (%s) and roleID = (%s) and guildID = (%s)",
-                            (level, role.id, interaction.guild.id))
-                        result = await cur.fetchone()
-                        if not result:
-                            await cur.execute("INSERT INTO levelroles(guildID, roleID, levelreq) VALUES(%s, %s, %s)",
-                                              (interaction.guild.id, role.id, level))
-                            await interaction.response.send_message(
-                                f"<:Astra_accept:1141303821176422460> **User bekommen nun die Rolle {role.mention} wenn sie Level `{level}` erreichen**")
-                        if result:
-                            roleid = result[0]
-                            roleobj = interaction.guild.get_role(roleid)
 
-                            await interaction.response.send_message(
-                                f"<:Astra_x:1141303954555289600> **Die Rolle {roleobj.mention} ist bereits für dieses Level aktiv**.",
-                                ephemeral=True)
+                    # -----------------------
+                    # BASIC CHECKS
+                    # -----------------------
+                    if not 1 <= level <= 100:
+                        return await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> **Level muss zwischen 1 und 100 liegen.**",
+                            ephemeral=True
+                        )
+
+                    bot_member = interaction.guild.me
+
+                    if not bot_member.guild_permissions.manage_roles:
+                        return await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> **Ich habe keine Berechtigung, Rollen zu verwalten.**",
+                            ephemeral=True
+                        )
+
+                    if role.is_default():
+                        return await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> **@everyone kann keine Levelrolle sein.**",
+                            ephemeral=True
+                        )
+
+                    if role.managed:
+                        return await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> **Diese Rolle wird von Discord/Integration verwaltet und kann nicht vergeben werden.**",
+                            ephemeral=True
+                        )
+
+                    if role.position >= bot_member.top_role.position:
+                        return await interaction.response.send_message(
+                            f"<:Astra_x:1141303954555289600> **Die Rolle {role.mention} ist höher oder gleich hoch wie meine Bot-Rolle.**\n"
+                            f"<:Astra_arrow:1141303823600717885> **Verschiebe meine Bot-Rolle über diese Rolle.**",
+                            ephemeral=True
+                        )
+
+                    # -----------------------
+                    # SYSTEM AKTIV?
+                    # -----------------------
+                    await cur.execute(
+                        "SELECT enabled FROM levelsystem WHERE guild_id = %s",
+                        (interaction.guild.id,)
+                    )
+                    enabled = await cur.fetchone()
+
+                    if not enabled or enabled[0] == 0:
+                        return await interaction.response.send_message(
+                            "<:Astra_x:1141303954555289600> **Das Levelsystem ist auf diesem Server deaktiviert.**",
+                            ephemeral=True
+                        )
+
+                    # -----------------------
+                    # DOPPELT?
+                    # -----------------------
+                    await cur.execute(
+                        "SELECT 1 FROM levelroles WHERE levelreq=%s AND roleID=%s AND guildID=%s",
+                        (level, role.id, interaction.guild.id)
+                    )
+                    exists = await cur.fetchone()
+
+                    if exists:
+                        return await interaction.response.send_message(
+                            f"<:Astra_x:1141303954555289600> **Die Rolle {role.mention} ist bereits für Level `{level}` gesetzt.**",
+                            ephemeral=True
+                        )
+
+                    # -----------------------
+                    # INSERT
+                    # -----------------------
+                    await cur.execute(
+                        "INSERT INTO levelroles (guildID, roleID, levelreq) VALUES (%s, %s, %s)",
+                        (interaction.guild.id, role.id, level)
+                    )
+
+                    await interaction.response.send_message(
+                        f"<:Astra_accept:1141303821176422460> **Levelrolle gesetzt!**\n"
+                        f"👤 User erhalten {role.mention} ab **Level {level}**."
+                    )
 
                 if modus == "Entfernen":
                     await cur.execute(f"SELECT enabled FROM levelsystem WHERE guild_id = (%s)", (interaction.guild.id))
