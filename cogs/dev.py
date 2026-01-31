@@ -3,6 +3,7 @@ from discord.ext import commands
 import subprocess
 import textwrap
 import traceback
+from math import ceil
 import sys
 import psutil
 from discord import app_commands
