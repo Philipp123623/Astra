@@ -446,7 +446,7 @@ class TempChannelCog(commands.Cog):
                                           description="> Stelle deinen Tempchannel mit den Buttons unten ein.",
                                           colour=discord.Colour.blue())
                     embed.set_image(
-                        url="https://cdn.discordapp.com/attachments/1141116983358804117/1410009910011363512/Banner_deutsch.png?")
+                        url="https://cdn.discordapp.com/attachments/1141116983358804117/1467192078365757582/Banner_deutsch.png?ex=697f7c9a&is=697e2b1a&hm=d67ebbdb74ea09bc57c4aafe556f24d16096f1f3af2d79b4ad2476850fd1d06a&")
                     embed.set_footer(icon_url=interaction.guild.icon.url,
                                      text=f"Du kannst deinen Tempchannel mit den Buttons einstellen.")
                     await interface.send(embed=embed, view=TempChannelView())
