@@ -459,7 +459,7 @@ class modlog(commands.Cog):
 
                     if result is None:
                         await interaction.response.send_message(
-                            "✅ Das Modlog-System wurde gelöscht.",
+                            "<:Astra_accept:1141303821176422460> Das Modlog-System wurde gelöscht.",
                             ephemeral=True
                         )
 
@@ -471,12 +471,12 @@ class modlog(commands.Cog):
                                 (channel.id, interaction.guild.id)
                             )
                             await interaction.response.send_message(
-                                "✅ Das Modlog-System wurde gelöscht.",
+                                "<:Astra_accept:1141303821176422460> Das Modlog-System wurde gelöscht.",
                                 ephemeral=True
                             )
                         else:
                             await interaction.response.send_message(
-                                "❌ Der Modlog ist bereits deaktiviert.",
+                                "<:Astra_x:1141303954555289600> Der Modlog ist bereits deaktiviert.",
                                 ephemeral=True
                             )
                             return
@@ -490,7 +490,7 @@ class modlog(commands.Cog):
 
                     if not result:
                         await interaction.response.send_message(
-                            "❌ Der Modlog ist derzeit deaktiviert.",
+                            "<:Astra_x:1141303954555289600> Der Modlog ist derzeit deaktiviert.",
                             ephemeral=True
                         )
 
