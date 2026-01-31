@@ -216,53 +216,6 @@ class modlog(commands.Cog):
                         await channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before, after):
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                    (member.guild.id,)
-                )
-                result = await cursor.fetchone()
-                if result is None:
-                    return
-
-                channel2 = result
-                guild = member.guild
-                channel = guild.get_channel(int(channel2[0]))
-
-                if before.channel is None:
-                    embed = discord.Embed(
-                        title="🔊 Sprachkanal betreten",
-                        description=f"{member.mention} ist einem Sprachkanal beigetreten",
-                        colour=discord.Colour.green(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Kanal", value=after.channel, inline=True)
-                    await channel.send(embed=embed)
-
-                if after.channel is None:
-                    embed = discord.Embed(
-                        title="🔇 Sprachkanal verlassen",
-                        description=f"{member.mention} hat einen Sprachkanal verlassen",
-                        colour=discord.Colour.red(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Kanal", value=before.channel, inline=True)
-                    await channel.send(embed=embed)
-
-                if before.channel and after.channel and before.channel != after.channel:
-                    embed = discord.Embed(
-                        title="🔄 Sprachkanal gewechselt",
-                        description=f"{member.mention} hat den Sprachkanal gewechselt",
-                        colour=discord.Colour.blue(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Vorher", value=before.channel, inline=True)
-                    embed.add_field(name="Nachher", value=after.channel, inline=True)
-                    await channel.send(embed=embed)
-
-    @commands.Cog.listener()
     async def on_guild_role_create(self, role):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:

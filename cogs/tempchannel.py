@@ -65,17 +65,27 @@ class RenameModal(discord.ui.Modal, title="Umbenennen"):
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
         try:
             await vc.edit(name=str(self.name.value))
-            await interaction.followup.send("✅ Kanal umbenannt.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Der Kanalname wurde erfolgreich aktualisiert.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte den Kanal nicht umbenennen.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Der Kanalname konnte nicht geändert werden.**",
+                ephemeral=True
+            )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         try:
-            await interaction.response.send_message("Oops! Etwas ist schiefgelaufen", ephemeral=True)
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> **Es ist ein unerwarteter Fehler aufgetreten.**",
+                ephemeral=True
+            )
         except Exception:
             pass
         traceback.print_tb(error.__traceback__)
@@ -95,25 +105,38 @@ class LimitModal(discord.ui.Modal, title="Limit"):
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
         try:
             lim = int(str(self.limit.value).strip())
             if lim < 0 or lim > 99:
                 return await interaction.followup.send(
-                    "<:Astra_x:1141303954555289600> Das Limit **muss** zwischen **0–99** liegen.",
-                    ephemeral=True,
+                    "<:Astra_x:1141303954555289600> **Das Limit muss zwischen 0 und 99 liegen.**",
+                    ephemeral=True
                 )
             await vc.edit(user_limit=lim)
-            await interaction.followup.send("✅ Limit gesetzt.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Das Benutzerlimit wurde erfolgreich gesetzt.**",
+                ephemeral=True
+            )
         except ValueError:
-            await interaction.followup.send("❌ Bitte eine Zahl zwischen 0–99 eingeben.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Bitte gib eine gültige Zahl zwischen 0 und 99 ein.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte das Limit nicht setzen.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Das Benutzerlimit konnte nicht gesetzt werden.**",
+                ephemeral=True
+            )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         try:
-            await interaction.response.send_message("Oops! Etwas ist schiefgelaufen", ephemeral=True)
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> **Es ist ein unerwarteter Fehler aufgetreten.**",
+                ephemeral=True
+            )
         except Exception:
             pass
         traceback.print_tb(error.__traceback__)
@@ -136,30 +159,30 @@ class TempChannelView(discord.ui.View):
                 )
                 return await cur.fetchone()
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:lock",
-        emoji="<:Schloss_2:1141384576019730474>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:lock",
+                       emoji="<:Schloss_2:1141384576019730474>")
     async def lock(self, interaction: discord.Interaction, button: discord.Button):
         await interaction.response.defer(ephemeral=True)
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
 
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
         overwrites = {
@@ -169,37 +192,42 @@ class TempChannelView(discord.ui.View):
         }
         try:
             await vc.edit(overwrites=overwrites)
-            await interaction.followup.send("🔒 Kanal gesperrt (niemand sonst kann verbinden).", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Der Kanal wurde erfolgreich gesperrt.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte den Kanal nicht sperren.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Der Kanal konnte nicht gesperrt werden.**",
+                ephemeral=True
+            )
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:unlock",
-        emoji="<:Schloss:1141384573171802132>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:unlock",
+                       emoji="<:Schloss:1141384573171802132>")
     async def unlock(self, interaction: discord.Interaction, button: discord.Button):
         await interaction.response.defer(ephemeral=True)
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
 
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
-        # Entsperren = @everyone darf wieder connecten
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(connect=True, view_channel=True),
             interaction.user: discord.PermissionOverwrite(connect=True, speak=True, view_channel=True),
@@ -207,34 +235,40 @@ class TempChannelView(discord.ui.View):
         }
         try:
             await vc.edit(overwrites=overwrites)
-            await interaction.followup.send("🔓 Kanal entsperrt (alle können verbinden).", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Der Kanal wurde erfolgreich entsperrt.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte den Kanal nicht entsperren.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Der Kanal konnte nicht entsperrt werden.**",
+                ephemeral=True
+            )
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:hide",
-        emoji="<:Verstecken:1141384593438683278>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:hide",
+                       emoji="<:Verstecken:1141384593438683278>")
     async def hide(self, interaction: discord.Interaction, button: discord.Button):
         await interaction.response.defer(ephemeral=True)
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
 
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
         overwrites = {
@@ -244,34 +278,40 @@ class TempChannelView(discord.ui.View):
         }
         try:
             await vc.edit(overwrites=overwrites)
-            await interaction.followup.send("🙈 Kanal versteckt (nur du siehst ihn).", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Der Kanal ist nun verborgen.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte den Kanal nicht verstecken.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Der Kanal konnte nicht verborgen werden.**",
+                ephemeral=True
+            )
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:visible",
-        emoji="<:Zeigen:1141384600384438324>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:visible",
+                       emoji="<:Zeigen:1141384600384438324>")
     async def visible(self, interaction: discord.Interaction, button: discord.Button):
         await interaction.response.defer(ephemeral=True)
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
 
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.followup.send(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
         overwrites = {
@@ -281,61 +321,70 @@ class TempChannelView(discord.ui.View):
         }
         try:
             await vc.edit(overwrites=overwrites)
-            await interaction.followup.send("👀 Kanal sichtbar für alle.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_accept:1141303821176422460> **Der Kanal ist nun für alle sichtbar.**",
+                ephemeral=True
+            )
         except Exception:
-            await interaction.followup.send("❌ Konnte den Kanal nicht sichtbar machen.", ephemeral=True)
+            await interaction.followup.send(
+                "<:Astra_x:1141303954555289600> **Der Kanal konnte nicht sichtbar gemacht werden.**",
+                ephemeral=True
+            )
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:rename",
-        emoji="<:Umbenennen:1141384590494290033>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:rename",
+                       emoji="<:Umbenennen:1141384590494290033>")
     async def rename(self, interaction: discord.Interaction, button: discord.Button):
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
+
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
         await interaction.response.send_modal(RenameModal())
 
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.grey,
-        custom_id="persistent_view:limit",
-        emoji="<:Limit:1141319054674636870>",
-    )
+    @discord.ui.button(label="", style=discord.ButtonStyle.grey,
+                       custom_id="persistent_view:limit",
+                       emoji="<:Limit:1141319054674636870>")
     async def limit(self, interaction: discord.Interaction, button: discord.Button):
         vc = getattr(interaction.user.voice, "channel", None)
         if not vc:
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Du befindest dich aktuell in keinem Tempchannel.**",
+                ephemeral=True
             )
 
         row = await self._get_owner_mapping(interaction)
         if not row:
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Du bist nicht in einem Tempchannel.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Dieser Kanal ist kein Tempchannel.**",
+                ephemeral=True
             )
+
         channelID, ownerID = row
         if vc.id != int(channelID) or not self._is_owner(ownerID, interaction.user.id):
             return await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> **Nur der Kanalbesitzer kann das.**", ephemeral=True
+                "<:Astra_x:1141303954555289600> **Diese Aktion ist ausschließlich dem Kanalbesitzer vorbehalten.**",
+                ephemeral=True
             )
 
         await interaction.response.send_modal(LimitModal())
+
 
 
 class TempChannelCog(commands.Cog):
