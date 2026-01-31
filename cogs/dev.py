@@ -98,13 +98,12 @@ class CommandTracking(commands.Cog):
     # GLOBAL TRACKER (HIER PASSIERT DAS TRACKING)
     # -----------------------------------------------------
     @commands.Cog.listener()
-    async def on_app_command_completion(
-        self,
-        interaction: discord.Interaction,
-        command: app_commands.Command
-    ):
+    async def on_interaction(self, interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.application_command:
+            return
+
         if not interaction.guild:
-            return  # DMs ignorieren
+            return
 
         command_name, subcommand = extract_command_path(interaction)
 
@@ -113,8 +112,9 @@ class CommandTracking(commands.Cog):
                 async with conn.cursor() as cur:
                     await cur.execute(
                         """
-                        INSERT INTO command_usage (guild_id, user_id, command, subcommand)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO command_usage
+                            (guild_id, user_id, command, subcommand, used_at)
+                        VALUES (%s, %s, %s, %s, NOW())
                         """,
                         (
                             interaction.guild.id,
@@ -124,9 +124,7 @@ class CommandTracking(commands.Cog):
                         )
                     )
         except Exception as e:
-            # Tracking darf NIE Commands kaputt machen
             print(f"[CommandTracking] DB-Fehler: {e}")
-
 
 
 PAGE_SIZE = 25  # max. Optionen im Select
