@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 # Zwischenspeicher für laufende Tempchannels (wird beim Neustart nicht befüllt – ist nur eine Optimierung)
 tempchannels: list[int] = []
+PENDING_TEMPCHANNEL_CREATORS: set[int] = set()
 
 
 def isTempChannel(channel: discord.abc.GuildChannel) -> bool:
@@ -588,14 +589,24 @@ class TempChannelCog(commands.Cog):
                 if after and after.channel:
                     try:
                         if await isJoinHub(self.bot, after.channel):
+
+                            # 🔒 VOR dem Clone markieren
+                            PENDING_TEMPCHANNEL_CREATORS.add(member.id)
+
                             name = f"{member.name}"
-                            output = await after.channel.clone(name=name, reason="JoinHub gejoined.")
+                            output = await after.channel.clone(
+                                name=name,
+                                reason="JoinHub gejoined."
+                            )
+
                             if output:
                                 tempchannels.append(output.id)
+
                                 try:
                                     await member.move_to(output, reason="Tempchannel erstellt.")
                                 except Exception:
                                     pass
+
                                 try:
                                     await cur.execute(
                                         "INSERT INTO usertempchannels (guildID, userID, channelID) VALUES (%s, %s, %s)",
@@ -603,7 +614,11 @@ class TempChannelCog(commands.Cog):
                                     )
                                 except Exception:
                                     pass
+                                finally:
+                                    # ✅ Nach DB-Insert IMMER wieder entfernen
+                                    PENDING_TEMPCHANNEL_CREATORS.discard(member.id)
                     except Exception:
+                        PENDING_TEMPCHANNEL_CREATORS.discard(member.id)
                         # Fehler beim Prüfen des JoinHubs ignorieren
                         pass
 

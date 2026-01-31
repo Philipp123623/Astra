@@ -3,7 +3,7 @@ from discord.ext import commands
 import pymysql.err
 from discord import app_commands
 from typing import Literal
-
+from cogs.tempchannel import PENDING_TEMPCHANNEL_CREATORS
 
 ##########
 def convert(time):
@@ -129,107 +129,130 @@ class modlog(commands.Cog):
                         await channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_channel_create(self, channelname):
-        if await is_tempchannel_db(self.bot, channelname):
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
+
+        # 1️⃣ RACE-SCHUTZ (Tempchannel gerade im Erstellen)
+        async for entry in channel.guild.audit_logs(
+                action=discord.AuditLogAction.channel_create,
+                limit=1
+        ):
+            if entry.user and entry.user.id in PENDING_TEMPCHANNEL_CREATORS:
+                return
+
+        # 2️⃣ PERSISTENTER CHECK (nach Restart)
+        if await is_tempchannel_db(self.bot, channel):
             return
+
+        # 3️⃣ Modlog-Channel holen
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                    (channelname.guild.id,)
+                    "SELECT channelID FROM modlog WHERE serverID = %s",
+                    (channel.guild.id,)
                 )
                 result = await cursor.fetchone()
-                if result is None:
+                if not result:
                     return
 
-                if "ticket-" in channelname.name:
-                    return
+        # 4️⃣ Tickets ignorieren
+        if channel.name.startswith("ticket-"):
+            return
 
-                channel2 = result
-                guild = channelname.guild
-                channel = guild.get_channel(int(channel2[0]))
+        log_channel = channel.guild.get_channel(int(result[0]))
+        if not log_channel:
+            return
 
-                async for entry in guild.audit_logs(
-                    action=discord.AuditLogAction.channel_create,
-                    limit=1
-                ):
-                    embed = discord.Embed(
-                        title="📁 Kanal erstellt",
-                        description=f"Kanal erstellt von {entry.user.mention}",
-                        colour=discord.Colour.green(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Kanalname", value=channelname.name, inline=True)
-                    embed.add_field(name="Kategorie", value=channelname.category, inline=True)
-                    await channel.send(embed=embed)
+        # 5️⃣ Embed senden
+        embed = discord.Embed(
+            title="📁 Kanal erstellt",
+            description=f"Kanal erstellt von {entry.user.mention}",
+            colour=discord.Colour.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="Kanalname", value=channel.name, inline=True)
+        embed.add_field(name="Kategorie", value=channel.category, inline=True)
+
+        await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_guild_channel_delete(self, channelname):
-        if await is_tempchannel_db(self.bot, channelname):
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
+
+        # Tempchannels NIE loggen
+        if await is_tempchannel_db(self.bot, channel):
             return
+
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                    (channelname.guild.id,)
+                    "SELECT channelID FROM modlog WHERE serverID = %s",
+                    (channel.guild.id,)
                 )
                 result = await cursor.fetchone()
-                if result is None:
+                if not result:
                     return
 
-                if "ticket-" in channelname.name:
-                    return
+        if channel.name.startswith("ticket-"):
+            return
 
-                channel2 = result
-                guild = channelname.guild
-                channel = guild.get_channel(int(channel2[0]))
+        log_channel = channel.guild.get_channel(int(result[0]))
+        if not log_channel:
+            return
 
-                async for entry in guild.audit_logs(
-                    action=discord.AuditLogAction.channel_delete,
-                    limit=1
-                ):
-                    embed = discord.Embed(
-                        title="🗑️ Kanal gelöscht",
-                        description=f"Kanal gelöscht von {entry.user.mention}",
-                        colour=discord.Colour.red(),
-                        timestamp=discord.utils.utcnow()
-                    )
-                    embed.add_field(name="Kanalname", value=channelname.name, inline=True)
-                    embed.add_field(name="Kategorie", value=channelname.category, inline=True)
-                    await channel.send(embed=embed)
+        async for entry in channel.guild.audit_logs(
+                action=discord.AuditLogAction.channel_delete,
+                limit=1
+        ):
+            embed = discord.Embed(
+                title="🗑️ Kanal gelöscht",
+                description=f"Kanal gelöscht von {entry.user.mention}",
+                colour=discord.Colour.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="Kanalname", value=channel.name, inline=True)
+            embed.add_field(name="Kategorie", value=channel.category, inline=True)
+
+            await log_channel.send(embed=embed)
+            break
 
     @commands.Cog.listener()
-    async def on_guild_channel_update(self, before, after):
-        if await is_tempchannel_db(self.bot, before) or await is_tempchannel_db(self.bot, after):
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
+
+        # Tempchannels NIE loggen
+        if await is_tempchannel_db(self.bot, channel):
             return
+
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                    (before.guild.id,)
+                    "SELECT channelID FROM modlog WHERE serverID = %s",
+                    (channel.guild.id,)
                 )
                 result = await cursor.fetchone()
-                if result is None:
+                if not result:
                     return
 
-                channel2 = result
-                guild = before.guild
-                channel = guild.get_channel(int(channel2[0]))
+        if channel.name.startswith("ticket-"):
+            return
 
-                if before.name != after.name:
-                    async for entry in guild.audit_logs(
-                        action=discord.AuditLogAction.channel_update,
-                        limit=1
-                    ):
-                        embed = discord.Embed(
-                            title="✏️ Kanal aktualisiert",
-                            description=f"Kanal umbenannt von {entry.user.mention}",
-                            colour=discord.Colour.blue(),
-                            timestamp=discord.utils.utcnow()
-                        )
-                        embed.add_field(name="Vorher", value=before.name, inline=True)
-                        embed.add_field(name="Nachher", value=after.name, inline=True)
-                        await channel.send(embed=embed)
+        log_channel = channel.guild.get_channel(int(result[0]))
+        if not log_channel:
+            return
+
+        async for entry in channel.guild.audit_logs(
+                action=discord.AuditLogAction.channel_delete,
+                limit=1
+        ):
+            embed = discord.Embed(
+                title="🗑️ Kanal gelöscht",
+                description=f"Kanal gelöscht von {entry.user.mention}",
+                colour=discord.Colour.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="Kanalname", value=channel.name, inline=True)
+            embed.add_field(name="Kategorie", value=channel.category, inline=True)
+
+            await log_channel.send(embed=embed)
+            break
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role):
