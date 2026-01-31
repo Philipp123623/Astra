@@ -190,9 +190,59 @@ class astra(commands.Cog):
     async def on_guild_join(self, guild):
         async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
+                    embed = discord.Embed(
+                        title="✨ Danke fürs Einladen von Astra!",
+                        description=(
+                            "Astra ist ein moderner Discord-Bot für **Administration, Moderation und Support**.\n"
+                            "Alle Systeme sind **optional**, **server-spezifisch** und lassen sich flexibel konfigurieren."
+                        ),
+                        colour=discord.Colour.blurple()
+                    )
+
+                    embed.add_field(
+                        name="🧩 Wichtige Module",
+                        value=(
+                            "• Moderation & Automod\n"
+                            "• Tickets & Support-System\n"
+                            "• Tempchannels & Reaction Roles\n"
+                            "• Levelsystem, Utilities & mehr"
+                        ),
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="🚀 Schnellstart",
+                        value=(
+                            "• `/help` – Übersicht aller Funktionen\n"
+                            "• `/ticket setup` – Support-System einrichten\n"
+                            "• `/automod` – Automoderation konfigurieren"
+                        ),
+                        inline=False
+                    )
+
+                    embed.add_field(
+                        name="🔗 Wichtige Links",
+                        value=(
+                            "**[Website](https://astra-bot.de/)**\n"
+                            "**[Support-Server](https://astra-bot.de/support)**\n"
+                            "**[Astra einladen](https://astra-bot.de/invite)**"
+                        ),
+                        inline=False
+                    )
+
+                    embed.set_footer(
+                        text="Astra • Klar • Modular • Server-fokussiert",
+                        icon_url=self.bot.user.display_avatar.url
+                    )
+
+                    embed.set_author(
+                        name="Astra",
+                        icon_url=self.bot.user.display_avatar.url
+                    )
+
                     try:
-                        await guild.owner.send("**Danke fürs Einladen von Astra!**\n\nAstra verwaltet Ihren Server – Sie können folgende System zum verwalten ihres Servers nutzen:\nAdministration, Levelsystem, Tempchannels, Willkommen Nachrichten,\nund vieles mehr.\n\n **Funktionen**\n\nAstra bringt außerdem folgende Funktionen mit sich: Fun,\nGiveaway, Reactionrole, Utility\nInformationen und Joinrole\n\n**Wichtige Links**\n\nWebsite: https://astra-bot.de/\n[Support Server](https://astra-bot.de/support)\n[Bot Invite](https://astra-bot.de/invite)\n")
-                    except:
+                        await guild.owner.send(embed=embed)
+                    except discord.Forbidden:
                         pass
                     try:
                         guilds = self.bot.get_guild(1141116981697859736)
