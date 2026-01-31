@@ -606,42 +606,30 @@ class TempChannelCog(commands.Cog):
                             except ValueError:
                                 pass
 
-                # JoinHub gejoint -> persönlichen Kanal klonen und umziehen
+                # JoinHub gejoint -> persönlichen Kanal klonen
                 if after and after.channel:
-                    try:
-                        if await isJoinHub(self.bot, after.channel):
+                    if await isJoinHub(self.bot, after.channel):
+                        name = f"{member.name}"
+                        output = await after.channel.clone(
+                            name=name,
+                            reason="JoinHub gejoined."
+                        )
 
-                            # 🔒 VOR dem Clone markieren
-                            PENDING_TEMPCHANNEL_CREATORS.add(member.id)
+                        if output:
+                            tempchannels.append(output.id)
 
-                            name = f"{member.name}"
-                            output = await after.channel.clone(
-                                name=name,
-                                reason="JoinHub gejoined."
-                            )
+                            try:
+                                await member.move_to(output, reason="Tempchannel erstellt.")
+                            except Exception:
+                                pass
 
-                            if output:
-                                tempchannels.append(output.id)
-
-                                try:
-                                    await member.move_to(output, reason="Tempchannel erstellt.")
-                                except Exception:
-                                    pass
-
-                                try:
-                                    await cur.execute(
-                                        "INSERT INTO usertempchannels (guildID, userID, channelID) VALUES (%s, %s, %s)",
-                                        (after.channel.guild.id, member.id, output.id)
-                                    )
-                                except Exception:
-                                    pass
-                                finally:
-                                    # ✅ Nach DB-Insert IMMER wieder entfernen
-                                    PENDING_TEMPCHANNEL_CREATORS.discard(member.id)
-                    except Exception:
-                        PENDING_TEMPCHANNEL_CREATORS.discard(member.id)
-                        # Fehler beim Prüfen des JoinHubs ignorieren
-                        pass
+                            try:
+                                await cur.execute(
+                                    "INSERT INTO usertempchannels (guildID, userID, channelID) VALUES (%s, %s, %s)",
+                                    (after.channel.guild.id, member.id, output.id)
+                                )
+                            except Exception:
+                                pass
 
 
 async def setup(bot: commands.Bot) -> None:
