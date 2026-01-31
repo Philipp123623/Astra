@@ -93,19 +93,19 @@ class CommandLogView(discord.ui.View):
 
 def extract_command_path(interaction: discord.Interaction) -> tuple[str, Optional[str]]:
     """
-    /ticket setup   -> ("ticket", "setup")
-    /ping           -> ("ping", None)
+    /levelsystem leaderboard -> ("levelsystem", "leaderboard")
+    /ping -> ("ping", None)
     """
-    if not interaction.command:
-        return ("unknown", None)
+    data = interaction.data
+    if not data:
+        return "unknown", None
 
-    command_name = interaction.command.name
+    command_name = data.get("name", "unknown")
     subcommand = None
 
-    if interaction.data and "options" in interaction.data:
-        opts = interaction.data["options"]
-        if opts and opts[0]["type"] in (1, 2):  # SUB_COMMAND / SUB_COMMAND_GROUP
-            subcommand = opts[0]["name"]
+    options = data.get("options")
+    if options and options[0].get("type") == 1:  # SUB_COMMAND
+        subcommand = options[0].get("name")
 
     return command_name, subcommand
 
