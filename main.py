@@ -872,7 +872,7 @@ async def sync(ctx, serverid: int = None):
 
 def serialize_guild(guild: discord.Guild):
     return {
-        "id": str(guild.id),
+        "id": str(guild.id).strip(),
         "name": guild.name,
         "icon": guild.icon.key if guild.icon else None,
         "memberCount": guild.member_count
