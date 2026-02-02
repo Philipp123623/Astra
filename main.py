@@ -905,6 +905,30 @@ def servers():
         logging.error(f"[API] /servers error: {e}")
         return jsonify(success=False, error="Internal error"), 500
 
+@app.route('/servers/<guild_id>')
+def server_detail(guild_id):
+    try:
+        guild = discord.utils.get(bot.guilds, id=int(guild_id))
+        if not guild:
+            return jsonify(success=False, error="Server not found"), 404
+
+        return jsonify(
+            success=True,
+            server={
+                "id": str(guild.id),
+                "name": guild.name,
+                "icon": guild.icon.key if guild.icon else None,
+                "memberCount": guild.member_count,
+                "channelCount": len(guild.channels),
+                "roleCount": len(guild.roles),
+                "ownerId": str(guild.owner_id)
+            }
+        )
+
+    except Exception as e:
+        logging.error(f"[API] /servers/<id> error: {e}")
+        return jsonify(success=False), 500
+
 
 def run_flask():
     serve(app, host="localhost", port=5000)  # produktionsreif, keine Warning
