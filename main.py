@@ -870,12 +870,41 @@ async def sync(ctx, serverid: int = None):
         if guild is None:
             await ctx.send(f"❌ Der Server mit der ID `{serverid}` wurde nicht gefunden.")
 
+def serialize_guild(guild: discord.Guild):
+    return {
+        "id": str(guild.id),
+        "name": guild.name,
+        "icon": guild.icon.key if guild.icon else None,
+        "memberCount": guild.member_count
+    }
+
 
 app = Flask(__name__)
 
 @app.route('/status')
 def status():
     return jsonify(online=True)
+
+@app.route('/servers')
+def servers():
+    try:
+        if not bot.is_ready():
+            return jsonify(success=False, error="Bot not ready"), 503
+
+        servers = []
+        for guild in bot.guilds:
+            servers.append(serialize_guild(guild))
+
+        return jsonify(
+            success=True,
+            count=len(servers),
+            servers=servers
+        )
+
+    except Exception as e:
+        logging.error(f"[API] /servers error: {e}")
+        return jsonify(success=False, error="Internal error"), 500
+
 
 def run_flask():
     serve(app, host="localhost", port=5000)  # produktionsreif, keine Warning
