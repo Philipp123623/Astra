@@ -33,6 +33,11 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import re
+from threading import Lock
+
+guild_cache = {}
+guild_cache_lock = Lock()
+bot_ready = False
 
 SCHEMA_PATH = "/root/Astra/opt/schema.sql"  # <- Pfad zu deiner Datei
 
@@ -578,6 +583,12 @@ def all_app_commands(bot):
 
 @bot.event
 async def on_ready():
+    with guild_cache_lock:
+        guild_cache.clear()
+        for g in bot.guilds:
+            guild_cache[g.id] = g
+
+    logging.info(f"[CACHE] {len(guild_cache)} Guilds cached")
     servercount = len(bot.guilds)
     usercount = sum(guild.member_count for guild in bot.guilds)
     commandCount = len(all_app_commands(bot))
@@ -619,6 +630,9 @@ async def on_ready():
                 activity=discord.Game('Astra V2 out now! 💙'),
                 status=discord.Status.online
             )
+            global bot_ready
+            bot_ready = True
+            logging.info("[API] Bot marked as READY")
 
 
 async def funktion2(user_id: int, when: datetime):
@@ -887,47 +901,44 @@ def status():
 
 @app.route('/servers')
 def servers():
-    try:
-        if not bot.is_ready():
-            return jsonify(success=False, error="Bot not ready"), 503
+    if not bot.is_ready():
+        return jsonify(success=False, error="Bot not ready"), 503
 
-        servers = []
-        for guild in bot.guilds:
-            servers.append(serialize_guild(guild))
+    with guild_cache_lock:
+        servers = [serialize_guild(g) for g in guild_cache.values()]
 
-        return jsonify(
-            success=True,
-            count=len(servers),
-            servers=servers
-        )
+    return jsonify(
+        success=True,
+        count=len(servers),
+        servers=servers
+    )
 
-    except Exception as e:
-        logging.error(f"[API] /servers error: {e}")
-        return jsonify(success=False, error="Internal error"), 500
-
-@app.route('/servers/<guild_id>')
+@app.route('/servers/<int:guild_id>')
 def server_detail(guild_id):
-    try:
-        guild = discord.utils.get(bot.guilds, id=int(guild_id))
-        if not guild:
-            return jsonify(success=False, error="Server not found"), 404
+    if not bot_ready:
+        return jsonify(success=False, error="Bot not ready"), 503
+    with guild_cache_lock:
+        guild = guild_cache.get(guild_id)
 
+    if not guild:
         return jsonify(
-            success=True,
-            server={
-                "id": str(guild.id),
-                "name": guild.name,
-                "icon": guild.icon.key if guild.icon else None,
-                "memberCount": guild.member_count,
-                "channelCount": len(guild.channels),
-                "roleCount": len(guild.roles),
-                "ownerId": str(guild.owner_id)
-            }
-        )
+            success=False,
+            error="Server not found"
+        ), 404
 
-    except Exception as e:
-        logging.error(f"[API] /servers/<id> error: {e}")
-        return jsonify(success=False), 500
+    return jsonify(
+        success=True,
+        server={
+            "id": str(guild.id),
+            "name": guild.name,
+            "icon": guild.icon.key if guild.icon else None,
+            "memberCount": guild.member_count,
+            "channelCount": len(guild.channels),
+            "roleCount": len(guild.roles),
+            "ownerId": str(guild.owner_id)
+        }
+    )
+
 
 
 def run_flask():
