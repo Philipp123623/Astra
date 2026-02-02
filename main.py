@@ -385,6 +385,7 @@ async def on_dbl_vote(data):
 
     async with bot.pool.acquire() as conn:
         async with conn.cursor() as cur:
+
             # Test-Hook früh raus
             if data.get("type") == "test":
                 return bot.dispatch("dbl_test", data)
@@ -412,43 +413,137 @@ async def on_dbl_vote(data):
             now_ts = int(now_utc.timestamp())
             next_vote_ts = now_ts + 12 * 3600
             this_month = now_utc.date().replace(day=1)
-            vote_increase = 2 if now_utc.weekday() in [4, 5, 6] else 1  # Fr/Sa/So doppelt
+            vote_increase = 2 if now_utc.weekday() in (4, 5, 6) else 1
 
-            # --- DB: topgg lesen/aktualisieren (nur diese Tabelle) ---
+            # --- DB lesen ---
             await cur.execute(
-                "SELECT count, last_reset FROM topgg WHERE userID = %s",
+                """
+                SELECT count, last_reset, last_vote_epoch, streak, best_streak
+                FROM topgg
+                WHERE userID = %s
+                """,
                 (user_id,)
             )
             row = await cur.fetchone()
 
+            # --- DUPLICATE-SCHUTZ ---
+            if row:
+                _, _, last_vote_epoch, _, _ = row
+                if last_vote_epoch and now_ts - int(last_vote_epoch) < 60:
+                    logging.warning(f"[Vote] Duplicate Vote ignoriert ({user_id})")
+                    return
+
+            # =============================
+            # USER EXISTIERT NICHT
+            # =============================
             if not row:
                 member_votes = vote_increase
+                streak = 1
+                best_streak = 1
+
                 await cur.execute(
                     """
-                    INSERT INTO topgg (userID, count, last_reset, last_vote, last_vote_epoch, next_vote_epoch)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO topgg
+                        (userID, count, last_reset, last_vote, last_vote_epoch,
+                         next_vote_epoch, streak, best_streak)
+                    VALUES
+                        (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (user_id, member_votes, this_month, now_utc, now_ts, next_vote_ts)
+                    (
+                        user_id,
+                        member_votes,
+                        this_month,
+                        now_utc,
+                        now_ts,
+                        next_vote_ts,
+                        streak,
+                        best_streak
+                    )
                 )
+
+            # =============================
+            # USER EXISTIERT
+            # =============================
             else:
-                count, last_reset = row
+                count, last_reset, last_vote_epoch, streak, best_streak = row
+
+                # Monatsreset
                 if not last_reset or last_reset < this_month:
                     count = 0
+                    last_reset = this_month
+
                 member_votes = count + vote_increase
+
+                # --- STREAK-LOGIK ---
+                diff = now_ts - int(last_vote_epoch)
+
+                if 12 * 3600 <= diff <= 24 * 3600:
+                    streak += 1
+                else:
+                    streak = 1
+
+                if streak > best_streak:
+                    best_streak = streak
+
                 await cur.execute(
                     """
                     UPDATE topgg
-                    SET count = %s,
+                    SET
+                        count = %s,
                         last_reset = %s,
                         last_vote = %s,
                         last_vote_epoch = %s,
-                        next_vote_epoch = %s
+                        next_vote_epoch = %s,
+                        streak = %s,
+                        best_streak = %s
                     WHERE userID = %s
                     """,
-                    (member_votes, this_month, now_utc, now_ts, next_vote_ts, user_id)
+                    (
+                        member_votes,
+                        last_reset,
+                        now_utc,
+                        now_ts,
+                        next_vote_ts,
+                        streak,
+                        best_streak,
+                        user_id
+                    )
                 )
 
-            # --- Gesamtvotes für aktuellen Monat aus eigener DB ---
+            # =============================
+            # ECONOMY-REWARD + STREAK-BONUS
+            # =============================
+            base_amount = random.randint(5, 25)
+            streak_bonus = 0
+
+            if streak == 3:
+                streak_bonus = 10
+            elif streak == 5:
+                streak_bonus = 25
+            elif streak == 7:
+                streak_bonus = 50
+            elif streak == 14:
+                streak_bonus = 100
+            elif streak == 30:
+                streak_bonus = 250
+
+            total_amount = base_amount + streak_bonus
+
+            await cur.execute(
+                """
+                INSERT INTO economy_users (user_id, wallet)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE wallet = wallet + VALUES(wallet)
+                """,
+                (user_id, total_amount)
+            )
+
+            await cur.execute(
+                "UPDATE economy_users SET last_work = %s WHERE user_id = %s",
+                (now_utc, user_id)
+            )
+
+            # --- Gesamtvotes für aktuellen Monat ---
             await cur.execute(
                 "SELECT COALESCE(SUM(count), 0) FROM topgg WHERE last_reset = %s",
                 (this_month,)
@@ -456,7 +551,9 @@ async def on_dbl_vote(data):
             row = await cur.fetchone()
             total_votes = row[0] if row and row[0] is not None else 0
 
-    # --- Channel-Embed für den Vote ---
+    # =============================
+    # EMBED
+    # =============================
     embed = discord.Embed(
         title="Danke fürs Voten von Astra",
         description=(
@@ -468,6 +565,7 @@ async def on_dbl_vote(data):
         colour=discord.Colour.blue(),
         timestamp=now_utc
     )
+
     embed.set_thumbnail(
         url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
     )
@@ -476,13 +574,20 @@ async def on_dbl_vote(data):
         icon_url="https://media.discordapp.net/attachments/813029623277158420/901963417223573524/Idee_2_blau.jpg"
     )
 
-    # --- Rolle vergeben (beim Vote) ---
+    # --- BELohnungstext für Nachricht ---
+    if streak_bonus > 0:
+        reward_text = (
+            f"🔥 **Deine Belohnung:** {base_amount} Coins "
+            f"+ {streak_bonus} Streak-Bonus (Streak {streak}) 💰"
+        )
+    else:
+        reward_text = f"🎁 **Deine Belohnung:** {base_amount} Coins 💰"
+
     member = guild.get_member(user_id)
     if not member:
         try:
             member = await guild.fetch_member(user_id)
         except Exception:
-            logging.error(f"Member {user_id} nicht gefunden")
             member = None
 
     if member and voterole:
@@ -491,18 +596,22 @@ async def on_dbl_vote(data):
         except Exception as e:
             logging.error(f"Fehler beim Hinzufügen der Rolle an {user_id}: {e}")
 
-    # --- Channel-Post mit Button ---
     try:
         if channel:
-            await channel.send(embed=embed, view=VoteView())
+            await channel.send(
+                reward_text,
+                embed=embed,
+                view=VoteView()
+            )
     except Exception as e:
         logging.error(f"Fehler beim Senden im Channel: {e}")
 
-    # --- Reminder (DM) für 12h terminieren ---
     when = datetime.fromtimestamp(next_vote_ts, timezone.utc)
     logging.info(f"[VoteReminder] scheduled DM for {user_id} at {when.isoformat()} (ts={next_vote_ts})")
     asyncio.create_task(funktion2(user_id, when))
+
     return None
+
 
 
 
