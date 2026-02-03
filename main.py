@@ -1048,6 +1048,32 @@ def server_detail(guild_id):
         }
     )
 
+@app.route('/servers/<int:guild_id>/roles')
+def server_roles(guild_id):
+    if not bot_ready:
+        return jsonify(success=False, error="Bot not ready"), 503
+
+    with guild_cache_lock:
+        guild = guild_cache.get(guild_id)
+
+    if not guild:
+        return jsonify(success=False, error="Server not found"), 404
+
+    roles = [
+        {
+            "id": str(role.id),
+            "name": role.name
+        }
+        for role in guild.roles
+        if role.name != "@everyone"
+    ]
+
+    return jsonify(
+        success=True,
+        count=len(roles),
+        roles=roles
+    )
+
 
 
 def run_flask():
