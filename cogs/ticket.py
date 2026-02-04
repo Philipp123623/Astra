@@ -407,31 +407,131 @@ class SetupWizardLayout(ui.LayoutView):
             3: "✅ Schritt 3 von 3 · Überprüfung",
         }
 
-        self.add_item(
-            ui.Container(
+        children = []
+
+        # --------------------------------------------------
+        # HEADER
+        # --------------------------------------------------
+        children.append(
+            ui.TextDisplay(
+                f"## <:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard\n"
+                f"### {steps[self.step]}\n\n"
+                "Dieser Assistent führt dich Schritt für Schritt durch die Erstellung "
+                "eines **Ticket-Panels**."
+            )
+        )
+        children.append(ui.Separator())
+
+        # --------------------------------------------------
+        # AKTUELLE AUSWAHL
+        # --------------------------------------------------
+        children.append(
+            ui.TextDisplay(
+                "### 📌 Aktuelle Auswahl\n"
+                f"<:Astra_punkt:1141303896745201696> **Kanal:** "
+                f"{self.target_channel.mention if self.target_channel else '_Nicht gesetzt_'}\n"
+                f"<:Astra_punkt:1141303896745201696> **Kategorie:** "
+                f"{self.category.name if self.category else '_Nicht gesetzt_'}\n"
+                f"<:Astra_punkt:1141303896745201696> **Support-Rolle:** "
+                f"{self.role.mention if self.role else '_Nicht gesetzt_'}"
+            )
+        )
+        children.append(ui.Separator())
+
+        # --------------------------------------------------
+        # STEP 1 – GRUNDLAGEN
+        # --------------------------------------------------
+        if self.step == 1:
+            children.append(
                 ui.TextDisplay(
-                    f"## <:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard\n"
-                    f"### {steps[self.step]}"
-                ),
-                ui.Separator(),
-                ui.TextDisplay(
-                    "### 📌 Aktuelle Auswahl\n"
-                    f"<:Astra_punkt:1141303896745201696> **Kanal:** {self.target_channel.mention if self.target_channel else 'Nicht gesetzt'}\n"
-                    f"<:Astra_punkt:1141303896745201696> **Kategorie:** {self.category.name if self.category else 'Nicht gesetzt'}\n"
-                    f"<:Astra_punkt:1141303896745201696> **Support-Rolle:** {self.role.mention if self.role else 'Nicht gesetzt'}"
-                ),
-                ui.Separator(),
+                    "### 🧩 Grundlagen festlegen\n"
+                    "Wähle hier:\n"
+                    "- den **Kanal**, in dem das Ticket-Panel gepostet wird\n"
+                    "- die **Kategorie**, in der Tickets erstellt werden\n"
+                    "- die **Support-Rolle**, die Zugriff auf Tickets erhält"
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
                 ui.ActionRow(
                     ChannelPick(self),
                     CategoryPick(self),
                     RolePick(self),
-                ),
-                ui.Separator(),
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
                 ui.ActionRow(
                     NextButton(self),
+                    CancelButton(self),
+                )
+            )
+
+        # --------------------------------------------------
+        # STEP 2 – PANEL-TEXTE
+        # --------------------------------------------------
+        elif self.step == 2:
+            children.append(
+                ui.TextDisplay(
+                    "### ✍️ Panel-Texte\n"
+                    "Lege nun fest, **was Benutzer sehen**, bevor sie ein Ticket öffnen.\n\n"
+                    "Du kannst:\n"
+                    "- einen **Titel** (z. B. *Support*, *Bewerbungen*)\n"
+                    "- eine **Beschreibung** mit Infos oder Regeln\n\n"
+                    "eingeben."
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.TextDisplay(
+                    "➡️ Klicke auf **Weiter**, um die Texte über ein Formular einzugeben."
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.ActionRow(
+                    NextButton(self),
+                    CancelButton(self),
+                )
+            )
+
+        # --------------------------------------------------
+        # STEP 3 – ÜBERPRÜFUNG
+        # --------------------------------------------------
+        elif self.step == 3:
+            children.append(
+                ui.TextDisplay(
+                    "### 🔍 Überprüfung\n"
+                    "Bitte prüfe deine Angaben, bevor das Panel erstellt wird."
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.TextDisplay(
+                    f"**Panel-Titel:**\n{self.panel_title or '_Nicht gesetzt_'}\n\n"
+                    f"**Panel-Beschreibung:**\n{self.panel_desc or '_Nicht gesetzt_'}"
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.ActionRow(
                     CreateButton(self),
                     CancelButton(self),
-                ),
+                )
+            )
+
+        # --------------------------------------------------
+        # CONTAINER (EINMALIG!)
+        # --------------------------------------------------
+        self.add_item(
+            ui.Container(
+                *children,
                 accent_color=ASTRA_BLUE.value,
             )
         )
