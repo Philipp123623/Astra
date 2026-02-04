@@ -453,14 +453,13 @@ class SetupWizardLayout(ui.LayoutView):
             )
             children.append(ui.Separator())
 
-            # ✅ SELECTS DIREKT (KEIN ActionRow!)
-            children.append(ChannelPick(self))
-            children.append(CategoryPick(self))
-            children.append(RolePick(self))
+            # ✅ JEDER SELECT IN SEINER EIGENEN ACTIONROW
+            children.append(ui.ActionRow(ChannelPick(self)))
+            children.append(ui.ActionRow(CategoryPick(self)))
+            children.append(ui.ActionRow(RolePick(self)))
 
             children.append(ui.Separator())
 
-            # ✅ BUTTONS IN ActionRow
             children.append(
                 ui.ActionRow(
                     NextButton(self),
@@ -526,7 +525,7 @@ class SetupWizardLayout(ui.LayoutView):
             )
 
         # --------------------------------------------------
-        # CONTAINER (EINMALIG!)
+        # CONTAINER
         # --------------------------------------------------
         self.add_item(
             ui.Container(
@@ -534,6 +533,7 @@ class SetupWizardLayout(ui.LayoutView):
                 accent_color=ASTRA_BLUE.value,
             )
         )
+
 
 
 
