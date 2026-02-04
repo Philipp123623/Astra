@@ -5,10 +5,9 @@ import re
 import html
 import asyncio
 from typing import Optional, Literal, List, Tuple
-from discord import ui
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
+from discord import app_commands, ui
 
 ASTRA_BLUE = discord.Colour.blue()
 
@@ -221,9 +220,9 @@ async def set_guild_config(pool, guild_id: int, **kwargs):
             await cur.execute(q, tuple(vals))
 
 class PanelTextModal(ui.Modal, title="Ticket-Panel Texte"):
-    def __init__(self, view: "SetupWizardLayout"):
+    def __init__(self, wizard: "SetupWizardLayout"):
         super().__init__(timeout=300)
-        self.view = view
+        self.wizard = wizard
 
         self.title_inp = ui.TextInput(
             label="Panel-Titel",
@@ -242,101 +241,104 @@ class PanelTextModal(ui.Modal, title="Ticket-Panel Texte"):
         self.add_item(self.desc_inp)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message(
                 "<:Astra_x:1141303954555289600> Nur der Ersteller darf das.",
                 ephemeral=True
             )
 
-        self.view.panel_title = self.title_inp.value.strip()
-        self.view.panel_desc = self.desc_inp.value.strip()
-        self.view.step = 3
-        self.view.rebuild()
-        await interaction.response.edit_message(view=self.view)
+        self.wizard.panel_title = self.title_inp.value.strip()
+        self.wizard.panel_desc = self.desc_inp.value.strip()
+        self.wizard.step = 3
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
 
 # ---------------------------------------------------------
 
 class ChannelPick(ui.ChannelSelect):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             placeholder="📢 Ziel-Kanal",
             channel_types=[discord.ChannelType.text],
             custom_id="ticket_setup:channel",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        self.view.target_channel = self.values[0]
-        self.view.rebuild()
-        await interaction.response.edit_message(view=self.view)
+        self.wizard.target_channel = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
 
 class CategoryPick(ui.ChannelSelect):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             placeholder="🗂 Kategorie",
             channel_types=[discord.ChannelType.category],
             custom_id="ticket_setup:category",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        self.view.category = self.values[0]
-        self.view.rebuild()
-        await interaction.response.edit_message(view=self.view)
+        self.wizard.category = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
 
 class RolePick(ui.RoleSelect):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             placeholder="🛡 Support-Rolle",
             custom_id="ticket_setup:role",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        self.view.role = self.values[0]
-        self.view.rebuild()
-        await interaction.response.edit_message(view=self.view)
+        self.wizard.role = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
 
 # ---------------------------------------------------------
 
 class NextButton(ui.Button):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             label="Weiter",
             style=discord.ButtonStyle.blurple,
-            disabled=not (view.target_channel and view.category and view.role),
+            disabled=not (wizard.target_channel and wizard.category and wizard.role),
             custom_id="ticket_setup:next",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        self.view.step = 2
-        self.view.rebuild()
-        await interaction.response.send_message(
-            modal=PanelTextModal(self.view)
-        )
+        self.wizard.step = 2
+        self.wizard.rebuild()
+        await interaction.response.send_modal(PanelTextModal(self.wizard))
+
 
 class CancelButton(ui.Button):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             label="Abbrechen",
             style=discord.ButtonStyle.red,
             emoji="<:Astra_x:1141303954555289600>",
             custom_id="ticket_setup:cancel",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(
@@ -347,30 +349,31 @@ class CancelButton(ui.Button):
             view=None,
         )
 
+
 class CreateButton(ui.Button):
-    def __init__(self, view):
+    def __init__(self, wizard):
         super().__init__(
             label="Erstellen",
             style=discord.ButtonStyle.green,
-            disabled=not (view.panel_title and view.panel_desc),
+            disabled=not (wizard.panel_title and wizard.panel_desc),
             custom_id="ticket_setup:create",
         )
-        self.view = view
+        self.wizard = wizard
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.view.invoker.id:
+        if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        ch = self.view.target_channel
+        ch = self.wizard.target_channel
         if not ch:
             return
 
         embed = mk_embed(
-            title=self.view.panel_title,
-            description=self.view.panel_desc,
+            title=self.wizard.panel_title,
+            description=self.wizard.panel_desc,
         )
 
-        await ch.send(embed=embed, view=TicketOpenView(self.view.bot))
+        await ch.send(embed=embed, view=TicketOpenView(self.wizard.bot))
         await interaction.response.edit_message(
             embed=mk_embed(
                 title="<:Astra_accept:1141303821176422460> Erfolgreich",
@@ -378,6 +381,7 @@ class CreateButton(ui.Button):
             ),
             view=None,
         )
+
 
 class SetupWizardLayout(ui.LayoutView):
     def __init__(self, bot: commands.Bot, invoker: discord.User):
