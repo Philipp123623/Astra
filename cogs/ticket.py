@@ -342,20 +342,10 @@ class CancelButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(
-            view=None,
-            content=None,
-            components=[
-                {
-                    "type": 1,
-                    "components": [
-                        {
-                            "type": 10,
-                            "content": "❌ **Setup abgebrochen**\n\nDer Ticket-Setup-Wizard wurde beendet."
-                        }
-                    ]
-                }
-            ]
+            content="❌ **Setup abgebrochen**\n\nDer Ticket-Setup-Wizard wurde beendet.",
+            view=None
         )
+
 
 
 
