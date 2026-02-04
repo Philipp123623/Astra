@@ -342,12 +342,21 @@ class CancelButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.edit_message(
-            embed=mk_embed(
-                title="<:Astra_x:1141303954555289600> Abgebrochen",
-                description="Der Setup-Wizard wurde beendet.",
-            ),
             view=None,
+            content=None,
+            components=[
+                {
+                    "type": 1,
+                    "components": [
+                        {
+                            "type": 10,
+                            "content": "❌ **Setup abgebrochen**\n\nDer Ticket-Setup-Wizard wurde beendet."
+                        }
+                    ]
+                }
+            ]
         )
+
 
 
 class CreateButton(ui.Button):
