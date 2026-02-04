@@ -418,22 +418,22 @@ class SetupWizardLayout(ui.LayoutView):
 
         children = []
 
-        # --------------------------------------------------
+        # ==================================================
         # HEADER
-        # --------------------------------------------------
+        # ==================================================
         children.append(
             ui.TextDisplay(
                 f"## 🎟️ Ticket-Setup-Wizard\n"
                 f"**{steps[self.step]}**\n\n"
-                "Erstelle ein **Ticket-Panel** für deinen Server.\n"
-                "_Alle Einstellungen können später angepasst werden._"
+                "Mit diesem Assistenten erstellst du ein **Ticket-Panel** für deinen Server.\n"
+                "_Alle Einstellungen lassen sich später jederzeit ändern._"
             )
         )
         children.append(ui.Separator())
 
-        # --------------------------------------------------
-        # AKTUELLE AUSWAHL
-        # --------------------------------------------------
+        # ==================================================
+        # AKTUELLE AUSWAHL (KOMPAKT)
+        # ==================================================
         children.append(
             ui.TextDisplay(
                 "### 📌 Aktuelle Auswahl\n\n"
@@ -444,27 +444,54 @@ class SetupWizardLayout(ui.LayoutView):
         )
         children.append(ui.Separator())
 
-        # --------------------------------------------------
+        # ==================================================
         # STEP 1 – GRUNDLAGEN
-        # --------------------------------------------------
+        # ==================================================
         if self.step == 1:
             children.append(
                 ui.TextDisplay(
                     "### 🧩 Grundlagen\n\n"
-                    "Lege fest, **wo** und **für wen** Tickets erstellt werden:\n\n"
-                    "• Ziel-Kanal für das Panel\n"
-                    "• Kategorie für Tickets\n"
-                    "• Support-Rolle mit Zugriff"
+                    "Lege hier fest, **wo Tickets erstellt werden** und "
+                    "**wer Zugriff darauf hat**.\n\n"
+                    "Gehe die Punkte der Reihe nach durch:"
                 )
             )
             children.append(ui.Separator())
 
+            # Ziel-Kanal
+            children.append(
+                ui.TextDisplay(
+                    "#### 📢 Ziel-Kanal\n"
+                    "In diesem Kanal wird das **Ticket-Panel** veröffentlicht.\n"
+                    "_Nutzer öffnen ihre Tickets über dieses Panel._"
+                )
+            )
             children.append(ui.ActionRow(ChannelPick(self)))
-            children.append(ui.ActionRow(CategoryPick(self)))
-            children.append(ui.ActionRow(RolePick(self)))
-
             children.append(ui.Separator())
 
+            # Kategorie
+            children.append(
+                ui.TextDisplay(
+                    "#### 🗂 Kategorie für Tickets\n"
+                    "Alle neu erstellten Tickets werden automatisch "
+                    "in dieser **Kategorie** angelegt."
+                )
+            )
+            children.append(ui.ActionRow(CategoryPick(self)))
+            children.append(ui.Separator())
+
+            # Support-Rolle
+            children.append(
+                ui.TextDisplay(
+                    "#### 🛡 Support-Rolle\n"
+                    "Mitglieder mit dieser Rolle können Tickets "
+                    "**sehen, beantworten und schließen**."
+                )
+            )
+            children.append(ui.ActionRow(RolePick(self)))
+            children.append(ui.Separator())
+
+            # Actions
             children.append(
                 ui.ActionRow(
                     NextButton(self),
@@ -472,23 +499,24 @@ class SetupWizardLayout(ui.LayoutView):
                 )
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # STEP 2 – PANEL-TEXTE
-        # --------------------------------------------------
+        # ==================================================
         elif self.step == 2:
             children.append(
                 ui.TextDisplay(
                     "### ✍️ Panel-Texte\n\n"
-                    "Diese Texte sehen Benutzer **vor dem Öffnen eines Tickets**.\n\n"
-                    "• **Titel** – z. B. _Support_ oder _Bewerbungen_\n"
-                    "• **Beschreibung** – Infos, Regeln oder Hinweise"
+                    "Diese Inhalte sehen Benutzer **bevor sie ein Ticket öffnen**.\n\n"
+                    "• **Titel** – z. B. _Support_, _Bewerbungen_ oder _Hilfe_\n"
+                    "• **Beschreibung** – Regeln, Hinweise oder Infos zum Ablauf"
                 )
             )
             children.append(ui.Separator())
 
             children.append(
                 ui.TextDisplay(
-                    "➡️ Klicke auf **Weiter**, um die Texte im Formular einzugeben."
+                    "➡️ Klicke auf **Weiter**, um Titel und Beschreibung "
+                    "über ein Formular einzugeben."
                 )
             )
             children.append(ui.Separator())
@@ -500,22 +528,24 @@ class SetupWizardLayout(ui.LayoutView):
                 )
             )
 
-        # --------------------------------------------------
+        # ==================================================
         # STEP 3 – ÜBERPRÜFUNG
-        # --------------------------------------------------
+        # ==================================================
         elif self.step == 3:
             children.append(
                 ui.TextDisplay(
                     "### 🔍 Überprüfung\n\n"
-                    "Bitte kontrolliere deine Angaben:"
+                    "Bitte überprüfe deine Angaben, bevor das Panel erstellt wird."
                 )
             )
             children.append(ui.Separator())
 
             children.append(
                 ui.TextDisplay(
-                    f"**📝 Titel**\n{self.panel_title or '—'}\n\n"
-                    f"**📄 Beschreibung**\n{self.panel_desc or '—'}"
+                    "#### 📝 Panel-Titel\n"
+                    f"{self.panel_title or '—'}\n\n"
+                    "#### 📄 Panel-Beschreibung\n"
+                    f"{self.panel_desc or '—'}"
                 )
             )
             children.append(ui.Separator())
@@ -527,9 +557,9 @@ class SetupWizardLayout(ui.LayoutView):
                 )
             )
 
-        # --------------------------------------------------
-        # CONTAINER
-        # --------------------------------------------------
+        # ==================================================
+        # CONTAINER (EINMALIG)
+        # ==================================================
         self.add_item(
             ui.Container(
                 *children,
