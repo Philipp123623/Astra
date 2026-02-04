@@ -364,7 +364,16 @@ class CreateButton(ui.Button):
         if interaction.user.id != self.wizard.invoker.id:
             return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
 
-        ch = self.wizard.target_channel
+        raw = self.wizard.target_channel
+        guild = interaction.guild
+
+        ch = guild.get_channel(raw.id) if raw else None
+        if not isinstance(ch, discord.TextChannel):
+            return await interaction.response.send_message(
+                "❌ Ziel-Kanal nicht gefunden oder kein Textkanal.",
+                ephemeral=True
+            )
+
         if not ch:
             return
 
@@ -414,10 +423,10 @@ class SetupWizardLayout(ui.LayoutView):
         # --------------------------------------------------
         children.append(
             ui.TextDisplay(
-                f"## <:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard\n"
-                f"### {steps[self.step]}\n\n"
-                "Dieser Assistent führt dich Schritt für Schritt durch die Erstellung "
-                "eines **Ticket-Panels**."
+                f"## 🎟️ Ticket-Setup-Wizard\n"
+                f"**{steps[self.step]}**\n\n"
+                "Erstelle ein **Ticket-Panel** für deinen Server.\n"
+                "_Alle Einstellungen können später angepasst werden._"
             )
         )
         children.append(ui.Separator())
@@ -427,13 +436,10 @@ class SetupWizardLayout(ui.LayoutView):
         # --------------------------------------------------
         children.append(
             ui.TextDisplay(
-                "### 📌 Aktuelle Auswahl\n"
-                f"<:Astra_punkt:1141303896745201696> **Kanal:** "
-                f"{self.target_channel.mention if self.target_channel else '_Nicht gesetzt_'}\n"
-                f"<:Astra_punkt:1141303896745201696> **Kategorie:** "
-                f"{self.category.name if self.category else '_Nicht gesetzt_'}\n"
-                f"<:Astra_punkt:1141303896745201696> **Support-Rolle:** "
-                f"{self.role.mention if self.role else '_Nicht gesetzt_'}"
+                "### 📌 Aktuelle Auswahl\n\n"
+                f"**Kanal:** {self.target_channel.mention if self.target_channel else '—'}\n"
+                f"**Kategorie:** {self.category.name if self.category else '—'}\n"
+                f"**Support-Rolle:** {self.role.mention if self.role else '—'}"
             )
         )
         children.append(ui.Separator())
@@ -444,16 +450,15 @@ class SetupWizardLayout(ui.LayoutView):
         if self.step == 1:
             children.append(
                 ui.TextDisplay(
-                    "### 🧩 Grundlagen festlegen\n"
-                    "Wähle hier:\n"
-                    "- den **Kanal**, in dem das Ticket-Panel gepostet wird\n"
-                    "- die **Kategorie**, in der Tickets erstellt werden\n"
-                    "- die **Support-Rolle**, die Zugriff auf Tickets erhält"
+                    "### 🧩 Grundlagen\n\n"
+                    "Lege fest, **wo** und **für wen** Tickets erstellt werden:\n\n"
+                    "• Ziel-Kanal für das Panel\n"
+                    "• Kategorie für Tickets\n"
+                    "• Support-Rolle mit Zugriff"
                 )
             )
             children.append(ui.Separator())
 
-            # ✅ JEDER SELECT IN SEINER EIGENEN ACTIONROW
             children.append(ui.ActionRow(ChannelPick(self)))
             children.append(ui.ActionRow(CategoryPick(self)))
             children.append(ui.ActionRow(RolePick(self)))
@@ -473,19 +478,17 @@ class SetupWizardLayout(ui.LayoutView):
         elif self.step == 2:
             children.append(
                 ui.TextDisplay(
-                    "### ✍️ Panel-Texte\n"
-                    "Lege nun fest, **was Benutzer sehen**, bevor sie ein Ticket öffnen.\n\n"
-                    "Du kannst:\n"
-                    "- einen **Titel** (z. B. *Support*, *Bewerbungen*)\n"
-                    "- eine **Beschreibung** mit Infos oder Regeln\n\n"
-                    "eingeben."
+                    "### ✍️ Panel-Texte\n\n"
+                    "Diese Texte sehen Benutzer **vor dem Öffnen eines Tickets**.\n\n"
+                    "• **Titel** – z. B. _Support_ oder _Bewerbungen_\n"
+                    "• **Beschreibung** – Infos, Regeln oder Hinweise"
                 )
             )
             children.append(ui.Separator())
 
             children.append(
                 ui.TextDisplay(
-                    "➡️ Klicke auf **Weiter**, um die Texte über ein Formular einzugeben."
+                    "➡️ Klicke auf **Weiter**, um die Texte im Formular einzugeben."
                 )
             )
             children.append(ui.Separator())
@@ -503,16 +506,16 @@ class SetupWizardLayout(ui.LayoutView):
         elif self.step == 3:
             children.append(
                 ui.TextDisplay(
-                    "### 🔍 Überprüfung\n"
-                    "Bitte prüfe deine Angaben, bevor das Panel erstellt wird."
+                    "### 🔍 Überprüfung\n\n"
+                    "Bitte kontrolliere deine Angaben:"
                 )
             )
             children.append(ui.Separator())
 
             children.append(
                 ui.TextDisplay(
-                    f"**Panel-Titel:**\n{self.panel_title or '_Nicht gesetzt_'}\n\n"
-                    f"**Panel-Beschreibung:**\n{self.panel_desc or '_Nicht gesetzt_'}"
+                    f"**📝 Titel**\n{self.panel_title or '—'}\n\n"
+                    f"**📄 Beschreibung**\n{self.panel_desc or '—'}"
                 )
             )
             children.append(ui.Separator())
@@ -533,8 +536,6 @@ class SetupWizardLayout(ui.LayoutView):
                 accent_color=ASTRA_BLUE.value,
             )
         )
-
-
 
 
 # =========================================================
