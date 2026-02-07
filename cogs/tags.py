@@ -148,8 +148,8 @@ class tags(commands.Cog):
         description="Erstelle eigene Befehle (Tags) für diesen Server."
     )
     @app_commands.describe(
-        modus="Hinzufügen, Entfernen oder Anzeigen.",
-        name="Name des Tags (nur bei Entfernen nötig)."
+        modus="Hinzufügen, Entfernen oder Anzeigen",
+        name="Name des Tags (nur bei Entfernen nötig)"
     )
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
@@ -176,7 +176,7 @@ class tags(commands.Cog):
                 if modus == "Entfernen":
                     if not name:
                         await interaction.response.send_message(
-                            "❌ Bitte gib einen Tagnamen an!",
+                            "❌ Bitte gib einen Tagnamen an.",
                             ephemeral=True
                         )
                         return
