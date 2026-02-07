@@ -324,7 +324,7 @@ class HelpCog(commands.Cog):
         embed.add_field(
             name="Letzte Updates",
             value=(
-                "> <:Astra_file1:1141303837181886494> Backup-System: `/backup create`, `/backup load`, `/backup undo`\n"
+                "> <:Astra_file1:1141303837181886494> Backup-System: `/backup erstellen`, `/backup laden`, `/backup zurücksetzen`\n"
                 "> <:Astra_news:1141303885533827072> Benachrichtigungssystem: `/benachrichtigung youtube/twitch`\n"
                 "> <:Astra_cookie:1141303831293079633> Economy: `/job`, `/economy`, `/economy blackjack`\n"
                 "> <:Astra_minigames:1141303876528648232> Minigames: `/hangman`, `/snake`, `/emojiquiz`"
