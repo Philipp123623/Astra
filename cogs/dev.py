@@ -543,30 +543,52 @@ class DevTools(commands.Cog):
 
     @commands.command(name="cmdlog")
     @commands.is_owner()
-    async def cmdlog(self, ctx: commands.Context):
-        """Zeigt Command-Nutzung der letzten 7 Tage."""
+    async def cmdlog(self, ctx: commands.Context, period: str = "today"):
+        """
+        Zeigt Command-Nutzung.
+        Standard: heute
+        Optionen: week | 7 | <tage>
+        """
+
+        period = period.lower()
+
+        if period in ("week", "woche", "7"):
+            title = "📊 Command Usage (letzte 7 Tage)"
+            where_clause = "used_at >= NOW() - INTERVAL 7 DAY"
+
+        elif period.isdigit():
+            days = int(period)
+            title = f"📊 Command Usage (letzte {days} Tage)"
+            where_clause = f"used_at >= NOW() - INTERVAL {days} DAY"
+
+        else:
+            # HEUTE (00:00 bis jetzt)
+            title = "📊 Command Usage (heute)"
+            where_clause = "DATE(used_at) = CURDATE()"
+
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    """
+                    f"""
                     SELECT guild_id, user_id, command, subcommand, used_at
                     FROM command_usage
-                    WHERE used_at >= NOW() - INTERVAL 7 DAY
+                    WHERE {where_clause}
                     ORDER BY used_at DESC
                     """
                 )
                 rows = await cur.fetchall()
 
         if not rows:
-            return await ctx.send("Keine Command-Daten der letzten 7 Tage gefunden.")
+            return await ctx.send("Keine Command-Daten für diesen Zeitraum gefunden.")
 
         pages = ceil(len(rows) / PAGE_SIZE)
         view = CommandLogView(ctx, rows, pages)
 
-        await ctx.send(
-            embed=view.make_embed(),
-            view=view
-        )
+        embed = view.make_embed()
+        embed.title = title
+
+        await ctx.send(embed=embed, view=view)
+        return None
 
     @commands.command(name="commandstats", aliases=["cmdstats"])
     @commands.is_owner()
