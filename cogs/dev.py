@@ -579,7 +579,7 @@ class DevTools(commands.Cog):
                 rows = await cur.fetchall()
 
         if not rows:
-            return await ctx.send("Keine Command-Daten für diesen Zeitraum gefunden!")
+            return await ctx.send("Keine Command-Daten für diesen Zeitraum gefunden.")
 
         pages = ceil(len(rows) / PAGE_SIZE)
         view = CommandLogView(ctx, rows, pages)
