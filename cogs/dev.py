@@ -861,7 +861,7 @@ class DevTools(commands.Cog):
             "`astra!cog list`"
         )
 
-    @cog_group.command(name="load")
+    @ext_group.command(name="load")
     @commands.is_owner()
     async def cog_load(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
@@ -873,7 +873,7 @@ class DevTools(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog_group.command(name="unload")
+    @ext_group.command(name="unload")
     @commands.is_owner()
     async def cog_unload(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
@@ -885,7 +885,7 @@ class DevTools(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog_group.command(name="reload")
+    @ext_group.command(name="reload")
     @commands.is_owner()
     async def cog_reload(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
@@ -897,7 +897,7 @@ class DevTools(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog_group.command(name="list")
+    @ext_group.command(name="list")
     @commands.is_owner()
     async def cog_list(self, ctx: commands.Context):
         if not self.bot.extensions:
