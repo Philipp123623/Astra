@@ -841,36 +841,69 @@ class DevTools(commands.Cog):
         except Exception as e:
             await ctx.send(f"Exception: {e}")
 
-    # --- Cogs laden/entladen/reload ---
-    @commands.command(name="load")
+    @commands.group(name="cog", invoke_without_command=True)
     @commands.is_owner()
-    async def load_cog(self, ctx, cog: str):
-        self.commands_run += 1
-        try:
-            self.bot.load_extension(cog)
-            await ctx.send(f"Cog `{cog}` geladen.")
-        except Exception as e:
-            await ctx.send(f"Fehler beim Laden des Cogs {cog}:\n```py\n{e}```")
+    async def cog(self, ctx: commands.Context):
+        """
+        Cog-Verwaltung (wie jishaku).
+        astra!cog load <name>
+        astra!cog unload <name>
+        astra!cog reload <name>
+        astra!cog list
+        """
+        await ctx.send(
+            "**Cog-Verwaltung**\n"
+            "`astra!cog load <name>`\n"
+            "`astra!cog unload <name>`\n"
+            "`astra!cog reload <name>`\n"
+            "`astra!cog list`"
+        )
 
-    @commands.command(name="unload")
+    @cog.command(name="load")
     @commands.is_owner()
-    async def unload_cog(self, ctx, cog: str):
-        self.commands_run += 1
+    async def cog_load(self, ctx: commands.Context, cog_name: str):
         try:
-            self.bot.unload_extension(cog)
-            await ctx.send(f"Cog `{cog}` entladen.")
+            await self.bot.load_extension(cog_name)
+            await ctx.send(f"✅ Cog `{cog_name}` geladen.")
+        except commands.ExtensionAlreadyLoaded:
+            await ctx.send(f"⚠️ Cog `{cog_name}` ist bereits geladen.")
         except Exception as e:
-            await ctx.send(f"Fehler beim Entladen des Cogs {cog}:\n```py\n{e}```")
+            await ctx.send(f"❌ Fehler beim Laden von `{cog_name}`:\n```py\n{e}```")
 
-    @commands.command(name="reload")
+    @cog.command(name="unload")
     @commands.is_owner()
-    async def reload_cog(self, ctx, cog: str):
-        self.commands_run += 1
+    async def cog_unload(self, ctx: commands.Context, cog_name: str):
         try:
-            self.bot.reload_extension(cog)
-            await ctx.send(f"Cog `{cog}` neu geladen.")
+            await self.bot.unload_extension(cog_name)
+            await ctx.send(f"🗑️ Cog `{cog_name}` entladen.")
+        except commands.ExtensionNotLoaded:
+            await ctx.send(f"⚠️ Cog `{cog_name}` ist nicht geladen.")
         except Exception as e:
-            await ctx.send(f"Fehler beim Neuladen des Cogs {cog}:\n```py\n{e}```")
+            await ctx.send(f"❌ Fehler beim Entladen von `{cog_name}`:\n```py\n{e}```")
+
+    @cog.command(name="reload")
+    @commands.is_owner()
+    async def cog_reload(self, ctx: commands.Context, cog_name: str):
+        try:
+            await self.bot.reload_extension(cog_name)
+            await ctx.send(f"🔁 Cog `{cog_name}` neu geladen.")
+        except commands.ExtensionNotLoaded:
+            await ctx.send(f"⚠️ Cog `{cog_name}` ist nicht geladen.")
+        except Exception as e:
+            await ctx.send(f"❌ Fehler beim Reload von `{cog_name}`:\n```py\n{e}```")
+
+    @cog.command(name="list")
+    @commands.is_owner()
+    async def cog_list(self, ctx: commands.Context):
+        loaded = list(self.bot.extensions.keys())
+        if not loaded:
+            await ctx.send("Keine Cogs geladen.")
+            return
+
+        await ctx.send(
+            "**📦 Geladene Cogs:**\n" +
+            "\n".join(f"• `{c}`" for c in loaded)
+        )
 
     # --- Sourcecode anzeigen (passt für persistente View) ---
     @commands.command(name="source")
