@@ -14,6 +14,15 @@ import asyncio
 import time
 from typing import List, Optional
 
+def resolve_extension(name: str) -> str:
+    """
+    dev        -> cogs.dev
+    cogs.dev   -> cogs.dev
+    """
+    if "." in name:
+        return name
+    return f"cogs.{name}"
+
 
 class CommandLogView(discord.ui.View):
     def __init__(self, ctx, rows, pages):
@@ -841,68 +850,63 @@ class DevTools(commands.Cog):
         except Exception as e:
             await ctx.send(f"Exception: {e}")
 
-    @commands.group(name="cog", invoke_without_command=True)
+    @commands.group(name="cog", aliases=["ext"], invoke_without_command=True)
     @commands.is_owner()
-    async def cog(self, ctx: commands.Context):
-        """
-        Cog-Verwaltung (wie jishaku).
-        astra!cog load <name>
-        astra!cog unload <name>
-        astra!cog reload <name>
-        astra!cog list
-        """
+    async def cog_group(self, ctx: commands.Context):
         await ctx.send(
-            "**Cog-Verwaltung**\n"
+            "**🧩 Cog-Verwaltung**\n"
             "`astra!cog load <name>`\n"
             "`astra!cog unload <name>`\n"
             "`astra!cog reload <name>`\n"
             "`astra!cog list`"
         )
 
-    @cog.command(name="load")
+    @cog_group.command(name="load")
     @commands.is_owner()
-    async def cog_load(self, ctx: commands.Context, cog_name: str):
+    async def cog_load(self, ctx: commands.Context, name: str):
+        ext = resolve_extension(name)
         try:
-            await self.bot.load_extension(cog_name)
-            await ctx.send(f"✅ Cog `{cog_name}` geladen.")
+            await self.bot.load_extension(ext)
+            await ctx.send(f"✅ Cog `{ext}` geladen.")
         except commands.ExtensionAlreadyLoaded:
-            await ctx.send(f"⚠️ Cog `{cog_name}` ist bereits geladen.")
+            await ctx.send(f"⚠️ Cog `{ext}` ist bereits geladen.")
         except Exception as e:
-            await ctx.send(f"❌ Fehler beim Laden von `{cog_name}`:\n```py\n{e}```")
+            await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog.command(name="unload")
+    @cog_group.command(name="unload")
     @commands.is_owner()
-    async def cog_unload(self, ctx: commands.Context, cog_name: str):
+    async def cog_unload(self, ctx: commands.Context, name: str):
+        ext = resolve_extension(name)
         try:
-            await self.bot.unload_extension(cog_name)
-            await ctx.send(f"🗑️ Cog `{cog_name}` entladen.")
+            await self.bot.unload_extension(ext)
+            await ctx.send(f"🗑️ Cog `{ext}` entladen.")
         except commands.ExtensionNotLoaded:
-            await ctx.send(f"⚠️ Cog `{cog_name}` ist nicht geladen.")
+            await ctx.send(f"⚠️ Cog `{ext}` ist nicht geladen.")
         except Exception as e:
-            await ctx.send(f"❌ Fehler beim Entladen von `{cog_name}`:\n```py\n{e}```")
+            await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog.command(name="reload")
+    @cog_group.command(name="reload")
     @commands.is_owner()
-    async def cog_reload(self, ctx: commands.Context, cog_name: str):
+    async def cog_reload(self, ctx: commands.Context, name: str):
+        ext = resolve_extension(name)
         try:
-            await self.bot.reload_extension(cog_name)
-            await ctx.send(f"🔁 Cog `{cog_name}` neu geladen.")
+            await self.bot.reload_extension(ext)
+            await ctx.send(f"🔁 Cog `{ext}` neu geladen.")
         except commands.ExtensionNotLoaded:
-            await ctx.send(f"⚠️ Cog `{cog_name}` ist nicht geladen.")
+            await ctx.send(f"⚠️ Cog `{ext}` ist nicht geladen.")
         except Exception as e:
-            await ctx.send(f"❌ Fehler beim Reload von `{cog_name}`:\n```py\n{e}```")
+            await ctx.send(f"❌ Fehler:\n```py\n{e}```")
 
-    @cog.command(name="list")
+    @cog_group.command(name="list")
     @commands.is_owner()
     async def cog_list(self, ctx: commands.Context):
-        loaded = list(self.bot.extensions.keys())
-        if not loaded:
+        if not self.bot.extensions:
             await ctx.send("Keine Cogs geladen.")
             return
 
         await ctx.send(
             "**📦 Geladene Cogs:**\n" +
-            "\n".join(f"• `{c}`" for c in loaded)
+            "\n".join(f"• `{ext}`" for ext in self.bot.extensions)
         )
 
     # --- Sourcecode anzeigen (passt für persistente View) ---
