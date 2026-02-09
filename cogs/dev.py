@@ -852,7 +852,7 @@ class DevTools(commands.Cog):
 
     @commands.group(name="cog", aliases=["ext"], invoke_without_command=True)
     @commands.is_owner()
-    async def cog_group(self, ctx: commands.Context):
+    async def ext_group(self, ctx: commands.Context):
         await ctx.send(
             "**🧩 Cog-Verwaltung**\n"
             "`astra!cog load <name>`\n"
