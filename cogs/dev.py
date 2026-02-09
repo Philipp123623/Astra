@@ -889,13 +889,21 @@ class DevTools(commands.Cog):
     @commands.is_owner()
     async def cog_reload(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
-        try:
-            await self.bot.reload_extension(ext)
-            await ctx.send(f"🔁 Cog `{ext}` neu geladen.")
-        except commands.ExtensionNotLoaded:
-            await ctx.send(f"⚠️ Cog `{ext}` ist nicht geladen.")
-        except Exception as e:
-            await ctx.send(f"❌ Fehler:\n```py\n{e}```")
+
+        # Erst antworten, dann reloaden (wichtig!)
+        await ctx.send(f"🔁 Lade Cog `{ext}` neu...")
+
+        async def do_reload():
+            await asyncio.sleep(0.2)  # gibt Discord Zeit, die Message zu senden
+            try:
+                await self.bot.reload_extension(ext)
+                print(f"[DEV] Cog neu geladen: {ext}")
+            except commands.ExtensionNotLoaded:
+                print(f"[DEV] Cog nicht geladen: {ext}")
+            except Exception as e:
+                print(f"[DEV][RELOAD ERROR] {ext}: {e}")
+
+        asyncio.create_task(do_reload())
 
     @ext_group.command(name="list")
     @commands.is_owner()
