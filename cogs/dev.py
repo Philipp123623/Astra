@@ -87,6 +87,36 @@ class CommandLogView(discord.ui.View):
         await interaction.message.delete()
         self.stop()
 
+class CmdLogOverviewView(discord.ui.View):
+    def __init__(self, ctx, rows):
+        super().__init__(timeout=120)
+        self.ctx = ctx
+        self.rows = rows
+        self.pages = ceil(len(rows) / PAGE_SIZE)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message(
+                "Nur der Bot-Owner darf das.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="📄 Vollständiges Log anzeigen",
+        style=discord.ButtonStyle.primary
+    )
+    async def show_full_log(self, interaction: discord.Interaction, _):
+        view = CommandLogView(self.ctx, self.rows, self.pages)
+        embed = view.make_embed()
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True
+        )
+
+
 # =========================================================
 # Helper: Command + Subcommand extrahieren
 # =========================================================
@@ -198,6 +228,93 @@ class CommandTracking(commands.Cog):
                     )
         except Exception as e:
             print(f"[CommandTracking] DB-Fehler: {e}")
+
+def build_cmdlog_overview_embed(ctx, title: str, rows: list):
+    total = len(rows)
+
+    users_count = defaultdict(int)
+    guilds_count = defaultdict(int)
+    commands_count = defaultdict(int)
+
+    timestamps = []
+
+    for guild_id, user_id, cmd, sub, used_at in rows:
+        users_count[user_id] += 1
+        guilds_count[guild_id] += 1
+        key = f"/{cmd}" + (f" {sub}" if sub else "")
+        commands_count[key] += 1
+        timestamps.append(used_at)
+
+    start = min(timestamps)
+    end = max(timestamps)
+
+    days = max(1, (end - start).days + 1)
+    avg_per_day = round(total / days)
+
+    top_commands = sorted(commands_count.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_users = sorted(users_count.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_guilds = sorted(guilds_count.items(), key=lambda x: x[1], reverse=True)[:3]
+
+    embed = discord.Embed(
+        title=title,
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="📈 Übersicht",
+        value=(
+            f"• **Gesamt-Commands:** `{total}`\n"
+            f"• **Ø pro Tag:** `{avg_per_day}`\n"
+            f"• **Unterschiedliche Commands:** `{len(commands_count)}`\n"
+            f"• **Aktive User:** `{len(users_count)}`\n"
+            f"• **Aktive Server:** `{len(guilds_count)}`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔥 Top Commands",
+        value="\n".join(
+            f"{i+1}. `{cmd}` → **{count}×**"
+            for i, (cmd, count) in enumerate(top_commands)
+        ) or "—",
+        inline=False
+    )
+
+    embed.add_field(
+        name="👤 Top User",
+        value="\n".join(
+            f"• <@{uid}> → **{count} Commands**"
+            for uid, count in top_users
+        ) or "—",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🏠 Top Server",
+        value="\n".join(
+            f"• **{ctx.bot.get_guild(gid).name if ctx.bot.get_guild(gid) else gid}** → **{count} Commands**"
+            for gid, count in top_guilds
+        ) or "—",
+        inline=False
+    )
+
+    embed.add_field(
+        name="⏱ Zeitraum",
+        value=(
+            f"{start.strftime('%d.%m.%Y %H:%M')} → "
+            f"{end.strftime('%d.%m.%Y %H:%M')}"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(
+        text="Klicke auf „Vollständiges Log“, um alle Einträge zu sehen"
+    )
+
+    return embed
+
+
 
 
 PAGE_SIZE = 25  # max. Optionen im Select
@@ -544,26 +661,19 @@ class DevTools(commands.Cog):
     @commands.command(name="cmdlog")
     @commands.is_owner()
     async def cmdlog(self, ctx: commands.Context, period: str = "today"):
-        """
-        Zeigt Command-Nutzung.
-        Standard: heute
-        Optionen: week | 7 | <tage>
-        """
-
         period = period.lower()
 
         if period in ("week", "woche", "7"):
-            title = "📊 Command Usage (letzte 7 Tage)"
+            title = "📊 Command Usage – letzte 7 Tage"
             where_clause = "used_at >= NOW() - INTERVAL 7 DAY"
 
         elif period.isdigit():
             days = int(period)
-            title = f"📊 Command Usage (letzte {days} Tage)"
+            title = f"📊 Command Usage – letzte {days} Tage"
             where_clause = f"used_at >= NOW() - INTERVAL {days} DAY"
 
         else:
-            # HEUTE (00:00 bis jetzt)
-            title = "📊 Command Usage (heute)"
+            title = "📊 Command Usage – heute"
             where_clause = "DATE(used_at) = CURDATE()"
 
         async with self.bot.pool.acquire() as conn:
@@ -579,16 +689,13 @@ class DevTools(commands.Cog):
                 rows = await cur.fetchall()
 
         if not rows:
-            return await ctx.send("Keine Command-Daten für diesen Zeitraum gefunden!")
+            await ctx.send("Keine Command-Daten für diesen Zeitraum gefunden.")
+            return
 
-        pages = ceil(len(rows) / PAGE_SIZE)
-        view = CommandLogView(ctx, rows, pages)
-
-        embed = view.make_embed()
-        embed.title = title
+        embed = build_cmdlog_overview_embed(ctx, title, rows)
+        view = CmdLogOverviewView(ctx, rows)
 
         await ctx.send(embed=embed, view=view)
-        return None
 
     @commands.command(name="commandstats", aliases=["cmdstats"])
     @commands.is_owner()
