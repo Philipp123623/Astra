@@ -863,7 +863,7 @@ class DevTools(commands.Cog):
 
     @ext_group.command(name="load")
     @commands.is_owner()
-    async def cog_load(self, ctx: commands.Context, name: str):
+    async def ext_load(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
         try:
             await self.bot.load_extension(ext)
@@ -875,7 +875,7 @@ class DevTools(commands.Cog):
 
     @ext_group.command(name="unload")
     @commands.is_owner()
-    async def cog_unload(self, ctx: commands.Context, name: str):
+    async def ext_unload(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
         try:
             await self.bot.unload_extension(ext)
@@ -887,7 +887,7 @@ class DevTools(commands.Cog):
 
     @ext_group.command(name="reload")
     @commands.is_owner()
-    async def cog_reload(self, ctx: commands.Context, name: str):
+    async def ext_reload(self, ctx: commands.Context, name: str):
         ext = resolve_extension(name)
 
         # Erst antworten, dann reloaden (wichtig!)
@@ -907,7 +907,7 @@ class DevTools(commands.Cog):
 
     @ext_group.command(name="list")
     @commands.is_owner()
-    async def cog_list(self, ctx: commands.Context):
+    async def ext_list(self, ctx: commands.Context):
         if not self.bot.extensions:
             await ctx.send("Keine Cogs geladen.")
             return
