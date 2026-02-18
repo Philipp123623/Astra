@@ -11,28 +11,6 @@ from collections import defaultdict
 
 
 # =========================================================
-# VIEW
-# =========================================================
-
-class AnalyticsView(discord.ui.View):
-    def __init__(self, cog, mode: str, target_id: int | None):
-        super().__init__(timeout=180)
-        self.cog = cog
-        self.mode = mode
-        self.target_id = target_id
-
-    @discord.ui.button(label="7 Tage", style=discord.ButtonStyle.secondary)
-    async def seven(self, interaction: discord.Interaction, _):
-        await interaction.response.defer()
-        await self.cog.send_stats(interaction, self.mode, 7, self.target_id)
-
-    @discord.ui.button(label="30 Tage", style=discord.ButtonStyle.secondary)
-    async def thirty(self, interaction: discord.Interaction, _):
-        await interaction.response.defer()
-        await self.cog.send_stats(interaction, self.mode, 30, self.target_id)
-
-
-# =========================================================
 # COG
 # =========================================================
 
@@ -161,30 +139,45 @@ class Analytics(commands.Cog):
     def create_chart(self, title, dates, msg_values, voice_values):
 
         plt.style.use("dark_background")
-        fig, ax = plt.subplots(figsize=(11, 4.5))
+        fig, ax = plt.subplots(figsize=(10, 4))
 
-        # --- SAFE TYPE CONVERSION ---
+        # ----- SAFE TYPES -----
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
         msg_values = np.array(msg_values, dtype=float)
         voice_values = np.array(voice_values, dtype=float)
 
-        # --- LINES ---
+        # ----- COLORS -----
+        msg_color = "#4cc9f0"  # hellblau
+        voice_color = "#9d4edd"  # violett
+
+        # ----- LINES -----
         ax.plot(x, msg_values,
                 linewidth=3,
+                marker="o",
+                markersize=5,
+                color=msg_color,
                 label="Nachrichten")
 
         ax.plot(x, voice_values,
                 linewidth=3,
+                marker="o",
+                markersize=5,
+                color=voice_color,
                 label="Voice Minuten")
 
-        # --- SAFE FILL ---
-        ax.fill_between(x, msg_values, 0, alpha=0.15)
-        ax.fill_between(x, voice_values, 0, alpha=0.15)
+        # ----- SOFT FILL -----
+        ax.fill_between(x, msg_values, 0,
+                        alpha=0.15,
+                        color=msg_color)
 
-        # --- FORMAT ---
-        ax.set_title(title, fontsize=14, weight="bold")
+        ax.fill_between(x, voice_values, 0,
+                        alpha=0.15,
+                        color=voice_color)
+
+        # ----- AXIS STYLE -----
+        ax.set_title(title, fontsize=14, weight="bold", pad=10)
         ax.set_ylabel("Aktivität")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
@@ -192,8 +185,12 @@ class Analytics(commands.Cog):
 
         fig.autofmt_xdate()
 
-        ax.grid(alpha=0.2)
-        ax.legend()
+        ax.grid(alpha=0.15)
+        ax.legend(frameon=False)
+
+        # ----- CLEAN BACKGROUND -----
+        ax.set_facecolor("#0f1020")
+        fig.patch.set_facecolor("#0f1020")
 
         fig.tight_layout()
 
@@ -256,63 +253,243 @@ class Analytics(commands.Cog):
 
     async def send_stats(self, interaction, mode, days, target_id=None):
 
-        start_date = datetime.utcnow().date() - timedelta(days=days - 1)
-        dates = [start_date + timedelta(days=i) for i in range(days)]
+        await interaction.response.defer()
 
-        if mode == "server":
-            rows = await self.fetch_server_data(
-                interaction.guild.id, start_date)
+        guild = interaction.guild
+        start_7 = datetime.utcnow().date() - timedelta(days=6)
+        start_30 = datetime.utcnow().date() - timedelta(days=29)
+
+        # --------------------------------------------------
+        # USER MODE
+        # --------------------------------------------------
+        if mode == "user":
+
+            member = guild.get_member(target_id) or interaction.user
+
+            rows_7 = await self.fetch_user_data(guild.id, member.id, start_7)
+            rows_30 = await self.fetch_user_data(guild.id, member.id, start_30)
+
+            def total(rows, key):
+                return sum(r.get(key, 0) or 0 for r in rows)
+
+            msg_7 = total(rows_7, "messages")
+            msg_30 = total(rows_30, "messages")
+            voice_7 = total(rows_7, "voice_minutes")
+            voice_30 = total(rows_30, "voice_minutes")
+
+            # ---- Rank Nachrichten
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("""
+                                         SELECT user_id, SUM(count) as total
+                                         FROM analytics_messages
+                                         WHERE guild_id = %s
+                                         GROUP BY user_id
+                                         ORDER BY total DESC
+                                         """, (guild.id,))
+                    ranking = await cursor.fetchall()
+
+            rank_msg = next((i + 1 for i, r in enumerate(ranking)
+                             if r["user_id"] == member.id), "-")
+
+            # ---- Rank Voice
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    await cursor.execute("""
+                                         SELECT user_id, SUM(minutes) as total
+                                         FROM analytics_voice
+                                         WHERE guild_id = %s
+                                         GROUP BY user_id
+                                         ORDER BY total DESC
+                                         """, (guild.id,))
+                    ranking_voice = await cursor.fetchall()
+
+            rank_voice = next((i + 1 for i, r in enumerate(ranking_voice)
+                               if r["user_id"] == member.id), "-")
+
+            embed = discord.Embed(
+                title=f"Stats für {member.display_name}",
+                color=0x1f6feb  # Astra Blau
+            )
+
+            embed.add_field(
+                name="Nachrichten",
+                value=(
+                    f"7 Tage: `{msg_7}`\n"
+                    f"30 Tage: `{msg_30}`"
+                ),
+                inline=True
+            )
+
+            embed.add_field(
+                name="Voice Minuten",
+                value=(
+                    f"7 Tage: `{voice_7}`\n"
+                    f"30 Tage: `{voice_30}`"
+                ),
+                inline=True
+            )
+
+            embed.add_field(
+                name="Server Rang",
+                value=(
+                    f"Nachrichten: `#{rank_msg}`\n"
+                    f"Sprachzeit: `#{rank_voice}`"
+                ),
+                inline=False
+            )
+
+            # Chart (7 Tage)
+            dates = [start_7 + timedelta(days=i) for i in range(7)]
+            data = {r["date"]: r for r in rows_7}
+            msg_values = [data.get(d, {}).get("messages", 0) for d in dates]
+            voice_values = [data.get(d, {}).get("voice_minutes", 0) for d in dates]
+
+            chart = self.create_chart(
+                f"{member.display_name} • 7 Tage Performance",
+                dates,
+                msg_values,
+                voice_values
+            )
+
+        # --------------------------------------------------
+        # SERVER MODE
+        # --------------------------------------------------
+        # --------------------------------------------------
+        # SERVER MODE
+        # --------------------------------------------------
         else:
-            rows = await self.fetch_user_data(
-                interaction.guild.id, target_id, start_date)
 
-        data = {r["date"]: r for r in rows}
+            rows_7 = await self.fetch_server_data(guild.id, start_7)
+            rows_30 = await self.fetch_server_data(guild.id, start_30)
 
-        msg_values = [data.get(d, {}).get("messages", 0) for d in dates]
-        voice_values = [data.get(d, {}).get("voice_minutes", 0) for d in dates]
+            def total(rows, key):
+                return sum(r.get(key, 0) or 0 for r in rows)
 
-        total_msgs = sum(msg_values)
-        total_voice = sum(voice_values)
+            msg_7 = total(rows_7, "messages")
+            msg_30 = total(rows_30, "messages")
+            voice_7 = total(rows_7, "voice_minutes")
+            voice_30 = total(rows_30, "voice_minutes")
 
-        avg_msgs = round(total_msgs / days, 1)
-        avg_voice = round(total_voice / days, 1)
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    # ---- Top Channel (7 Tage)
+                    await cursor.execute("""
+                                         SELECT channel_id, SUM(count) as total
+                                         FROM analytics_messages
+                                         WHERE guild_id = %s
+                                           AND date >= %s
+                                         GROUP BY channel_id
+                                         ORDER BY total DESC
+                                         LIMIT 1
+                                         """, (guild.id, start_7))
+                    top_channel = await cursor.fetchone()
 
-        title = (
-            f"{interaction.guild.name} • {days} Tage Analytics"
-            if mode == "server"
-            else f"{interaction.guild.get_member(target_id).display_name} • {days} Tage Performance"
-        )
+                    # ---- Top 3 User (Nachrichten)
+                    await cursor.execute("""
+                                         SELECT user_id, SUM(count) as total
+                                         FROM analytics_messages
+                                         WHERE guild_id = %s
+                                           AND date >= %s
+                                         GROUP BY user_id
+                                         ORDER BY total DESC
+                                         LIMIT 3
+                                         """, (guild.id, start_7))
+                    top_users_msg = await cursor.fetchall()
 
-        chart = self.create_chart(title, dates, msg_values, voice_values)
+                    # ---- Top 3 Voice User
+                    await cursor.execute("""
+                                         SELECT user_id, SUM(minutes) as total
+                                         FROM analytics_voice
+                                         WHERE guild_id = %s
+                                           AND date >= %s
+                                         GROUP BY user_id
+                                         ORDER BY total DESC
+                                         LIMIT 3
+                                         """, (guild.id, start_7))
+                    top_users_voice = await cursor.fetchall()
+
+            # Format Top Channel
+            if top_channel:
+                channel = guild.get_channel(top_channel["channel_id"])
+                top_channel_text = f"{channel.mention} • {top_channel['total']} Nachrichten"
+            else:
+                top_channel_text = "Keine Aktivität"
+
+            # Format Top User Nachrichten
+            if top_users_msg:
+                ranking_text = ""
+                for i, row in enumerate(top_users_msg, 1):
+                    member = guild.get_member(row["user_id"])
+                    if member:
+                        ranking_text += f"`{i}.` {member.mention} • {row['total']}\n"
+            else:
+                ranking_text = "Keine Daten"
+
+            # Format Top Voice User
+            if top_users_voice:
+                voice_ranking_text = ""
+                for i, row in enumerate(top_users_voice, 1):
+                    member = guild.get_member(row["user_id"])
+                    if member:
+                        voice_ranking_text += f"`{i}.` {member.mention} • {row['total']} Min\n"
+            else:
+                voice_ranking_text = "Keine Daten"
+
+            embed = discord.Embed(
+                title=f"Stats für {guild.name}",
+                color=0x1f6feb
+            )
+
+            embed.add_field(
+                name="Aktivität Übersicht",
+                value=(
+                    f"Nachrichten (7 Tage): `{msg_7}`\n"
+                    f"Nachrichten (30 Tage): `{msg_30}`\n"
+                    f"Voice (7 Tage): `{voice_7}` Min\n"
+                    f"Voice (30 Tage): `{voice_30}` Min"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="Top Channel (7 Tage)",
+                value=top_channel_text,
+                inline=False
+            )
+
+            embed.add_field(
+                name="🏆 Aktivste Nutzer (Nachrichten)",
+                value=ranking_text,
+                inline=True
+            )
+
+            embed.add_field(
+                name="🎙️ Aktivste Nutzer (Voice)",
+                value=voice_ranking_text,
+                inline=True
+            )
+
+            # Chart
+            dates = [start_7 + timedelta(days=i) for i in range(7)]
+            data = {r["date"]: r for r in rows_7}
+            msg_values = [data.get(d, {}).get("messages", 0) for d in dates]
+            voice_values = [data.get(d, {}).get("voice_minutes", 0) for d in dates]
+
+            chart = self.create_chart(
+                f"{guild.name} • 7 Tage Übersicht",
+                dates,
+                msg_values,
+                voice_values
+            )
+
         file = discord.File(chart, filename="analytics.png")
-
-        embed = discord.Embed(
-            title="ASTRA ULTRA ANALYTICS",
-            description=f"{days} Tage Intelligence Report",
-            color=0xff9f1c
-        )
-
-        embed.add_field(
-            name="Nachrichten",
-            value=f"Gesamt: `{total_msgs}`\nØ/Tag: `{avg_msgs}`",
-            inline=True
-        )
-
-        embed.add_field(
-            name="Voice Minuten",
-            value=f"Gesamt: `{total_voice}`\nØ/Tag: `{avg_voice}`",
-            inline=True
-        )
-
         embed.set_image(url="attachment://analytics.png")
-        embed.set_footer(text="Astra Intelligence Engine v2")
-
-        view = AnalyticsView(self, mode, target_id)
+        embed.set_footer(text="Astra Analytics System")
 
         await interaction.edit_original_response(
             embed=embed,
-            attachments=[file],
-            view=view
+            attachments=[file]
         )
 
     # =====================================================
