@@ -140,30 +140,34 @@ class Analytics(commands.Cog):
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        # -----------------------------
-        # DARK MODERN BACKGROUND
-        # -----------------------------
-        fig, ax = plt.subplots(figsize=(9.5, 4.8))
-        fig.patch.set_facecolor("#0f1720")  # dunkler als Discord
-        ax.set_facecolor("#111827")
+        # -----------------------------------
+        # DARK BLUE BACKGROUND (wie Screenshot)
+        # -----------------------------------
+        fig, ax = plt.subplots(figsize=(10, 4.5))
+        fig.patch.set_facecolor("#070b1a")
+        ax.set_facecolor("#0b1224")
 
-        msg_color = "#f59e0b"  # orange (wie Bild)
-        voice_color = "#22c55e"  # neon green
+        msg_color = "#4cc9f0"  # CYAN
+        voice_color = "#9d4edd"  # PURPLE
 
         max_val = max(max(msg_values), max(voice_values), 1)
-        ax.set_ylim(0, max_val * 1.25 + 1)
 
-        # -----------------------------
-        # GLOW EFFECT (MAGIC)
-        # -----------------------------
-        for lw, alpha in [(8, 0.08), (6, 0.12), (4, 0.2)]:
+        if np.count_nonzero(msg_values) <= 1 and np.count_nonzero(voice_values) <= 1:
+            ax.set_ylim(0, max_val + 5)
+        else:
+            ax.set_ylim(0, max_val * 1.2 + 1)
+
+        # -----------------------------------
+        # SOFTER GLOW
+        # -----------------------------------
+        for lw, alpha in [(12, 0.04), (8, 0.06), (5, 0.1)]:
             ax.plot(x, msg_values, linewidth=lw, color=msg_color, alpha=alpha)
             ax.plot(x, voice_values, linewidth=lw, color=voice_color, alpha=alpha)
 
-        # Hauptlinien
+        # MAIN LINES
         ax.plot(
             x, msg_values,
-            linewidth=2.8,
+            linewidth=3,
             marker="o",
             markersize=6,
             color=msg_color,
@@ -172,53 +176,71 @@ class Analytics(commands.Cog):
 
         ax.plot(
             x, voice_values,
-            linewidth=2.8,
+            linewidth=3,
             marker="o",
             markersize=6,
             color=voice_color,
-            label="Sprachzeit"
+            label="Voice Minuten"
         )
 
-        # -----------------------------
-        # GRID (klar sichtbar)
-        # -----------------------------
-        ax.grid(color="#1f2937", linewidth=0.8, alpha=0.8)
+        # -----------------------------------
+        # SUBTLE FILL (wie Screenshot)
+        # -----------------------------------
+        ax.fill_between(x, msg_values, 0, color=msg_color, alpha=0.08)
+        ax.fill_between(x, voice_values, 0, color=voice_color, alpha=0.08)
 
-        # -----------------------------
-        # AXIS STYLE
-        # -----------------------------
-        ax.set_ylabel("Aktivität", fontsize=10, color="#d1d5db")
+        # -----------------------------------
+        # GRID
+        # -----------------------------------
+        ax.grid(color="#1b2540", linewidth=0.8, alpha=0.8)
+
+        # -----------------------------------
+        # AXIS
+        # -----------------------------------
+        ax.set_ylabel("Aktivität", fontsize=10, color="#cbd5e1")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
-        ax.tick_params(axis="x", colors="#9ca3af", labelsize=9)
-        ax.tick_params(axis="y", colors="#9ca3af", labelsize=9)
+        ax.tick_params(axis="x", colors="#94a3b8", labelsize=9)
+        ax.tick_params(axis="y", colors="#94a3b8", labelsize=9)
 
-        # Spines entfernen
         for spine in ax.spines.values():
             spine.set_visible(False)
 
-        # -----------------------------
-        # LEGEND CENTER TOP
-        # -----------------------------
+        # -----------------------------------
+        # TITLE (optional, wenn du willst)
+        # -----------------------------------
+        ax.set_title(title, fontsize=15, weight="bold", color="#e2e8f0", pad=12)
+
+        # -----------------------------------
+        # LEGEND
+        # -----------------------------------
         legend = ax.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, 1.02),
-            ncol=2,
+            loc="upper left",
             frameon=False,
             fontsize=10
         )
 
         for text in legend.get_texts():
-            text.set_color("#e5e7eb")
+            text.set_color("#e2e8f0")
 
+        # -----------------------------------
+        # REMOVE EXTRA SPACE
+        # -----------------------------------
         fig.tight_layout()
+        plt.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.15)
 
         buffer = io.BytesIO()
 
-        # WICHTIG: nicht zu hohe DPI!
-        plt.savefig(buffer, format="png", dpi=150)
+        plt.savefig(
+            buffer,
+            format="png",
+            dpi=140,
+            bbox_inches="tight",
+            pad_inches=0.05
+        )
+
         buffer.seek(0)
         plt.close()
 
