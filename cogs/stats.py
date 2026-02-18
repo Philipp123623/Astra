@@ -60,7 +60,7 @@ class Analytics(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.bot or not message.guild:
+        if message.author.bot or not message.guild:
             return
 
         today = datetime.utcnow().date()
