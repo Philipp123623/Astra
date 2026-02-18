@@ -138,63 +138,76 @@ class Analytics(commands.Cog):
 
     def create_chart(self, title, dates, msg_values, voice_values):
 
-        # -------- CUMULATIVE FIX --------
-        msg_values = np.cumsum(np.array(msg_values, dtype=float))
-        voice_values = np.cumsum(np.array(voice_values, dtype=float))
+        # ---------- NORMAL VALUES ----------
+        msg_values = np.array(msg_values, dtype=float)
+        voice_values = np.array(voice_values, dtype=float)
 
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        # -------- BIGGER GRAPH --------
-        fig, ax = plt.subplots(figsize=(14, 6))  # größer!
+        # ---------- SIZE ----------
+        fig, ax = plt.subplots(figsize=(12, 5))
 
-        fig.patch.set_facecolor("#0b1020")
-        ax.set_facecolor("#0f1630")
+        # ---------- CLEAN DARK (NICHT ZU DUNKEL) ----------
+        fig.patch.set_facecolor("#1e1f22")  # Discord embed gray
+        ax.set_facecolor("#2b2d31")  # Slightly lighter
 
-        msg_color = "#4cc9f0"
-        voice_color = "#9d4edd"
+        # ---------- MODERN COLORS ----------
+        msg_color = "#3ba4f7"  # softer blue
+        voice_color = "#a56eff"  # softer purple
 
-        # Linien
-        ax.plot(x, msg_values,
-                linewidth=4,
-                marker="o",
-                markersize=6,
-                color=msg_color,
-                label="Nachrichten")
+        # ---------- DYNAMIC Y SCALE ----------
+        max_val = max(max(msg_values), max(voice_values), 1)
+        ax.set_ylim(0, max_val * 1.25)
 
-        ax.plot(x, voice_values,
-                linewidth=4,
-                marker="o",
-                markersize=6,
-                color=voice_color,
-                label="Voice Minuten")
+        # ---------- LINES ----------
+        ax.plot(
+            x, msg_values,
+            linewidth=3,
+            marker="o",
+            markersize=7,
+            color=msg_color,
+            label="Nachrichten"
+        )
 
-        # Fills
-        ax.fill_between(x, msg_values, 0,
-                        alpha=0.15,
-                        color=msg_color)
+        ax.plot(
+            x, voice_values,
+            linewidth=3,
+            marker="o",
+            markersize=7,
+            color=voice_color,
+            label="Voice Minuten"
+        )
 
-        ax.fill_between(x, voice_values, 0,
-                        alpha=0.15,
-                        color=voice_color)
+        # ---------- LIGHT FILL ----------
+        ax.fill_between(x, msg_values, 0, alpha=0.10, color=msg_color)
+        ax.fill_between(x, voice_values, 0, alpha=0.10, color=voice_color)
 
-        # Axis
-        ax.set_title(title, fontsize=18, weight="bold", pad=15)
-        ax.set_ylabel("Kumulative Aktivität", fontsize=12)
+        # ---------- TITLE ----------
+        ax.set_title(title, fontsize=15, weight="bold", color="white", pad=10)
+
+        # ---------- AXIS ----------
+        ax.set_ylabel("Aktivität", fontsize=11, color="#dddddd")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
+        ax.tick_params(axis="x", colors="#cccccc")
+        ax.tick_params(axis="y", colors="#cccccc")
+
+        # ---------- GRID ----------
+        ax.grid(color="#444", alpha=0.25, linestyle="--")
+
+        # ---------- LEGEND ----------
+        legend = ax.legend(frameon=False)
+        for text in legend.get_texts():
+            text.set_color("#ffffff")
+
         fig.autofmt_xdate()
-
-        ax.grid(alpha=0.1)
-        ax.legend(frameon=False, fontsize=12)
-
-        # Mehr Abstand im Embed
-        fig.tight_layout(pad=3)
+        fig.tight_layout()
 
         buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", dpi=350, bbox_inches="tight")
+        plt.savefig(buffer, format="png", dpi=300)
         buffer.seek(0)
         plt.close()
 
