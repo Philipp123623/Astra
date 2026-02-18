@@ -143,7 +143,7 @@ class Analytics(commands.Cog):
         # -----------------------------------
         # DARK BLUE BACKGROUND (wie Screenshot)
         # -----------------------------------
-        fig, ax = plt.subplots(figsize=(10, 4.5))
+        fig, ax = plt.subplots(figsize=(10, 4.2))
         fig.patch.set_facecolor("#070b1a")
         ax.set_facecolor("#0b1224")
 
@@ -228,17 +228,14 @@ class Analytics(commands.Cog):
         # -----------------------------------
         # REMOVE EXTRA SPACE
         # -----------------------------------
-        fig.tight_layout()
-        plt.subplots_adjust(left=0.06, right=0.98, top=0.88, bottom=0.15)
+        fig.tight_layout(pad=1.2)
 
         buffer = io.BytesIO()
 
         plt.savefig(
             buffer,
             format="png",
-            dpi=140,
-            bbox_inches="tight",
-            pad_inches=0.05
+            dpi=130  # etwas niedriger = bessere Discord Darstellung
         )
 
         buffer.seek(0)
