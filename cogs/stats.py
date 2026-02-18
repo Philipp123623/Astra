@@ -141,85 +141,90 @@ class Analytics(commands.Cog):
         x = mdates.date2num(dates)
 
         # ---------------------------
-        # SIZE (optimal for Discord)
+        # PERFECT DISCORD SIZE
         # ---------------------------
-        fig, ax = plt.subplots(figsize=(11, 4.8))
+        fig, ax = plt.subplots(figsize=(10, 4.2))  # kompakter
 
         # ---------------------------
-        # ASTRA THEME COLORS
+        # ASTRA EMBED LOOK
         # ---------------------------
-        fig.patch.set_facecolor("#232428")  # Discord background
-        ax.set_facecolor("#2b2d31")  # Embed tone
+        fig.patch.set_facecolor("#2b2d31")  # Discord embed
+        ax.set_facecolor("#2b2d31")
 
-        msg_color = "#4da3ff"  # Astra Blue
-        voice_color = "#9f6eff"  # Astra Purple
+        msg_color = "#3ba4f7"
+        voice_color = "#a56eff"
 
         # ---------------------------
-        # AUTO SCALE
+        # SMART Y SCALE
         # ---------------------------
         max_val = max(max(msg_values), max(voice_values), 1)
-        ax.set_ylim(0, max_val * 1.3)
+
+        if max_val <= 5:
+            ax.set_ylim(0, 6)
+        elif max_val <= 15:
+            ax.set_ylim(0, 20)
+        else:
+            ax.set_ylim(0, max_val * 1.2)
 
         # ---------------------------
-        # CLEAN LINES (NO HEAVY FILL)
+        # LINES
         # ---------------------------
         ax.plot(
             x, msg_values,
-            linewidth=3,
+            linewidth=2.8,
             marker="o",
-            markersize=6,
+            markersize=5,
             color=msg_color,
             label="Nachrichten"
         )
 
         ax.plot(
             x, voice_values,
-            linewidth=3,
+            linewidth=2.8,
             marker="o",
-            markersize=6,
+            markersize=5,
             color=voice_color,
-            label="Voice Minuten"
+            label="Voice"
         )
 
-        # Very soft glow instead of heavy fill
-        ax.fill_between(x, msg_values, 0, alpha=0.06, color=msg_color)
-        ax.fill_between(x, voice_values, 0, alpha=0.06, color=voice_color)
+        # Kein heavy fill
+        ax.fill_between(x, msg_values, 0, alpha=0.05, color=msg_color)
+        ax.fill_between(x, voice_values, 0, alpha=0.05, color=voice_color)
 
         # ---------------------------
         # TITLE
         # ---------------------------
-        ax.set_title(title, fontsize=14, weight="bold", color="white", pad=8)
+        ax.set_title(title, fontsize=13, weight="bold", color="white", pad=6)
 
         # ---------------------------
-        # AXIS STYLE
+        # AXIS
         # ---------------------------
-        ax.set_ylabel("Aktivität", fontsize=10, color="#d0d0d0")
+        ax.set_ylabel("Aktivität", fontsize=9, color="#cccccc")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
-        ax.tick_params(axis="x", colors="#bfbfbf")
-        ax.tick_params(axis="y", colors="#bfbfbf")
+        ax.tick_params(axis="x", colors="#bfbfbf", labelsize=8)
+        ax.tick_params(axis="y", colors="#bfbfbf", labelsize=8)
 
-        # Subtle grid
-        ax.grid(color="#3a3c42", linestyle="-", linewidth=0.6, alpha=0.4)
+        # leichte Grid Lines
+        ax.grid(color="#3a3c42", linewidth=0.5, alpha=0.35)
 
-        # Remove top/right border (cleaner look)
+        # Clean Borders
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_color("#444")
         ax.spines["bottom"].set_color("#444")
 
-        # Legend
-        legend = ax.legend(frameon=False)
+        # Legend rechts oben klein
+        legend = ax.legend(frameon=False, fontsize=8, loc="upper left")
         for text in legend.get_texts():
-            text.set_color("white")
+            text.set_color("#ffffff")
 
-        fig.autofmt_xdate()
         fig.tight_layout()
 
         buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", dpi=300)
+        plt.savefig(buffer, format="png", dpi=250)
         buffer.seek(0)
         plt.close()
 
