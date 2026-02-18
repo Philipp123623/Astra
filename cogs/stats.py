@@ -140,40 +140,32 @@ class Analytics(commands.Cog):
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        # ---------------------------
-        # PERFECT DISCORD SIZE
-        # ---------------------------
-        fig, ax = plt.subplots(figsize=(10, 4.2))  # kompakter
+        # -----------------------------
+        # DARK MODERN BACKGROUND
+        # -----------------------------
+        fig, ax = plt.subplots(figsize=(9.5, 4.8))
+        fig.patch.set_facecolor("#0f1720")  # dunkler als Discord
+        ax.set_facecolor("#111827")
 
-        # ---------------------------
-        # ASTRA EMBED LOOK
-        # ---------------------------
-        fig.patch.set_facecolor("#2b2d31")  # Discord embed
-        ax.set_facecolor("#2b2d31")
+        msg_color = "#f59e0b"  # orange (wie Bild)
+        voice_color = "#22c55e"  # neon green
 
-        msg_color = "#3ba4f7"
-        voice_color = "#a56eff"
-
-        # ---------------------------
-        # SMART Y SCALE
-        # ---------------------------
         max_val = max(max(msg_values), max(voice_values), 1)
+        ax.set_ylim(0, max_val * 1.25 + 1)
 
-        if max_val <= 5:
-            ax.set_ylim(0, 6)
-        elif max_val <= 15:
-            ax.set_ylim(0, 20)
-        else:
-            ax.set_ylim(0, max_val * 1.2)
+        # -----------------------------
+        # GLOW EFFECT (MAGIC)
+        # -----------------------------
+        for lw, alpha in [(8, 0.08), (6, 0.12), (4, 0.2)]:
+            ax.plot(x, msg_values, linewidth=lw, color=msg_color, alpha=alpha)
+            ax.plot(x, voice_values, linewidth=lw, color=voice_color, alpha=alpha)
 
-        # ---------------------------
-        # LINES
-        # ---------------------------
+        # Hauptlinien
         ax.plot(
             x, msg_values,
             linewidth=2.8,
             marker="o",
-            markersize=5,
+            markersize=6,
             color=msg_color,
             label="Nachrichten"
         )
@@ -182,49 +174,51 @@ class Analytics(commands.Cog):
             x, voice_values,
             linewidth=2.8,
             marker="o",
-            markersize=5,
+            markersize=6,
             color=voice_color,
-            label="Voice"
+            label="Sprachzeit"
         )
 
-        # Kein heavy fill
-        ax.fill_between(x, msg_values, 0, alpha=0.05, color=msg_color)
-        ax.fill_between(x, voice_values, 0, alpha=0.05, color=voice_color)
+        # -----------------------------
+        # GRID (klar sichtbar)
+        # -----------------------------
+        ax.grid(color="#1f2937", linewidth=0.8, alpha=0.8)
 
-        # ---------------------------
-        # TITLE
-        # ---------------------------
-        ax.set_title(title, fontsize=13, weight="bold", color="white", pad=6)
-
-        # ---------------------------
-        # AXIS
-        # ---------------------------
-        ax.set_ylabel("Aktivität", fontsize=9, color="#cccccc")
+        # -----------------------------
+        # AXIS STYLE
+        # -----------------------------
+        ax.set_ylabel("Aktivität", fontsize=10, color="#d1d5db")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
-        ax.tick_params(axis="x", colors="#bfbfbf", labelsize=8)
-        ax.tick_params(axis="y", colors="#bfbfbf", labelsize=8)
+        ax.tick_params(axis="x", colors="#9ca3af", labelsize=9)
+        ax.tick_params(axis="y", colors="#9ca3af", labelsize=9)
 
-        # leichte Grid Lines
-        ax.grid(color="#3a3c42", linewidth=0.5, alpha=0.35)
+        # Spines entfernen
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
-        # Clean Borders
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_color("#444")
-        ax.spines["bottom"].set_color("#444")
+        # -----------------------------
+        # LEGEND CENTER TOP
+        # -----------------------------
+        legend = ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.02),
+            ncol=2,
+            frameon=False,
+            fontsize=10
+        )
 
-        # Legend rechts oben klein
-        legend = ax.legend(frameon=False, fontsize=8, loc="upper left")
         for text in legend.get_texts():
-            text.set_color("#ffffff")
+            text.set_color("#e5e7eb")
 
         fig.tight_layout()
 
         buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", dpi=250)
+
+        # WICHTIG: nicht zu hohe DPI!
+        plt.savefig(buffer, format="png", dpi=150)
         buffer.seek(0)
         plt.close()
 
