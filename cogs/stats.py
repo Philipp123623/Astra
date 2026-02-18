@@ -138,36 +138,38 @@ class Analytics(commands.Cog):
 
     def create_chart(self, title, dates, msg_values, voice_values):
 
-        plt.style.use("dark_background")
-        fig, ax = plt.subplots(figsize=(10, 4))
+        # -------- CUMULATIVE FIX --------
+        msg_values = np.cumsum(np.array(msg_values, dtype=float))
+        voice_values = np.cumsum(np.array(voice_values, dtype=float))
 
-        # ----- SAFE TYPES -----
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        msg_values = np.array(msg_values, dtype=float)
-        voice_values = np.array(voice_values, dtype=float)
+        # -------- BIGGER GRAPH --------
+        fig, ax = plt.subplots(figsize=(14, 6))  # größer!
 
-        # ----- COLORS -----
-        msg_color = "#4cc9f0"  # hellblau
-        voice_color = "#9d4edd"  # violett
+        fig.patch.set_facecolor("#0b1020")
+        ax.set_facecolor("#0f1630")
 
-        # ----- LINES -----
+        msg_color = "#4cc9f0"
+        voice_color = "#9d4edd"
+
+        # Linien
         ax.plot(x, msg_values,
-                linewidth=3,
+                linewidth=4,
                 marker="o",
-                markersize=5,
+                markersize=6,
                 color=msg_color,
                 label="Nachrichten")
 
         ax.plot(x, voice_values,
-                linewidth=3,
+                linewidth=4,
                 marker="o",
-                markersize=5,
+                markersize=6,
                 color=voice_color,
                 label="Voice Minuten")
 
-        # ----- SOFT FILL -----
+        # Fills
         ax.fill_between(x, msg_values, 0,
                         alpha=0.15,
                         color=msg_color)
@@ -176,26 +178,23 @@ class Analytics(commands.Cog):
                         alpha=0.15,
                         color=voice_color)
 
-        # ----- AXIS STYLE -----
-        ax.set_title(title, fontsize=14, weight="bold", pad=10)
-        ax.set_ylabel("Aktivität")
+        # Axis
+        ax.set_title(title, fontsize=18, weight="bold", pad=15)
+        ax.set_ylabel("Kumulative Aktivität", fontsize=12)
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
         fig.autofmt_xdate()
 
-        ax.grid(alpha=0.15)
-        ax.legend(frameon=False)
+        ax.grid(alpha=0.1)
+        ax.legend(frameon=False, fontsize=12)
 
-        # ----- CLEAN BACKGROUND -----
-        ax.set_facecolor("#0f1020")
-        fig.patch.set_facecolor("#0f1020")
-
-        fig.tight_layout()
+        # Mehr Abstand im Embed
+        fig.tight_layout(pad=3)
 
         buffer = io.BytesIO()
-        plt.savefig(buffer, format="png", dpi=300)
+        plt.savefig(buffer, format="png", dpi=350, bbox_inches="tight")
         buffer.seek(0)
         plt.close()
 
@@ -306,35 +305,31 @@ class Analytics(commands.Cog):
                                if r["user_id"] == member.id), "-")
 
             embed = discord.Embed(
-                title=f"Stats für {member.display_name}",
-                color=0x1f6feb  # Astra Blau
+                title=f"📊 Statistik • {member.display_name}",
+                color=0x1f6feb
+            )
+
+            embed.description = (
+                f"**🗓 Zeitraum:** 7 & 30 Tage Übersicht\n"
+                f"**👤 Server Rang:** Nachrichten `#{rank_msg}` • Voice `#{rank_voice}`"
             )
 
             embed.add_field(
-                name="Nachrichten",
+                name="💬 Nachrichten",
                 value=(
-                    f"7 Tage: `{msg_7}`\n"
-                    f"30 Tage: `{msg_30}`"
+                    f"**7 Tage:** `{msg_7}`\n"
+                    f"**30 Tage:** `{msg_30}`"
                 ),
                 inline=True
             )
 
             embed.add_field(
-                name="Voice Minuten",
+                name="🎙 Voice Minuten",
                 value=(
-                    f"7 Tage: `{voice_7}`\n"
-                    f"30 Tage: `{voice_30}`"
+                    f"**7 Tage:** `{voice_7}`\n"
+                    f"**30 Tage:** `{voice_30}`"
                 ),
                 inline=True
-            )
-
-            embed.add_field(
-                name="Server Rang",
-                value=(
-                    f"Nachrichten: `#{rank_msg}`\n"
-                    f"Sprachzeit: `#{rank_voice}`"
-                ),
-                inline=False
             )
 
             # Chart (7 Tage)
