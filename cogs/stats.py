@@ -163,22 +163,34 @@ class Analytics(commands.Cog):
         plt.style.use("dark_background")
         fig, ax = plt.subplots(figsize=(11, 4.5))
 
+        # --- SAFE TYPE CONVERSION ---
+        dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        ax.plot_date(dates, msg_values, "-",
-                     linewidth=3,
-                     label="Nachrichten")
+        msg_values = np.array(msg_values, dtype=float)
+        voice_values = np.array(voice_values, dtype=float)
 
-        ax.plot_date(dates, voice_values, "-",
-                     linewidth=3,
-                     label="Voice Minuten")
+        # --- LINES ---
+        ax.plot(x, msg_values,
+                linewidth=3,
+                label="Nachrichten")
 
-        ax.fill_between(dates, msg_values, alpha=0.15)
-        ax.fill_between(dates, voice_values, alpha=0.15)
+        ax.plot(x, voice_values,
+                linewidth=3,
+                label="Voice Minuten")
 
+        # --- SAFE FILL ---
+        ax.fill_between(x, msg_values, 0, alpha=0.15)
+        ax.fill_between(x, voice_values, 0, alpha=0.15)
+
+        # --- FORMAT ---
         ax.set_title(title, fontsize=14, weight="bold")
         ax.set_ylabel("Aktivität")
+
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
+        ax.xaxis.set_major_locator(mdates.DayLocator())
+
+        fig.autofmt_xdate()
 
         ax.grid(alpha=0.2)
         ax.legend()
