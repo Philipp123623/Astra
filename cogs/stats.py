@@ -253,8 +253,6 @@ class Analytics(commands.Cog):
 
     async def send_stats(self, interaction, mode, days, target_id=None):
 
-        await interaction.response.defer()
-
         guild = interaction.guild
         start_7 = datetime.utcnow().date() - timedelta(days=6)
         start_30 = datetime.utcnow().date() - timedelta(days=29)
