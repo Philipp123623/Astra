@@ -5,10 +5,9 @@ import re
 import html
 import asyncio
 from typing import Optional, Literal, List, Tuple
-
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
+from discord import app_commands, ui
 
 ASTRA_BLUE = discord.Colour.blue()
 
@@ -16,6 +15,17 @@ ASTRA_BLUE = discord.Colour.blue()
 #                      HELPERS
 # =========================================================
 
+def _plural(n: int, s: str, p: str) -> str:
+    return f"{n} {s if n == 1 else p}"
+
+def sanitize_filename(name: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9._-]+", "-", name)[:60]
+
+def mk_embed(*, title: str, description: str = "", color: discord.Colour = ASTRA_BLUE):
+    return discord.Embed(title=title, description=description, colour=color)
+
+def fmt_user(u: discord.abc.User) -> str:
+    return f"{u.name}#{u.discriminator}"
 # Globale Presets (passen für alle Felder)
 # Values sind „Input-Strings“, die der Parser versteht.
 GLOBAL_PRESETS = [
@@ -209,253 +219,352 @@ async def set_guild_config(pool, guild_id: int, **kwargs):
         async with conn.cursor() as cur:
             await cur.execute(q, tuple(vals))
 
-# =========================================================
-#                 SETUP WIZARD (VIEWS/MODAL)
-# =========================================================
+class PanelTextModal(ui.Modal, title="Ticket-Panel Texte"):
+    def __init__(self, wizard: "SetupWizardLayout"):
+        super().__init__(timeout=300)
+        self.wizard = wizard
 
-class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
-    def __init__(self, cb_submit):
-        super().__init__(timeout=180)
-        self._cb_submit = cb_submit
-        self.inp_title = discord.ui.TextInput(
+        self.title_inp = ui.TextInput(
             label="Panel-Titel",
-            placeholder="z. B. Support, Teamkontakt, Bewerben …",
+            placeholder="z. B. Support, Bewerbungen …",
             max_length=100,
             required=True,
         )
-        self.inp_desc = discord.ui.TextInput(
+        self.desc_inp = ui.TextInput(
             label="Panel-Beschreibung",
             style=discord.TextStyle.paragraph,
-            placeholder="Beschreibe kurz, wofür dieses Ticket gedacht ist.",
             max_length=1024,
             required=True,
         )
-        self.add_item(self.inp_title)
-        self.add_item(self.inp_desc)
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
+        self.add_item(self.title_inp)
+        self.add_item(self.desc_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Nur der Ersteller darf das.",
+                ephemeral=True
+            )
+
+        self.wizard.panel_title = self.title_inp.value.strip()
+        self.wizard.panel_desc = self.desc_inp.value.strip()
+        self.wizard.step = 3
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
 
 
-class SetupWizardView(discord.ui.View):
-    """Geführter Wizard: Kanal/Kategorie/Rolle → Modal → Erstellen"""
+# ---------------------------------------------------------
 
+class ChannelPick(ui.ChannelSelect):
+    def __init__(self, wizard):
+        super().__init__(
+            placeholder="📢 Ziel-Kanal",
+            channel_types=[discord.ChannelType.text],
+            custom_id="ticket_setup:channel",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
+
+        self.wizard.target_channel = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
+
+class CategoryPick(ui.ChannelSelect):
+    def __init__(self, wizard):
+        super().__init__(
+            placeholder="🗂 Kategorie",
+            channel_types=[discord.ChannelType.category],
+            custom_id="ticket_setup:category",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
+
+        self.wizard.category = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
+
+class RolePick(ui.RoleSelect):
+    def __init__(self, wizard):
+        super().__init__(
+            placeholder="🛡 Support-Rolle",
+            custom_id="ticket_setup:role",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
+
+        self.wizard.role = self.values[0]
+        self.wizard.rebuild()
+        await interaction.response.edit_message(view=self.wizard)
+
+
+# ---------------------------------------------------------
+
+class NextButton(ui.Button):
+    def __init__(self, wizard):
+        super().__init__(
+            label="Weiter",
+            style=discord.ButtonStyle.blurple,
+            disabled=not (wizard.target_channel and wizard.category and wizard.role),
+            custom_id="ticket_setup:next",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
+
+        self.wizard.step = 2
+        self.wizard.rebuild()
+        await interaction.response.send_modal(PanelTextModal(self.wizard))
+
+
+class CancelButton(ui.Button):
+    def __init__(self, wizard):
+        super().__init__(
+            label="Abbrechen",
+            style=discord.ButtonStyle.red,
+            emoji="<:Astra_x:1141303954555289600>",
+            custom_id="ticket_setup:cancel",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content="❌ **Setup abgebrochen**\n\nDer Ticket-Setup-Wizard wurde beendet.",
+            view=None
+        )
+
+
+
+
+class CreateButton(ui.Button):
+    def __init__(self, wizard):
+        super().__init__(
+            label="Erstellen",
+            style=discord.ButtonStyle.green,
+            disabled=not (wizard.panel_title and wizard.panel_desc),
+            custom_id="ticket_setup:create",
+        )
+        self.wizard = wizard
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.wizard.invoker.id:
+            return await interaction.response.send_message("❌ Kein Zugriff.", ephemeral=True)
+
+        raw = self.wizard.target_channel
+        guild = interaction.guild
+
+        ch = guild.get_channel(raw.id) if raw else None
+        if not isinstance(ch, discord.TextChannel):
+            return await interaction.response.send_message(
+                "❌ Ziel-Kanal nicht gefunden oder kein Textkanal.",
+                ephemeral=True
+            )
+
+        if not ch:
+            return
+
+        embed = mk_embed(
+            title=self.wizard.panel_title,
+            description=self.wizard.panel_desc,
+        )
+
+        await ch.send(embed=embed, view=TicketOpenView(self.wizard.bot))
+        await interaction.response.edit_message(
+            embed=mk_embed(
+                title="<:Astra_accept:1141303821176422460> Erfolgreich",
+                description=f"Ticket-Panel wurde in {ch.mention} erstellt.",
+            ),
+            view=None,
+        )
+
+
+class SetupWizardLayout(ui.LayoutView):
     def __init__(self, bot: commands.Bot, invoker: discord.User):
         super().__init__(timeout=None)
         self.bot = bot
         self.invoker = invoker
 
-        # State
+        self.step = 1
         self.target_channel: Optional[discord.TextChannel] = None
         self.category: Optional[discord.CategoryChannel] = None
         self.role: Optional[discord.Role] = None
         self.panel_title: Optional[str] = None
         self.panel_desc: Optional[str] = None
 
-        self.btn_next.disabled = True
-        self.btn_create.disabled = True
+        self.rebuild()
 
-    # ---------- Selects (discord.py-kompatibel) ----------
+    def rebuild(self):
+        self.clear_items()
 
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        placeholder="Wähle Ziel-Kanal (Text)",
-        channel_types=[discord.ChannelType.text],
-        min_values=1, max_values=1,
-        custom_id="ticket_setup:channel",
-    )
-    async def sel_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        self.target_channel = select.values[0]  # type: ignore
-        await self._redraw(interaction)
+        steps = {
+            1: "🧭 Schritt 1 von 3 · Grundlagen",
+            2: "✍️ Schritt 2 von 3 · Panel-Texte",
+            3: "✅ Schritt 3 von 3 · Überprüfung",
+        }
 
-    @discord.ui.select(
-        cls=discord.ui.ChannelSelect,
-        placeholder="Wähle Ticket-Kategorie",
-        channel_types=[discord.ChannelType.category],
-        min_values=1, max_values=1,
-        custom_id="ticket_setup:category",
-    )
-    async def sel_category(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        self.category = select.values[0]  # type: ignore
-        await self._redraw(interaction)
+        children = []
 
-    @discord.ui.select(
-        cls=discord.ui.RoleSelect,
-        placeholder="Wähle Support-Rolle",
-        min_values=1, max_values=1,
-        custom_id="ticket_setup:role",
-    )
-    async def sel_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
-        self.role = select.values[0]
-        await self._redraw(interaction)
+        # ==================================================
+        # HEADER
+        # ==================================================
+        children.append(
+            ui.TextDisplay(
+                f"## 🎟️ Ticket-Setup-Wizard\n"
+                f"**{steps[self.step]}**\n\n"
+                "Mit diesem Assistenten erstellst du ein **Ticket-Panel** für deinen Server.\n"
+                "_Alle Einstellungen lassen sich später jederzeit ändern._"
+            )
+        )
+        children.append(ui.Separator())
 
-    # ---------- Buttons ----------
+        # ==================================================
+        # AKTUELLE AUSWAHL (KOMPAKT)
+        # ==================================================
+        children.append(
+            ui.TextDisplay(
+                "### 📌 Aktuelle Auswahl\n\n"
+                f"**Kanal:** {self.target_channel.mention if self.target_channel else '—'}\n"
+                f"**Kategorie:** {self.category.name if self.category else '—'}\n"
+                f"**Support-Rolle:** {self.role.mention if self.role else '—'}"
+            )
+        )
+        children.append(ui.Separator())
 
-    @discord.ui.button(label="Weiter (Titel & Beschreibung)", style=discord.ButtonStyle.blurple,
-                       custom_id="ticket_setup:next")
-    async def btn_next(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
-        await interaction.response.send_modal(PanelTextModal(self._after_texts))
-
-    @discord.ui.button(label="Erstellen", style=discord.ButtonStyle.green,
-                       custom_id="ticket_setup:create")
-    async def btn_create(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Nur der Ersteller darf diesen Wizard bedienen.",
-                                                           ephemeral=True)
-
-        assert self.target_channel and self.category and self.role and self.panel_title and self.panel_desc
-
-        # ⬇️ Wrapper -> echte Objekte
-        guild = interaction.guild
-        chan = guild.get_channel(int(self.target_channel.id)) or await guild.fetch_channel(int(self.target_channel.id))
-        cat = guild.get_channel(int(self.category.id))  # nur für Anzeige/Validierung
-        role = guild.get_role(int(self.role.id))
-
-        if not isinstance(chan, discord.TextChannel):
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Der gewählte Kanal ist kein Textkanal.", ephemeral=True)
-        if not isinstance(cat, discord.CategoryChannel):
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die gewählte Kategorie existiert nicht mehr.",
-                                                           ephemeral=True)
-        if role is None:
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die gewählte Rolle existiert nicht mehr.", ephemeral=True)
-
-        # DB schreiben
-        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID) VALUES(%s, %s, %s, %s, %s)",
-                    (guild.id, chan.id, self.panel_title, role.id, cat.id),
+        # ==================================================
+        # STEP 1 – GRUNDLAGEN
+        # ==================================================
+        if self.step == 1:
+            children.append(
+                ui.TextDisplay(
+                    "### 🧩 Grundlagen\n\n"
+                    "Lege hier fest, **wo Tickets erstellt werden** und "
+                    "**wer Zugriff darauf hat**.\n\n"
+                    "Gehe die Punkte der Reihe nach durch:"
                 )
-
-        # Panel posten
-        panel = mk_embed(
-            title=self.panel_title,
-            description=self.panel_desc,
-            color=ASTRA_BLUE,
-            thumb=guild.icon.url if guild and guild.icon else None,
-            footer="Klicke auf den Button, um ein Ticket zu erstellen!",
-        )
-        await chan.send(embed=panel, view=TicketOpenView(self.bot))
-
-        # Abschlussmeldung
-        # Abschlussmeldung
-        done = mk_embed(
-            title="Ticket-Panel erstellt",
-            description=(
-                f"<:Astra_punkt:1141303896745201696> Kanal: <#{chan.id}>\n"
-                f"<:Astra_punkt:1141303896745201696> Kategorie: {cat.name}\n"
-                f"<:Astra_punkt:1141303896745201696> Support-Rolle: {role.mention}\n"
-                f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title}\n"
-                f"<:Astra_punkt:1141303896745201696> Beschreibung: {self.panel_desc}\n\n"
-                "Der Setup-Wizard kann geschlossen werden."
-            ),
-            color=discord.Colour.green(),
-        )
-
-        # Die ursprüngliche (ephemere) Wizard-Nachricht aktualisieren
-        try:
-            await interaction.response.edit_message(
-                content=f"<:Astra_accept:1141303821176422460> Das Panel wurde in <#{chan.id}> erstellt!",
-                embed=done,
-                view=None,
             )
-            return None
-        except discord.InteractionResponded:
-            # Falls bereits geantwortet wurde (z. B. durch vorherige Interaktionen)
-            await interaction.edit_original_response(
-                content=f"<:Astra_accept:1141303821176422460> Das Panel wurde in <#{chan.id}> erstellt!",
-                embed=done,
-                view=None,
+            children.append(ui.Separator())
+
+            # Ziel-Kanal
+            children.append(
+                ui.TextDisplay(
+                    "#### 📢 Ziel-Kanal\n"
+                    "In diesem Kanal wird das **Ticket-Panel** veröffentlicht.\n"
+                    "_Nutzer öffnen ihre Tickets über dieses Panel._"
+                )
             )
-        return None
+            children.append(ui.ActionRow(ChannelPick(self)))
+            children.append(ui.Separator())
 
-    @discord.ui.button(label="Abbrechen", style=discord.ButtonStyle.red,
-                       custom_id="ticket_setup:cancel", emoji="<:Astra_x:1141303954555289600>")
-    async def btn_cancel(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        if interaction.user.id != self.invoker.id:
-            return await interaction.response.send_message("Nur der Ersteller darf diesen Wizard bedienen.", ephemeral=True)
-        await interaction.response.edit_message(
-            embed=mk_embed(title="<:Astra_x:1141303954555289600> Abgebrochen", description="Der Setup-Wizard wurde beendet."),
-            view=None
+            # Kategorie
+            children.append(
+                ui.TextDisplay(
+                    "#### 🗂 Kategorie für Tickets\n"
+                    "Alle neu erstellten Tickets werden automatisch "
+                    "in dieser **Kategorie** angelegt."
+                )
+            )
+            children.append(ui.ActionRow(CategoryPick(self)))
+            children.append(ui.Separator())
+
+            # Support-Rolle
+            children.append(
+                ui.TextDisplay(
+                    "#### 🛡 Support-Rolle\n"
+                    "Mitglieder mit dieser Rolle können Tickets "
+                    "**sehen, beantworten und schließen**."
+                )
+            )
+            children.append(ui.ActionRow(RolePick(self)))
+            children.append(ui.Separator())
+
+            # Actions
+            children.append(
+                ui.ActionRow(
+                    NextButton(self),
+                    CancelButton(self),
+                )
+            )
+
+        # ==================================================
+        # STEP 2 – PANEL-TEXTE
+        # ==================================================
+        elif self.step == 2:
+            children.append(
+                ui.TextDisplay(
+                    "### ✍️ Panel-Texte\n\n"
+                    "Diese Inhalte sehen Benutzer **bevor sie ein Ticket öffnen**.\n\n"
+                    "• **Titel** – z. B. _Support_, _Bewerbungen_ oder _Hilfe_\n"
+                    "• **Beschreibung** – Regeln, Hinweise oder Infos zum Ablauf"
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.TextDisplay(
+                    "➡️ Klicke auf **Weiter**, um Titel und Beschreibung "
+                    "über ein Formular einzugeben."
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.ActionRow(
+                    NextButton(self),
+                    CancelButton(self),
+                )
+            )
+
+        # ==================================================
+        # STEP 3 – ÜBERPRÜFUNG
+        # ==================================================
+        elif self.step == 3:
+            children.append(
+                ui.TextDisplay(
+                    "### 🔍 Überprüfung\n\n"
+                    "Bitte überprüfe deine Angaben, bevor das Panel erstellt wird."
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.TextDisplay(
+                    "#### 📝 Panel-Titel\n"
+                    f"{self.panel_title or '—'}\n\n"
+                    "#### 📄 Panel-Beschreibung\n"
+                    f"{self.panel_desc or '—'}"
+                )
+            )
+            children.append(ui.Separator())
+
+            children.append(
+                ui.ActionRow(
+                    CreateButton(self),
+                    CancelButton(self),
+                )
+            )
+
+        # ==================================================
+        # CONTAINER (EINMALIG)
+        # ==================================================
+        self.add_item(
+            ui.Container(
+                *children,
+                accent_color=ASTRA_BLUE.value,
+            )
         )
-
-    # ---------- Helpers (umbenannt!) ----------
-
-    def build_embed(self) -> discord.Embed:
-        def lbl_channel(ch):
-            if not ch:
-                return "Nicht gesetzt"
-            # Versuch 1: mention (hat sowohl TextChannel als auch AppCommandChannel)
-            m = getattr(ch, "mention", None)
-            if m:
-                return m
-            # Fallback: name + id
-            nm = getattr(ch, "name", None)
-            cid = getattr(ch, "id", None)
-            if nm and cid:
-                return f"#{nm} (ID: {cid})"
-            return "Nicht gesetzt"
-
-        def lbl_cat(cat):
-            if not cat:
-                return "Nicht gesetzt"
-            # Kategorie kann auch AppCommandChannel(Category) sein
-            nm = getattr(cat, "name", None)
-            if nm:
-                return nm
-            return "Nicht gesetzt"
-
-        def lbl_role(r):
-            if not r:
-                return "Nicht gesetzt"
-            m = getattr(r, "mention", None)
-            if m:
-                return m
-            nm = getattr(r, "name", None)
-            rid = getattr(r, "id", None)
-            if nm and rid:
-                return f"@{nm} (ID: {rid})"
-            return "Nicht gesetzt"
-
-        lines = []
-        lines.append("**So funktioniert's:**")
-        lines.append("1️⃣ Wähle **Ziel-Kanal**, **Kategorie** und **Support-Rolle** über die Menüs.")
-        lines.append("2️⃣ Klicke **Weiter**, um Titel & Beschreibung einzutragen.")
-        lines.append("3️⃣ Klicke **Erstellen**, um das Panel zu posten.\n")
-        lines.append("**Aktuelle Auswahl:**")
-        lines.append(f"<:Astra_punkt:1141303896745201696> Kanal: {lbl_channel(self.target_channel)}")
-        lines.append(f"<:Astra_punkt:1141303896745201696> Kategorie: {lbl_cat(self.category)}")
-        lines.append(f"<:Astra_punkt:1141303896745201696> Support-Rolle: {lbl_role(self.role)}")
-        if self.panel_title or self.panel_desc:
-            lines.append(f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title or 'Nicht gesetzt'}")
-            if self.panel_desc:
-                short = self.panel_desc[:80] + ("…" if len(self.panel_desc) > 80 else "")
-                lines.append(f"<:Astra_punkt:1141303896745201696> Beschreibung: {short}")
-            else:
-                lines.append("<:Astra_punkt:1141303896745201696> Beschreibung: Nicht gesetzt")
-        lines.append(f"\n\n<:Astra_wichtig:1141303951862534224> **Wichtig:** Um unseren Bot und eure Discord-Server vor [<:Astra_url:1141303937056657458> **Ratelimits**](https://discord.com/developers/docs/topics/rate-limits) zu schützen, können nur User mit der Supportrolle, Tickets schließen.")
-
-        return mk_embed(title="<:Astra_ticket:1141833836204937347> Ticket-Setup-Wizard", description="\n".join(lines), color=ASTRA_BLUE)
-
-    async def _after_texts(self, interaction: discord.Interaction, title: str, desc: str):
-        self.panel_title = title.strip()
-        self.panel_desc = desc.strip()
-        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
-        await self._redraw(interaction)
-
-    async def _redraw(self, interaction: discord.Interaction):
-        self.btn_next.disabled = not (self.target_channel and self.category and self.role)
-        self.btn_create.disabled = not (self.panel_title and self.panel_desc)
-        embed = self.build_embed()
-
-        try:
-            # Falls die Response noch nicht benutzt wurde:
-            await interaction.response.edit_message(embed=embed, view=self)
-        except discord.InteractionResponded:
-            # Wenn schon geantwortet: Original-Message updaten
-            await interaction.edit_original_response(embed=embed, view=self)
 
 
 # =========================================================
@@ -766,80 +875,22 @@ class TicketButtons(discord.ui.View):
 #                      PANEL VIEW
 # =========================================================
 
-class TicketOpenView(discord.ui.View):
+class TicketOpenView(ui.View):
     def __init__(self, bot: commands.Bot):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="Ticket öffnen", style=discord.ButtonStyle.green, emoji="<:Astra_ticket:1141833836204937347>", custom_id="ticket_panel:open")
-    async def open_ticket(self, interaction: discord.Interaction, _button: discord.Button):
-        guild = interaction.guild
-        user = interaction.user
-        panel_channel: discord.TextChannel = interaction.channel  # type: ignore
-
-        # Panel-Config
-        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT categoryID, thema, roleID FROM ticketsystem WHERE channelID=%s", (panel_channel.id,))
-                row = await cur.fetchone()
-        if not row:
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Für diesen Kanal ist kein Ticket-Panel hinterlegt.", ephemeral=True)
-
-        category_id, thema, role_id = int(row[0]), row[1], int(row[2])
-        category = guild.get_channel(category_id)
-        role = guild.get_role(role_id)
-        if not isinstance(category, discord.CategoryChannel):
-            return await interaction.response.send_message("<:Astra_x:1141303954555289600> Die hinterlegte Ticket-Kategorie existiert nicht mehr.", ephemeral=True)
-
-        # Schon ein Ticket?
-        for ch in category.text_channels:
-            if ch.topic == str(user.id):
-                return await interaction.response.send_message("<:Astra_x:1141303954555289600> Du hast bereits ein offenes Ticket in dieser Kategorie.", ephemeral=True)
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-            user: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-        }
-        if role:
-            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
-
-        new_channel = await guild.create_text_channel(
-            name=f"ticket-{sanitize_filename(user.name)}".lower(),
-            category=category,
-            overwrites=overwrites,
-            topic=str(user.id),
-            reason="Ticket eröffnet",
+    @ui.button(
+        label="Ticket öffnen",
+        style=discord.ButtonStyle.green,
+        emoji="<:Astra_ticket:1141833836204937347>",
+        custom_id="ticket_panel:open",
+    )
+    async def open_ticket(self, interaction: discord.Interaction, _):
+        await interaction.response.send_message(
+            "<:Astra_accept:1141303821176422460> Ticket erstellt.",
+            ephemeral=True
         )
-
-        e = mk_embed(
-            title=f"Ticket von {user.name}",
-            description=f"Hallo {user.mention}! Ein Teammitglied meldet sich gleich. "
-                        f"Bitte beschreibe in der Zwischenzeit dein Anliegen.",
-            color=ASTRA_BLUE,
-        )
-        e.set_author(name=str(user), icon_url=user.display_avatar.url)
-        e.add_field(name="Thema", value=thema or "—")
-        e.add_field(name="Geclaimed von", value="Nicht geclaimed")
-
-        msg = await new_channel.send(
-            f"{role.mention if role else ''} {user.mention}".strip(),  # Ping nur beim Erstellen
-            embed=e,
-            view=TicketButtons(self.bot)
-        )
-
-        # DB
-        async with self.bot.pool.acquire() as conn:  # type: ignore[attr-defined]
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "INSERT INTO ticketsystem_channels(guildID, channelID, msgID, opened, claimed, closed, time) "
-                    "VALUES(%s,%s,%s,%s,%s,%s,%s)",
-                    (guild.id, new_channel.id, msg.id, user.id, "Not Set", "Not Set", discord.utils.format_dt(new_channel.created_at, "F")),
-                )
-
-        await interaction.response.send_message(f"<:Astra_accept:1141303821176422460> Dein Ticket wurde erstellt: {new_channel.mention}", ephemeral=True)
-        return None
-
 
 # =========================================================
 #                     SLASH COMMANDS
@@ -855,8 +906,8 @@ class Ticket(app_commands.Group):
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
-        view = SetupWizardView(self.bot, interaction.user)
-        await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
+        view = SetupWizardLayout(self.bot, interaction.user)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
