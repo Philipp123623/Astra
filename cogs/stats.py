@@ -228,7 +228,8 @@ class Analytics(commands.Cog):
         # -----------------------------------
         # REMOVE EXTRA SPACE
         # -----------------------------------
-        fig.tight_layout(pad=1.2)
+        fig.tight_layout()
+        plt.subplots_adjust(bottom=0.22)  # <-- DAS IST DER FIX
 
         buffer = io.BytesIO()
 
