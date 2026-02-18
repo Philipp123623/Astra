@@ -13,6 +13,38 @@ import io
 import asyncio
 import time
 from typing import List, Optional
+import logging
+from pathlib import Path
+import re
+
+SCHEMA_PATH = "/root/Astra/opt/schema.sql"  # <- Pfad zu deiner Datei
+
+async def run_sql_file(pool, path: str):
+    p = Path(path)
+    if not p.exists():
+        logging.error(f"[DB] SQL-Datei nicht gefunden: {path}")
+        return
+
+    raw = p.read_text(encoding="utf-8")
+
+    # -- Kommentare entfernen (-- … und /* … */), dann an ';' splitten
+    raw = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)          # block comments
+    lines = []
+    for line in raw.splitlines():
+        # entferne Zeilenkommentare, aber nicht in Strings (einfacher Ansatz reicht hier)
+        line = re.sub(r"--.*$", "", line)
+        lines.append(line)
+    cleaned = "\n".join(lines)
+
+    statements = [s.strip() for s in cleaned.split(";") if s.strip()]
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            for stmt in statements:
+                try:
+                    await cur.execute(stmt)
+                except Exception as e:
+                    logging.error(f"[DB] Fehler in Statement:\n{stmt}\n{e}")
+
 
 def resolve_extension(name: str) -> str:
     """
@@ -658,6 +690,7 @@ class DevTools(commands.Cog):
         self.owner_id = owner_id
         self.start_time = time.time()
         self.commands_run = 0
+        self.pool = None  # Pool-Objekt hier zentral gespeichert
 
     def cog_check(self, ctx):
         return ctx.author.id == self.owner_id
@@ -1053,6 +1086,7 @@ class DevTools(commands.Cog):
         if len(output) > 1900:
             output = output[:1900] + "\n... (gekürzt)"
         await ctx.send(f"```bash\n{output}```")
+        await run_sql_file(self.pool, SCHEMA_PATH)
 
     # --- Sysinfo ---
     @commands.command(name="sysinfo")
