@@ -222,15 +222,11 @@ class Analytics(commands.Cog):
         legend = ax.legend(
             loc="upper left",
             frameon=False,
-            fontsize=15,  # deutlich größer
-            handlelength=3,  # längere Linien
-            markerscale=1.6,  # größere Punkte
-            labelspacing=0.6
+            fontsize=10
         )
 
         for text in legend.get_texts():
-            text.set_color("#f8fafc")  # noch heller
-            text.set_fontweight("semibold")
+            text.set_color("#e2e8f0")
 
         # -----------------------------------
         # REMOVE EXTRA SPACE
