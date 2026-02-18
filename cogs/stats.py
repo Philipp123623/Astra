@@ -59,7 +59,7 @@ class Analytics(commands.Cog):
     # =====================================================
 
     @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
+    async def on_message(self, message):
         if message.bot or not message.guild:
             return
 
