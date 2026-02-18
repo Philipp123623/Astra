@@ -132,40 +132,42 @@ class Analytics(commands.Cog):
                         WHERE guild_id=%s AND user_id=%s
                     """, (member.guild.id, member.id))
 
-    # =====================================================
-    # CHART ENGINE (clean & readable)
-    # =====================================================
-
     def create_chart(self, title, dates, msg_values, voice_values):
 
-        # ---------- NORMAL VALUES ----------
         msg_values = np.array(msg_values, dtype=float)
         voice_values = np.array(voice_values, dtype=float)
 
         dates = [datetime.combine(d, datetime.min.time()) for d in dates]
         x = mdates.date2num(dates)
 
-        # ---------- SIZE ----------
-        fig, ax = plt.subplots(figsize=(12, 5))
+        # ---------------------------
+        # SIZE (optimal for Discord)
+        # ---------------------------
+        fig, ax = plt.subplots(figsize=(11, 4.8))
 
-        # ---------- CLEAN DARK (NICHT ZU DUNKEL) ----------
-        fig.patch.set_facecolor("#1e1f22")  # Discord embed gray
-        ax.set_facecolor("#2b2d31")  # Slightly lighter
+        # ---------------------------
+        # ASTRA THEME COLORS
+        # ---------------------------
+        fig.patch.set_facecolor("#232428")  # Discord background
+        ax.set_facecolor("#2b2d31")  # Embed tone
 
-        # ---------- MODERN COLORS ----------
-        msg_color = "#3ba4f7"  # softer blue
-        voice_color = "#a56eff"  # softer purple
+        msg_color = "#4da3ff"  # Astra Blue
+        voice_color = "#9f6eff"  # Astra Purple
 
-        # ---------- DYNAMIC Y SCALE ----------
+        # ---------------------------
+        # AUTO SCALE
+        # ---------------------------
         max_val = max(max(msg_values), max(voice_values), 1)
-        ax.set_ylim(0, max_val * 1.25)
+        ax.set_ylim(0, max_val * 1.3)
 
-        # ---------- LINES ----------
+        # ---------------------------
+        # CLEAN LINES (NO HEAVY FILL)
+        # ---------------------------
         ax.plot(
             x, msg_values,
             linewidth=3,
             marker="o",
-            markersize=7,
+            markersize=6,
             color=msg_color,
             label="Nachrichten"
         )
@@ -174,34 +176,44 @@ class Analytics(commands.Cog):
             x, voice_values,
             linewidth=3,
             marker="o",
-            markersize=7,
+            markersize=6,
             color=voice_color,
             label="Voice Minuten"
         )
 
-        # ---------- LIGHT FILL ----------
-        ax.fill_between(x, msg_values, 0, alpha=0.10, color=msg_color)
-        ax.fill_between(x, voice_values, 0, alpha=0.10, color=voice_color)
+        # Very soft glow instead of heavy fill
+        ax.fill_between(x, msg_values, 0, alpha=0.06, color=msg_color)
+        ax.fill_between(x, voice_values, 0, alpha=0.06, color=voice_color)
 
-        # ---------- TITLE ----------
-        ax.set_title(title, fontsize=15, weight="bold", color="white", pad=10)
+        # ---------------------------
+        # TITLE
+        # ---------------------------
+        ax.set_title(title, fontsize=14, weight="bold", color="white", pad=8)
 
-        # ---------- AXIS ----------
-        ax.set_ylabel("Aktivität", fontsize=11, color="#dddddd")
+        # ---------------------------
+        # AXIS STYLE
+        # ---------------------------
+        ax.set_ylabel("Aktivität", fontsize=10, color="#d0d0d0")
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
-        ax.tick_params(axis="x", colors="#cccccc")
-        ax.tick_params(axis="y", colors="#cccccc")
+        ax.tick_params(axis="x", colors="#bfbfbf")
+        ax.tick_params(axis="y", colors="#bfbfbf")
 
-        # ---------- GRID ----------
-        ax.grid(color="#444", alpha=0.25, linestyle="--")
+        # Subtle grid
+        ax.grid(color="#3a3c42", linestyle="-", linewidth=0.6, alpha=0.4)
 
-        # ---------- LEGEND ----------
+        # Remove top/right border (cleaner look)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#444")
+        ax.spines["bottom"].set_color("#444")
+
+        # Legend
         legend = ax.legend(frameon=False)
         for text in legend.get_texts():
-            text.set_color("#ffffff")
+            text.set_color("white")
 
         fig.autofmt_xdate()
         fig.tight_layout()
