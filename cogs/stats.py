@@ -318,8 +318,10 @@ class Analytics(commands.Cog):
         await self.send_stats(interaction, "server", 7)
 
     @statistik.command(name="user")
-    async def user(self, interaction: discord.Interaction, member: discord.Member):
+    async def user(self, interaction: discord.Interaction, member: discord.Member=None):
         await interaction.response.defer()
+        if member is None:
+            member = interaction.user
         await self.send_stats(interaction, "user", 7, member.id)
 
     @statistik.command(name="reset")
