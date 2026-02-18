@@ -152,10 +152,10 @@ class Analytics(commands.Cog):
 
         max_val = max(max(msg_values), max(voice_values), 1)
 
-        if np.count_nonzero(msg_values) <= 1 and np.count_nonzero(voice_values) <= 1:
-            ax.set_ylim(0, max_val + 5)
-        else:
-            ax.set_ylim(0, max_val * 1.2 + 1)
+        bottom_padding = max_val * 0.08
+        top_padding = max_val * 0.25
+
+        ax.set_ylim(-bottom_padding, max_val + top_padding)
 
         # -----------------------------------
         # SOFTER GLOW
