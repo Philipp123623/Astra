@@ -197,13 +197,16 @@ class Analytics(commands.Cog):
         # -----------------------------------
         # AXIS
         # -----------------------------------
-        ax.set_ylabel("Aktivität", fontsize=10, color="#cbd5e1")
+        ax.set_ylabel("Aktivität", fontsize=12, color="#e2e8f0")
+
 
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.xaxis.set_major_locator(mdates.DayLocator())
 
-        ax.tick_params(axis="x", colors="#94a3b8", labelsize=9)
-        ax.tick_params(axis="y", colors="#94a3b8", labelsize=9)
+        ax.tick_params(axis="x", colors="#e2e8f0", labelsize=11)
+        ax.tick_params(axis="y", colors="#e2e8f0", labelsize=11)
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_fontweight("medium")
 
         for spine in ax.spines.values():
             spine.set_visible(False)
