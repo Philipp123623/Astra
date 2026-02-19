@@ -327,7 +327,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -358,7 +359,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -385,7 +387,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -422,7 +425,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -494,7 +498,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -550,7 +555,8 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    discord.ui.TextDisplay(box)
+                    discord.ui.TextDisplay(box),
+                    accessory=None
                 )
             )
         )
@@ -1012,7 +1018,11 @@ class Ticket(app_commands.Group):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
         view = SetupWizardView(self.bot, interaction.user)
-        await interaction.response.send_message(view=view, ephemeral=True)
+
+        await interaction.response.send_message(
+            view=view,
+            ephemeral=True  # wichtig → nur der User sieht den Wizard
+        )
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
