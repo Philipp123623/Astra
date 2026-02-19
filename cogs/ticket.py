@@ -5,7 +5,7 @@ import re
 import html
 import asyncio
 from typing import Optional, Literal, List, Tuple
-
+from discord import ui
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -237,7 +237,7 @@ class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
         await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
 
 
-class SetupWizardView(discord.ui.View):
+class SetupWizardView(ui.LayoutView):
 
     TOTAL_STEPS = 4
 
@@ -981,7 +981,7 @@ class Ticket(app_commands.Group):
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     async def ticket_setup(self, interaction: discord.Interaction):
         view = SetupWizardView(self.bot, interaction.user)
-        await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     # Panels auflisten
     @app_commands.command(name="anzeigen", description="Listet alle Ticket-Panels dieses Servers auf.")
