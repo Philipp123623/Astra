@@ -306,7 +306,7 @@ class SetupWizardView(ui.LayoutView):
         await interaction.response.edit_message(view=self)
 
     # =========================================================
-    # PROGRESS BLOCK
+    # PROGRESS
     # =========================================================
 
     def _progress(self):
@@ -326,15 +326,12 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
     # =========================================================
-    # STATUS BLOCK
+    # STATUS
     # =========================================================
 
     def _status(self):
@@ -358,15 +355,12 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
     # =========================================================
-    # PAGE 0 – INTRO
+    # PAGE 0
     # =========================================================
 
     def _page_intro(self):
@@ -386,10 +380,7 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
@@ -405,7 +396,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(start)
 
     # =========================================================
-    # PAGE 1 – PANEL
+    # PAGE 1
     # =========================================================
 
     def _page_panel(self):
@@ -424,10 +415,7 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
@@ -478,7 +466,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(text_btn)
 
     # =========================================================
-    # PAGE 2 – SYSTEM SETTINGS
+    # PAGE 2
     # =========================================================
 
     def _page_system(self):
@@ -497,10 +485,7 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
@@ -535,7 +520,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(select)
 
     # =========================================================
-    # PAGE 3 – FINISH
+    # PAGE 3
     # =========================================================
 
     def _page_finish(self):
@@ -554,10 +539,7 @@ class SetupWizardView(ui.LayoutView):
 
         self.add_item(
             discord.ui.Container(
-                discord.ui.Section(
-                    discord.ui.TextDisplay(box),
-                    accessory=None
-                )
+                discord.ui.TextDisplay(box)
             )
         )
 
