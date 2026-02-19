@@ -5,7 +5,7 @@ import re
 import html
 import asyncio
 from typing import Optional, Literal, List, Tuple
-from discord import ui
+
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -237,7 +237,7 @@ class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
         await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
 
 
-class SetupWizardView(ui.LayoutView):
+class SetupWizardView(discord.ui.LayoutView):
 
     TOTAL_STEPS = 4
 
@@ -294,7 +294,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="📊 SETUP FORTSCHRITT",
+                    label="📊 SETUP FORTSCHRITT",
                     description=(
                         "╔══════════════════════════════════════╗\n"
                         f"║   Schritt {self.page+1}/{self.TOTAL_STEPS}                         ║\n"
@@ -315,7 +315,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="📌 KONFIGURATIONS-ÜBERSICHT",
+                    label="📌 KONFIGURATIONS-ÜBERSICHT",
                     description=(
                         "╔══════════════════════════════════════╗\n"
                         "║              PANEL STATUS           ║\n"
@@ -341,7 +341,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="🎫 ASTRA PREMIUM SETUP",
+                    label="🎫 ASTRA PREMIUM SETUP",
                     description=(
                         "╭──────────────────────────────────────╮\n"
                         "│  Willkommen im erweiterten Wizard   │\n"
@@ -370,7 +370,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="📦 PANEL KONFIGURATION",
+                    label="📦 PANEL KONFIGURATION",
                     description=(
                         "╭──────────────────────────────────────╮\n"
                         "│  Wähle die Basis deines Panels.     │\n"
@@ -429,7 +429,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="⚙ SYSTEM-EINSTELLUNGEN",
+                    label="⚙ SYSTEM-EINSTELLUNGEN",
                     description=(
                         "╔══════════════════════════════════════╗\n"
                         "║  Passe optionale Systemwerte an.   ║\n"
@@ -484,7 +484,7 @@ class SetupWizardView(ui.LayoutView):
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    title="🚀 ABSCHLUSS",
+                    label="🚀 ABSCHLUSS",
                     description=(
                         "╭──────────────────────────────────────╮\n"
                         "│  Panel wird nur erstellt wenn       │\n"
