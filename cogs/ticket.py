@@ -5,7 +5,7 @@ import re
 import html
 import asyncio
 from typing import Optional, Literal, List, Tuple
-
+from discord import ui
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -237,7 +237,7 @@ class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
         await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
 
 
-class SetupWizardView(discord.ui.LayoutView):
+class SetupWizardView(ui.LayoutView):
 
     TOTAL_STEPS = 4
 
@@ -247,7 +247,6 @@ class SetupWizardView(discord.ui.LayoutView):
         self.invoker = invoker
         self.page = 0
 
-        # PANEL STATE
         self.target_channel = None
         self.category = None
         self.role = None
@@ -257,14 +256,36 @@ class SetupWizardView(discord.ui.LayoutView):
         self._build()
 
     # =========================================================
+    # DESIGN HELPERS
+    # =========================================================
+
+    def _frame(self, title: str, lines: list[str]) -> str:
+        width = 46
+        top = "╭" + "─" * width + "╮"
+        mid = "├" + "─" * width + "┤"
+        bottom = "╰" + "─" * width + "╯"
+
+        formatted_lines = []
+        for line in lines:
+            formatted_lines.append(f"│  {line:<42}│")
+
+        return "\n".join([
+            top,
+            f"│  {title:<42}│",
+            mid,
+            *formatted_lines,
+            bottom
+        ])
+
+    def _divider(self):
+        return "┈" * 48
+
+    # =========================================================
     # CORE
     # =========================================================
 
-    def _clear(self):
-        self.clear_items()
-
     def _build(self):
-        self._clear()
+        self.clear_items()
         self._progress()
         self._status()
 
@@ -285,25 +306,35 @@ class SetupWizardView(discord.ui.LayoutView):
         await interaction.response.edit_message(view=self)
 
     # =========================================================
-    # GLOBAL CONTAINERS
+    # PROGRESS BLOCK
     # =========================================================
 
     def _progress(self):
-        dots = ["●" if i <= self.page else "○" for i in range(self.TOTAL_STEPS)]
+        dots = " ".join(
+            "●" if i == self.page else "○"
+            for i in range(self.TOTAL_STEPS)
+        )
+
+        box = self._frame(
+            "📊 SETUP FORTSCHRITT",
+            [
+                f"Schritt {self.page+1} von {self.TOTAL_STEPS}",
+                "",
+                dots
+            ]
+        )
 
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="📊 SETUP FORTSCHRITT",
-                    description=(
-                        "╔══════════════════════════════════════╗\n"
-                        f"║   Schritt {self.page+1}/{self.TOTAL_STEPS}                         ║\n"
-                        f"║   {' '.join(dots)}                                ║\n"
-                        "╚══════════════════════════════════════╝"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
+
+    # =========================================================
+    # STATUS BLOCK
+    # =========================================================
 
     def _status(self):
 
@@ -312,22 +343,22 @@ class SetupWizardView(discord.ui.LayoutView):
                 return "Nicht gesetzt"
             return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
 
+        box = self._frame(
+            "📌 KONFIGURATIONS STATUS",
+            [
+                f"Kanal: {fmt(self.target_channel)}",
+                f"Kategorie: {fmt(self.category)}",
+                f"Support Rolle: {fmt(self.role)}",
+                "",
+                f"Titel: {self.panel_title or 'Nicht gesetzt'}",
+                f"Beschreibung: {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}"
+            ]
+        )
+
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="📌 KONFIGURATIONS-ÜBERSICHT",
-                    description=(
-                        "╔══════════════════════════════════════╗\n"
-                        "║              PANEL STATUS           ║\n"
-                        "╠══════════════════════════════════════╣\n"
-                        f"║  📂 Kanal         → {fmt(self.target_channel)}\n"
-                        f"║  🗂 Kategorie     → {fmt(self.category)}\n"
-                        f"║  👥 Support-Rolle → {fmt(self.role)}\n"
-                        "╠══════════════════════════════════════╣\n"
-                        f"║  🏷 Titel         → {self.panel_title or 'Nicht gesetzt'}\n"
-                        f"║  📝 Beschreibung  → {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}\n"
-                        "╚══════════════════════════════════════╝"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
@@ -338,22 +369,31 @@ class SetupWizardView(discord.ui.LayoutView):
 
     def _page_intro(self):
 
+        box = self._frame(
+            "🎫 ASTRA PREMIUM SETUP",
+            [
+                "Willkommen im erweiterten Wizard.",
+                "Konfiguriere dein Ticketsystem",
+                "vollständig & modern.",
+                "",
+                self._divider(),
+                "",
+                "Drücke 'Setup starten' um zu beginnen."
+            ]
+        )
+
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="🎫 ASTRA PREMIUM SETUP",
-                    description=(
-                        "╭──────────────────────────────────────╮\n"
-                        "│  Willkommen im erweiterten Wizard   │\n"
-                        "│  Konfiguriere dein Ticketsystem     │\n"
-                        "│  vollständig & modern.              │\n"
-                        "╰──────────────────────────────────────╯"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
 
-        start = discord.ui.Button(label="🚀 Setup starten", style=discord.ButtonStyle.success)
+        start = discord.ui.Button(
+            label="🚀 Setup starten",
+            style=discord.ButtonStyle.success
+        )
 
         async def start_cb(interaction):
             await self._switch(interaction, 1)
@@ -367,55 +407,68 @@ class SetupWizardView(discord.ui.LayoutView):
 
     def _page_panel(self):
 
+        box = self._frame(
+            "📦 PANEL KONFIGURATION",
+            [
+                "Wähle Ziel-Kanal & Kategorie.",
+                "Definiere die Support-Rolle.",
+                "",
+                self._divider(),
+                "",
+                "Titel & Beschreibung sind Pflicht."
+            ]
+        )
+
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="📦 PANEL KONFIGURATION",
-                    description=(
-                        "╭──────────────────────────────────────╮\n"
-                        "│  Wähle die Basis deines Panels.     │\n"
-                        "│  Alle Felder sind verpflichtend.    │\n"
-                        "╰──────────────────────────────────────╯"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
 
-        # CHANNEL
         ch = discord.ui.ChannelSelect(channel_types=[discord.ChannelType.text])
-
         async def ch_cb(interaction):
             self.target_channel = ch.values[0]
             await self._switch(interaction, self.page)
-
         ch.callback = ch_cb
         self.add_item(ch)
 
-        # CATEGORY
         cat = discord.ui.ChannelSelect(channel_types=[discord.ChannelType.category])
-
         async def cat_cb(interaction):
             self.category = cat.values[0]
             await self._switch(interaction, self.page)
-
         cat.callback = cat_cb
         self.add_item(cat)
 
-        # ROLE
         role = discord.ui.RoleSelect()
-
         async def role_cb(interaction):
             self.role = role.values[0]
             await self._switch(interaction, self.page)
-
         role.callback = role_cb
         self.add_item(role)
 
-        # TEXT MODAL
-        text_btn = discord.ui.Button(label="📝 Titel & Beschreibung setzen", style=discord.ButtonStyle.primary)
+        text_btn = discord.ui.Button(
+            label="📝 Titel & Beschreibung setzen",
+            style=discord.ButtonStyle.primary
+        )
 
         async def text_cb(interaction):
-            await interaction.response.send_modal(PanelTextModal(self))
+
+            class PanelModal(discord.ui.Modal, title="Panel Texte setzen"):
+                title_input = discord.ui.TextInput(label="Panel Titel", required=True)
+                desc_input = discord.ui.TextInput(
+                    label="Panel Beschreibung",
+                    style=discord.TextStyle.paragraph,
+                    required=True
+                )
+
+                async def on_submit(modal_self, inter2):
+                    self.panel_title = str(modal_self.title_input.value)
+                    self.panel_desc = str(modal_self.desc_input.value)
+                    await inter2.response.edit_message(view=self)
+
+            await interaction.response.send_modal(PanelModal())
 
         text_btn.callback = text_cb
         self.add_item(text_btn)
@@ -426,16 +479,22 @@ class SetupWizardView(discord.ui.LayoutView):
 
     def _page_system(self):
 
+        box = self._frame(
+            "⚙ SYSTEM EINSTELLUNGEN",
+            [
+                "Passe optionale Systemwerte an.",
+                "Diese wirken global.",
+                "",
+                self._divider(),
+                "",
+                "Beispiel: 30m • 2h • 1d • 0=Aus"
+            ]
+        )
+
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="⚙ SYSTEM-EINSTELLUNGEN",
-                    description=(
-                        "╔══════════════════════════════════════╗\n"
-                        "║  Passe optionale Systemwerte an.   ║\n"
-                        "║  Diese wirken global.              ║\n"
-                        "╚══════════════════════════════════════╝"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
@@ -443,10 +502,10 @@ class SetupWizardView(discord.ui.LayoutView):
         select = discord.ui.Select(
             placeholder="🔧 Einstellung bearbeiten",
             options=[
-                discord.SelectOption(label="Auto-Close", value="autoclose_hours", emoji="⏳"),
-                discord.SelectOption(label="Reminder", value="remind_minutes", emoji="🔔"),
-                discord.SelectOption(label="Reopen", value="reopen_hours", emoji="♻"),
-                discord.SelectOption(label="Ping-Throttle", value="ping_throttle_minutes", emoji="🚦"),
+                discord.SelectOption(label="Auto-Close", value="autoclose_hours"),
+                discord.SelectOption(label="Reminder", value="remind_minutes"),
+                discord.SelectOption(label="Reopen", value="reopen_hours"),
+                discord.SelectOption(label="Ping-Throttle", value="ping_throttle_minutes"),
             ]
         )
 
@@ -462,12 +521,7 @@ class SetupWizardView(discord.ui.LayoutView):
                     except Exception:
                         return await inter2.response.send_message("Ungültiges Format.", ephemeral=True)
 
-                    await set_guild_config(
-                        self.bot.pool,
-                        inter2.guild.id,
-                        **{key: new_val}
-                    )
-
+                    await set_guild_config(self.bot.pool, inter2.guild.id, **{key: new_val})
                     await inter2.response.send_message("Wert gespeichert.", ephemeral=True)
 
             await interaction.response.send_modal(ConfigModal())
@@ -481,60 +535,41 @@ class SetupWizardView(discord.ui.LayoutView):
 
     def _page_finish(self):
 
+        box = self._frame(
+            "🚀 ABSCHLUSS",
+            [
+                "Panel wird nur erstellt wenn",
+                "alle Pflichtfelder gesetzt sind.",
+                "",
+                self._divider(),
+                "",
+                "Überprüfe alle Einstellungen sorgfältig!"
+            ]
+        )
+
         self.add_item(
             discord.ui.Container(
                 discord.ui.Section(
-                    label="🚀 ABSCHLUSS",
-                    description=(
-                        "╭──────────────────────────────────────╮\n"
-                        "│  Panel wird nur erstellt wenn       │\n"
-                        "│  alle Pflichtfelder gesetzt sind.   │\n"
-                        "╰──────────────────────────────────────╯"
-                    )
+                    discord.ui.TextDisplay(box)
                 )
             )
         )
 
-        create = discord.ui.Button(label="🎯 Panel erstellen", style=discord.ButtonStyle.success)
+        create = discord.ui.Button(
+            label="🎯 Panel erstellen",
+            style=discord.ButtonStyle.success
+        )
 
         async def create_cb(interaction):
-
             if not await self.validate():
                 return await interaction.response.send_message(
                     "⚠ Bitte alle Pflichtfelder setzen.",
                     ephemeral=True
                 )
-
             await self._create_panel(interaction)
 
         create.callback = create_cb
         self.add_item(create)
-
-    async def _create_panel(self, interaction):
-
-        guild = interaction.guild
-
-        async with self.bot.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID) VALUES(%s,%s,%s,%s,%s)",
-                    (guild.id, self.target_channel.id, self.panel_title, self.role.id, self.category.id),
-                )
-
-        panel = mk_embed(
-            title=self.panel_title,
-            description=self.panel_desc,
-            color=ASTRA_BLUE,
-            thumb=guild.icon.url if guild and guild.icon else None,
-            footer="Klicke auf den Button, um ein Ticket zu erstellen!"
-        )
-
-        await self.target_channel.send(embed=panel, view=TicketOpenView(self.bot))
-
-        await interaction.response.edit_message(
-            content="<:Astra_accept:1141303821176422460> Panel erfolgreich erstellt.",
-            view=None
-        )
 
     # =========================================================
     # NAVIGATION
@@ -559,10 +594,6 @@ class SetupWizardView(discord.ui.LayoutView):
 
             nxt.callback = next_cb
             self.add_item(nxt)
-
-    # =========================================================
-    # VALIDATION
-    # =========================================================
 
     async def validate(self):
         return all([
