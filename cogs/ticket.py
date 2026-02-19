@@ -256,31 +256,6 @@ class SetupWizardView(ui.LayoutView):
         self._build()
 
     # =========================================================
-    # DESIGN HELPERS
-    # =========================================================
-
-    def _frame(self, title: str, lines: list[str]) -> str:
-        width = 46
-        top = "╭" + "─" * width + "╮"
-        mid = "├" + "─" * width + "┤"
-        bottom = "╰" + "─" * width + "╯"
-
-        formatted_lines = []
-        for line in lines:
-            formatted_lines.append(f"│  {line:<42}│")
-
-        return "\n".join([
-            top,
-            f"│  {title:<42}│",
-            mid,
-            *formatted_lines,
-            bottom
-        ])
-
-    def _divider(self):
-        return "┈" * 48
-
-    # =========================================================
     # CORE
     # =========================================================
 
@@ -288,62 +263,51 @@ class SetupWizardView(ui.LayoutView):
         self.clear_items()
         children = []
 
-        # ================= PROGRESS =================
-        dots = " ".join(
-            "●" if i == self.page else "○"
-            for i in range(self.TOTAL_STEPS)
+        # ================= HEADER =================
+        children.append(
+            discord.ui.TextDisplay(
+                f"# 🎫 Ticket Setup Wizard\n"
+                f"### Schritt {self.page+1} von {self.TOTAL_STEPS}\n"
+                f"{'● ' * (self.page+1)}{'○ ' * (self.TOTAL_STEPS-self.page-1)}"
+            )
         )
 
-        progress_box = self._frame(
-            "📊 SETUP FORTSCHRITT",
-            [
-                f"Schritt {self.page+1} von {self.TOTAL_STEPS}",
-                "",
-                dots
-            ]
-        )
-
-        children.append(discord.ui.TextDisplay(progress_box))
-
-        # ================= STATUS =================
+        # ================= STATUS BOX =================
         def fmt(x):
             if not x:
-                return "Nicht gesetzt"
+                return "`Nicht gesetzt`"
             return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
 
-        status_box = self._frame(
-            "📌 KONFIGURATIONS STATUS",
-            [
-                f"Kanal: {fmt(self.target_channel)}",
-                f"Kategorie: {fmt(self.category)}",
-                f"Support Rolle: {fmt(self.role)}",
-                "",
-                f"Titel: {self.panel_title or 'Nicht gesetzt'}",
-                f"Beschreibung: {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}"
-            ]
+        children.append(
+            discord.ui.TextDisplay(
+                "## 📌 Aktuelle Konfiguration\n"
+                f"**Kanal:** {fmt(self.target_channel)}\n"
+                f"**Kategorie:** {fmt(self.category)}\n"
+                f"**Support-Rolle:** {fmt(self.role)}\n\n"
+                f"**Titel:** {self.panel_title or '`Nicht gesetzt`'}\n"
+                f"**Beschreibung:** {'Gesetzt' if self.panel_desc else '`Nicht gesetzt`'}"
+            )
         )
 
-        children.append(discord.ui.TextDisplay(status_box))
+        children.append(discord.ui.Separator())
 
-        # ================= PAGES =================
+        # =========================================================
+        # PAGE 0 – INTRO
+        # =========================================================
         if self.page == 0:
-            box = self._frame(
-                "🎫 ASTRA PREMIUM SETUP",
-                [
-                    "Willkommen im erweiterten Wizard.",
-                    "Konfiguriere dein Ticketsystem",
-                    "vollständig & modern.",
-                    "",
-                    self._divider(),
-                    "",
-                    "Drücke 'Setup starten' um zu beginnen."
-                ]
+
+            children.append(
+                discord.ui.TextDisplay(
+                    "## 🚀 Willkommen\n"
+                    "Dieser Wizard führt dich Schritt für Schritt durch die Einrichtung "
+                    "deines **Ticketsystems**.\n\n"
+                    "Drücke unten auf **Setup starten**, um zu beginnen."
+                )
             )
 
-            children.append(discord.ui.TextDisplay(box))
-
             start = discord.ui.Button(
-                label="🚀 Setup starten",
+                label="Setup starten",
+                emoji="🚀",
                 style=discord.ButtonStyle.success
             )
 
@@ -353,56 +317,70 @@ class SetupWizardView(ui.LayoutView):
             start.callback = start_cb
             children.append(discord.ui.ActionRow(start))
 
+        # =========================================================
+        # PAGE 1 – PANEL CONFIG
+        # =========================================================
         elif self.page == 1:
-            box = self._frame(
-                "📦 PANEL KONFIGURATION",
-                [
-                    "Wähle Ziel-Kanal & Kategorie.",
-                    "Definiere die Support-Rolle.",
-                    "",
-                    self._divider(),
-                    "",
-                    "Titel & Beschreibung sind Pflicht."
-                ]
+
+            children.append(
+                discord.ui.TextDisplay(
+                    "## 📦 Panel Konfiguration\n"
+                    "Wähle die grundlegenden Elemente für dein Ticket-Panel."
+                )
             )
 
-            children.append(discord.ui.TextDisplay(box))
-
-            ch = discord.ui.ChannelSelect(channel_types=[discord.ChannelType.text])
-            cat = discord.ui.ChannelSelect(channel_types=[discord.ChannelType.category])
-            role = discord.ui.RoleSelect()
+            ch = discord.ui.ChannelSelect(
+                placeholder="📢 Wähle den Kanal, in dem das Ticket-Panel gepostet wird",
+                channel_types=[discord.ChannelType.text]
+            )
 
             async def ch_cb(interaction):
                 self.target_channel = ch.values[0]
                 await self._switch(interaction, self.page)
 
+            ch.callback = ch_cb
+            children.append(discord.ui.ActionRow(ch))
+
+            cat = discord.ui.ChannelSelect(
+                placeholder="🗂 Wähle die Kategorie, in der Tickets erstellt werden",
+                channel_types=[discord.ChannelType.category]
+            )
+
             async def cat_cb(interaction):
                 self.category = cat.values[0]
                 await self._switch(interaction, self.page)
+
+            cat.callback = cat_cb
+            children.append(discord.ui.ActionRow(cat))
+
+            role = discord.ui.RoleSelect(
+                placeholder="🛡 Wähle die Support-Rolle, die Tickets bearbeiten darf"
+            )
 
             async def role_cb(interaction):
                 self.role = role.values[0]
                 await self._switch(interaction, self.page)
 
-            ch.callback = ch_cb
-            cat.callback = cat_cb
             role.callback = role_cb
-
-            children.append(discord.ui.ActionRow(ch))
-            children.append(discord.ui.ActionRow(cat))
             children.append(discord.ui.ActionRow(role))
 
             text_btn = discord.ui.Button(
-                label="📝 Titel & Beschreibung setzen",
+                label="Titel & Beschreibung setzen",
+                emoji="📝",
                 style=discord.ButtonStyle.primary
             )
 
             async def text_cb(interaction):
 
                 class PanelModal(discord.ui.Modal, title="Panel Texte setzen"):
-                    title_input = discord.ui.TextInput(label="Panel Titel", required=True)
+                    title_input = discord.ui.TextInput(
+                        label="Panel Titel",
+                        placeholder="z.B. Support, Bewerbungen, Hilfe",
+                        required=True
+                    )
                     desc_input = discord.ui.TextInput(
                         label="Panel Beschreibung",
+                        placeholder="Beschreibe hier, wofür dieses Ticket gedacht ist...",
                         style=discord.TextStyle.paragraph,
                         required=True
                     )
@@ -417,28 +395,42 @@ class SetupWizardView(ui.LayoutView):
             text_btn.callback = text_cb
             children.append(discord.ui.ActionRow(text_btn))
 
+        # =========================================================
+        # PAGE 2 – SYSTEM SETTINGS
+        # =========================================================
         elif self.page == 2:
-            box = self._frame(
-                "⚙ SYSTEM EINSTELLUNGEN",
-                [
-                    "Passe optionale Systemwerte an.",
-                    "Diese wirken global.",
-                    "",
-                    self._divider(),
-                    "",
-                    "Beispiel: 30m • 2h • 1d • 0=Aus"
-                ]
+
+            children.append(
+                discord.ui.TextDisplay(
+                    "## ⚙ System Einstellungen\n"
+                    "Passe optionale automatische Funktionen an.\n\n"
+                    "`30m` • `2h` • `1d` • `0` = deaktiviert"
+                )
             )
 
-            children.append(discord.ui.TextDisplay(box))
-
             select = discord.ui.Select(
-                placeholder="🔧 Einstellung bearbeiten",
+                placeholder="🔧 Wähle eine Einstellung zum Bearbeiten",
                 options=[
-                    discord.SelectOption(label="Auto-Close", value="autoclose_hours"),
-                    discord.SelectOption(label="Reminder", value="remind_minutes"),
-                    discord.SelectOption(label="Reopen", value="reopen_hours"),
-                    discord.SelectOption(label="Ping-Throttle", value="ping_throttle_minutes"),
+                    discord.SelectOption(
+                        label="Auto-Close",
+                        description="Schließt Tickets automatisch nach X Zeit",
+                        value="autoclose_hours"
+                    ),
+                    discord.SelectOption(
+                        label="Reminder",
+                        description="Sendet Erinnerung bei Inaktivität",
+                        value="remind_minutes"
+                    ),
+                    discord.SelectOption(
+                        label="Reopen",
+                        description="Zeitfenster zum Wiederöffnen",
+                        value="reopen_hours"
+                    ),
+                    discord.SelectOption(
+                        label="Ping-Throttle",
+                        description="Limit für Support-Pings",
+                        value="ping_throttle_minutes"
+                    ),
                 ]
             )
 
@@ -446,7 +438,10 @@ class SetupWizardView(ui.LayoutView):
                 key = select.values[0]
 
                 class ConfigModal(discord.ui.Modal, title="Wert setzen"):
-                    value = discord.ui.TextInput(label="z.B. 30m, 2h, 1d, 0=Aus")
+                    value = discord.ui.TextInput(
+                        label="Zeitwert",
+                        placeholder="z.B. 30m, 2h, 1d oder 0"
+                    )
 
                     async def on_submit(modal_self, inter2):
                         try:
@@ -462,23 +457,22 @@ class SetupWizardView(ui.LayoutView):
             select.callback = select_cb
             children.append(discord.ui.ActionRow(select))
 
+        # =========================================================
+        # PAGE 3 – FINISH
+        # =========================================================
         elif self.page == 3:
-            box = self._frame(
-                "🚀 ABSCHLUSS",
-                [
-                    "Panel wird nur erstellt wenn",
-                    "alle Pflichtfelder gesetzt sind.",
-                    "",
-                    self._divider(),
-                    "",
-                    "Überprüfe alle Einstellungen sorgfältig!"
-                ]
+
+            children.append(
+                discord.ui.TextDisplay(
+                    "## 🎯 Abschluss\n"
+                    "Überprüfe deine Einstellungen.\n"
+                    "Wenn alles korrekt ist, erstelle das Panel."
+                )
             )
 
-            children.append(discord.ui.TextDisplay(box))
-
             create = discord.ui.Button(
-                label="🎯 Panel erstellen",
+                label="Panel erstellen",
+                emoji="🎯",
                 style=discord.ButtonStyle.success
             )
 
@@ -493,11 +487,13 @@ class SetupWizardView(ui.LayoutView):
             create.callback = create_cb
             children.append(discord.ui.ActionRow(create))
 
-        # ================= NAVIGATION =================
+        # =========================================================
+        # NAVIGATION
+        # =========================================================
         nav = []
 
         if self.page > 0:
-            back = discord.ui.Button(label="⬅ Zurück", style=discord.ButtonStyle.secondary)
+            back = discord.ui.Button(label="Zurück", emoji="⬅", style=discord.ButtonStyle.secondary)
 
             async def back_cb(interaction):
                 await self._switch(interaction, self.page - 1)
@@ -506,7 +502,7 @@ class SetupWizardView(ui.LayoutView):
             nav.append(back)
 
         if self.page < self.TOTAL_STEPS - 1:
-            nxt = discord.ui.Button(label="Weiter ➡", style=discord.ButtonStyle.primary)
+            nxt = discord.ui.Button(label="Weiter", emoji="➡", style=discord.ButtonStyle.primary)
 
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
@@ -517,11 +513,11 @@ class SetupWizardView(ui.LayoutView):
         if nav:
             children.append(discord.ui.ActionRow(*nav))
 
-        # ================= EIN ROOT CONTAINER =================
+        # =========================================================
+        # ROOT CONTAINER
+        # =========================================================
         self.add_item(
-            discord.ui.Container(
-                *children
-            )
+            discord.ui.Container(*children)
         )
 
     async def _switch(self, interaction, page: int):
