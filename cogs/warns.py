@@ -605,7 +605,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                                 )
                             )
 
-                    await self.parent._refresh(inter)
+                    await self.parent.refresh_view(inter)
 
             await interaction.response.send_modal(RuleModal(self))
 
@@ -628,7 +628,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                                 (self.parent.guild.id, self.warns.value)
                             )
 
-                    await self.parent._refresh(inter)
+                    await self.parent.refresh_view(inter)
 
             await interaction.response.send_modal(RemoveModal(self))
 
@@ -679,7 +679,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                             (self.guild.id, 50)
                         )
 
-            await self._refresh(interaction)
+            await self.refresh_view(interaction)
 
         toggle_btn.callback = toggle_caps
 
@@ -722,7 +722,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                                 (self.percent.value, self.parent.guild.id)
                             )
 
-                    await self.parent._refresh(inter)
+                    await self.parent.refresh_view(inter)
 
             await interaction.response.send_modal(PercentModal(self))
 
@@ -777,7 +777,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                         # hier nichts einfügen – Wörter kommen später
                         pass
 
-            await self._refresh(interaction)
+            await self.refresh_view(interaction)
 
         toggle_blacklist.callback = toggle_blacklist_cb
 
@@ -842,7 +842,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                                     (self.parent.guild.id, word)
                                 )
 
-                    await self.parent._refresh(inter)
+                    await self.parent.refresh_view(inter)
 
             await interaction.response.send_modal(AddWord(self))
 
@@ -866,7 +866,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                                 (self.parent.guild.id, self.word.value.lower())
                             )
 
-                    await self.parent._refresh(inter)
+                    await self.parent.refresh_view(inter)
 
             await interaction.response.send_modal(RemoveWord(self))
 
@@ -880,7 +880,7 @@ class AutomodConfigView(discord.ui.LayoutView):
     # REFRESH
     # =========================================================
 
-    async def _refresh(self, interaction: discord.Interaction):
+    async def refresh_view(self, interaction: discord.Interaction):
         await self._load_data()
         self._build()
         await interaction.response.edit_message(view=self)
