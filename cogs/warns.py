@@ -34,33 +34,46 @@ class AutomodSetupView(discord.ui.LayoutView):
     async def _already_configured(self, guild_id: int) -> bool:
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
+
+                # Warn-System
                 await cursor.execute(
                     "SELECT guildID FROM automod WHERE guildID=%s LIMIT 1",
                     (guild_id,)
                 )
                 warn_exists = await cursor.fetchone()
 
+                # Caps
                 await cursor.execute(
                     "SELECT guildID FROM capslock WHERE guildID=%s LIMIT 1",
                     (guild_id,)
                 )
                 caps_exists = await cursor.fetchone()
 
+                # Blacklist (neue Tabellenstruktur!)
                 await cursor.execute(
-                    "SELECT serverID FROM blacklist WHERE serverID=%s LIMIT 1",
+                    "SELECT serverID FROM blacklist_settings WHERE serverID=%s LIMIT 1",
                     (guild_id,)
                 )
-                blacklist_exists = await cursor.fetchone()
+                blacklist_settings_exists = await cursor.fetchone()
 
-                return bool(warn_exists or caps_exists or blacklist_exists)
+                await cursor.execute(
+                    "SELECT serverID FROM blacklist_words WHERE serverID=%s LIMIT 1",
+                    (guild_id,)
+                )
+                blacklist_words_exists = await cursor.fetchone()
+
+                return bool(
+                    warn_exists
+                    or caps_exists
+                    or blacklist_settings_exists
+                    or blacklist_words_exists
+                )
 
     async def start(self, interaction: discord.Interaction):
 
-        # Prüfen ob bereits Konfiguration existiert
         exists = await self._already_configured(interaction.guild.id)
 
         if exists:
-            # Roter Container anzeigen
             red_view = discord.ui.LayoutView()
 
             container = discord.ui.Container(
@@ -77,14 +90,15 @@ class AutomodSetupView(discord.ui.LayoutView):
             red_view.add_item(container)
 
             await interaction.response.send_message(
+                content="‎",
                 view=red_view,
                 ephemeral=True
             )
             return
 
-        # Wenn nichts existiert → normales Setup
         self._build()
         await interaction.response.send_message(
+            content="‎",
             view=self,
             ephemeral=True
         )
@@ -110,10 +124,6 @@ class AutomodSetupView(discord.ui.LayoutView):
             accent_color=discord.Colour.orange().value
         )
 
-        # =====================================================
-        # HEADER SECTION
-        # =====================================================
-
         container.add_item(discord.ui.TextDisplay(
             "# 🤖 Automod Setup\n"
             f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
@@ -121,10 +131,7 @@ class AutomodSetupView(discord.ui.LayoutView):
         ))
         container.add_item(discord.ui.Separator())
 
-        # =====================================================
-        # PAGE 0 – WILLKOMMEN
-        # =====================================================
-
+        # PAGE 0
         if self.page == 0:
 
             container.add_item(discord.ui.TextDisplay(
@@ -150,10 +157,7 @@ class AutomodSetupView(discord.ui.LayoutView):
             start.callback = start_cb
             container.add_item(discord.ui.ActionRow(start))
 
-        # =====================================================
-        # PAGE 1 – WARN SYSTEM
-        # =====================================================
-
+        # PAGE 1
         elif self.page == 1:
 
             rules_text = (
@@ -224,10 +228,7 @@ class AutomodSetupView(discord.ui.LayoutView):
             add_btn.callback = add_cb
             container.add_item(discord.ui.ActionRow(add_btn))
 
-        # =====================================================
-        # PAGE 2 – CAPS FILTER
-        # =====================================================
-
+        # PAGE 2
         elif self.page == 2:
 
             active = self.caps_enabled
@@ -290,10 +291,7 @@ class AutomodSetupView(discord.ui.LayoutView):
             percent_select.callback = percent_cb
             container.add_item(discord.ui.ActionRow(percent_select))
 
-        # =====================================================
-        # PAGE 3 – BLACKLIST
-        # =====================================================
-
+        # PAGE 3
         elif self.page == 3:
 
             words_text = (
@@ -349,10 +347,7 @@ class AutomodSetupView(discord.ui.LayoutView):
             add_btn.callback = add_cb
             container.add_item(discord.ui.ActionRow(add_btn))
 
-        # =====================================================
-        # PAGE 4 – ÜBERSICHT & SPEICHERN
-        # =====================================================
-
+        # PAGE 4
         elif self.page == 4:
 
             container.add_item(discord.ui.TextDisplay(
@@ -399,7 +394,12 @@ class AutomodSetupView(discord.ui.LayoutView):
                         )
 
                         await cursor.execute(
-                            "DELETE FROM blacklist WHERE serverID=%s",
+                            "DELETE FROM blacklist_settings WHERE serverID=%s",
+                            (interaction.guild.id,)
+                        )
+
+                        await cursor.execute(
+                            "DELETE FROM blacklist_words WHERE serverID=%s",
                             (interaction.guild.id,)
                         )
 
@@ -413,17 +413,24 @@ class AutomodSetupView(discord.ui.LayoutView):
 
                         if self.caps_enabled:
                             await cursor.execute(
-                                "INSERT INTO capslock (guildID, percent) "
-                                "VALUES (%s,%s)",
-                                (interaction.guild.id, self.caps_percent)
+                                "INSERT INTO capslock (guildID, percent, status) "
+                                "VALUES (%s,%s,%s)",
+                                (interaction.guild.id, self.caps_percent, 1)
                             )
 
-                        for word in self.blacklist_words:
+                        if self.blacklist_words:
                             await cursor.execute(
-                                "INSERT INTO blacklist (serverID, word) "
+                                "INSERT INTO blacklist_settings (serverID, status) "
                                 "VALUES (%s,%s)",
-                                (interaction.guild.id, word)
+                                (interaction.guild.id, 1)
                             )
+
+                            for word in self.blacklist_words:
+                                await cursor.execute(
+                                    "INSERT INTO blacklist_words (serverID, word) "
+                                    "VALUES (%s,%s)",
+                                    (interaction.guild.id, word)
+                                )
 
                 success_view = discord.ui.LayoutView()
 
@@ -440,17 +447,10 @@ class AutomodSetupView(discord.ui.LayoutView):
                 success_view.add_item(success_container)
 
                 await interaction.response.defer()
-
-                await interaction.edit_original_response(
-                    view=success_view
-                )
+                await interaction.edit_original_response(view=success_view)
 
             save.callback = save_cb
             container.add_item(discord.ui.ActionRow(save))
-
-        # =====================================================
-        # NAVIGATION
-        # =====================================================
 
         nav = []
 
