@@ -415,7 +415,7 @@ class SetupWizardView(ui.LayoutView):
 
         # Header
         container.add_item(discord.ui.TextDisplay(
-            f"<:Astra_ticket:1141833836204937347> # Ticket Setup\n"
+            f"# Ticket Setup\n"
             f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
@@ -424,7 +424,7 @@ class SetupWizardView(ui.LayoutView):
 
         # Aktuelle Panel Daten
         container.add_item(discord.ui.TextDisplay(
-            "<:Astra_pin:1141303893616250900> ## Aktuelle Konfiguration\n"
+            "## Aktuelle Konfiguration\n"
             f"<:Astra_punkt:1141303896745201696> **Kanal:** {fmt(self.target_channel)}\n"
             f"<:Astra_punkt:1141303896745201696> **Kategorie:** {fmt(self.category)}\n"
             f"<:Astra_punkt:1141303896745201696> **Support-Rolle:** {fmt(self.role)}\n\n"
@@ -440,7 +440,7 @@ class SetupWizardView(ui.LayoutView):
         if self.page == 0:
 
             container.add_item(discord.ui.TextDisplay(
-                "<:Astra_boost:1141303827107164270> ## Willkommen\n"
+                "## Willkommen\n"
                 "Dieser Wizard führt dich Schritt für Schritt durch das Setup."
             ))
 
@@ -461,7 +461,7 @@ class SetupWizardView(ui.LayoutView):
         # =====================================================
         elif self.page == 1:
 
-            container.add_item(discord.ui.TextDisplay("<:Astra_settings:1141303908778639490> ## Panel Einstellungen"))
+            container.add_item(discord.ui.TextDisplay("## Panel Einstellungen"))
 
             ch = discord.ui.ChannelSelect(
                 placeholder="📢 Panel-Kanal wählen",
@@ -529,7 +529,7 @@ class SetupWizardView(ui.LayoutView):
                 return f"<:Astra_accept:1141303821176422460> Aktiv ({pretty})"
 
             container.add_item(discord.ui.TextDisplay(
-                "<:Astra_settings:1141303908778639490> ## Automatische Funktionen\n\n"
+                "## Automatische Funktionen\n\n"
                 f"<:Astra_punkt:1141303896745201696> **Auto-Close:** {show_status('autoclose_hours')}\n"
                 f"<:Astra_punkt:1141303896745201696> **Reminder:** {show_status('remind_minutes')}\n"
                 f"<:Astra_punkt:1141303896745201696> **Reopen:** {show_status('reopen_hours')}\n"
@@ -633,7 +633,7 @@ class SetupWizardView(ui.LayoutView):
             cfg = self.cached_config
 
             container.add_item(discord.ui.TextDisplay(
-                "<:Astra_file1:1141303837181886494> ## Abschluss & Übersicht\n\n"
+                "## Abschluss & Übersicht\n\n"
                 f"<:Astra_punkt:1141303896745201696> **Auto-Close:** {show(cfg['autoclose_hours'])}\n"
                 f"<:Astra_punkt:1141303896745201696> **Reminder:** {show(cfg['remind_minutes'])}\n"
                 f"<:Astra_punkt:1141303896745201696> **Reopen:** {show(cfg['reopen_hours'])}\n"
