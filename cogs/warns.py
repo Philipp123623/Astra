@@ -5,7 +5,6 @@ from datetime import timedelta
 from typing import Literal
 import asyncio
 
-
 # =========================================================
 # ================= AUTOMOD SETUP VIEW ====================
 # =========================================================
@@ -30,6 +29,46 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         # Blacklist
         self.blacklist_words: list[str] = []
+
+    def _parse_duration(self, value: str) -> int | None:
+        if not value:
+            return None
+
+        value = value.lower()
+
+        units = {
+            "w": 604800,
+            "d": 86400,
+            "h": 3600,
+            "m": 60,
+            "s": 1
+        }
+
+        total_seconds = 0
+        parts = value.split(",")
+
+        for part in parts:
+            part = part.strip()
+
+            if not part:
+                continue
+
+            if len(part) < 2:
+                return None
+
+            number = part[:-1]
+            unit = part[-1]
+
+            if not number.isdigit() or unit not in units:
+                return None
+
+            total_seconds += int(number) * units[unit]
+
+        # Discord Timeout Limit (28 Tage)
+        if total_seconds <= 0 or total_seconds > 2419200:
+            return None
+
+        return total_seconds
 
     async def _already_configured(self, guild_id: int) -> bool:
         async with self.bot.pool.acquire() as conn:
@@ -191,7 +230,8 @@ class AutomodSetupView(discord.ui.LayoutView):
                     warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
                     action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
                     timeout_input = discord.ui.TextInput(
-                        label="Timeout Sekunden (optional)",
+                        label="Timeout (optional)",
+                        placeholder="z.B. 1h, 30m | w=Wochen d=Tage h=Stunden m=Min s=Sek",
                         required=False
                     )
 
@@ -209,13 +249,19 @@ class AutomodSetupView(discord.ui.LayoutView):
                                 ephemeral=True
                             )
 
-                        timeout_val = (
-                            int(self.timeout_input.value)
-                            if self.timeout_input.value else None
-                        )
+                        timeout_val = None
+
+                        if self.timeout_input.value:
+                            timeout_val = self.parent._parse_duration(self.timeout_input.value)
+
+                            if timeout_val is None:
+                                return await inter.response.send_message(
+                                    "<:Astra_x:1141303954555289600> Ungültiges Zeitformat. Nutze z.B. 1w, 1d, 2h, 3m oder 4s.",
+                                    ephemeral=True
+                                )
 
                         self.parent.warn_rules.append(
-                            (warns_val, self.action.value.strip(), timeout_val)
+                            (warns_val, self.action.value.strip().capitalize(), timeout_val)
                         )
 
                         self.parent._build()
@@ -513,6 +559,46 @@ class AutomodConfigView(discord.ui.LayoutView):
         self.caps_percent: int | None = None
         self.words: list[str] = []
 
+    def _parse_duration(self, value: str) -> int | None:
+        if not value:
+            return None
+
+        value = value.lower()
+
+        units = {
+            "w": 604800,
+            "d": 86400,
+            "h": 3600,
+            "m": 60,
+            "s": 1
+        }
+
+        total_seconds = 0
+        parts = value.split(",")
+
+        for part in parts:
+            part = part.strip()
+
+            if not part:
+                continue
+
+            if len(part) < 2:
+                return None
+
+            number = part[:-1]
+            unit = part[-1]
+
+            if not number.isdigit() or unit not in units:
+                return None
+
+            total_seconds += int(number) * units[unit]
+
+        # Discord Timeout Limit (28 Tage)
+        if total_seconds <= 0 or total_seconds > 2419200:
+            return None
+
+        return total_seconds
+
     # =========================================================
     # START
     # =========================================================
@@ -663,7 +749,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                 warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
                 action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
                 timeout_input = discord.ui.TextInput(
-                    label="Timeout Sekunden (optional)",
+                    label="Timeout (optional)",
+                    placeholder="z.B. 1h, 30m | w=Wochen d=Tage h=Stunden m=Min s=Sek",
                     required=False
                 )
 
@@ -673,10 +760,16 @@ class AutomodConfigView(discord.ui.LayoutView):
 
                 async def on_submit(self, inter):
 
-                    timeout_val = (
-                        int(self.timeout_input.value)
-                        if self.timeout_input.value else None
-                    )
+                    timeout_val = None
+
+                    if self.timeout_input.value:
+                        timeout_val = self.parent._parse_duration(self.timeout_input.value)
+
+                        if timeout_val is None:
+                            return await inter.response.send_message(
+                                "<:Astra_x:1141303954555289600> Ungültiges Zeitformat. Nutze z.B. 1w, 1d, 2h, 3m oder 4s.",
+                                ephemeral=True
+                            )
 
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
@@ -1110,9 +1203,22 @@ class Automod(app_commands.Group):
 
                 async with self.bot.pool.acquire() as conn:
                     async with conn.cursor() as cursor:
-                        await cursor.execute("DELETE FROM automod WHERE guildID=%s", (inter.guild.id,))
-                        await cursor.execute("DELETE FROM capslock WHERE guildID=%s", (inter.guild.id,))
-                        await cursor.execute("DELETE FROM blacklist WHERE serverID=%s", (inter.guild.id,))
+                        await cursor.execute(
+                            "DELETE FROM automod WHERE guildID=%s",
+                            (inter.guild.id,)
+                        )
+                        await cursor.execute(
+                            "DELETE FROM capslock WHERE guildID=%s",
+                            (inter.guild.id,)
+                        )
+                        await cursor.execute(
+                            "DELETE FROM blacklist_settings WHERE serverID=%s",
+                            (inter.guild.id,)
+                        )
+                        await cursor.execute(
+                            "DELETE FROM blacklist_words WHERE serverID=%s",
+                            (inter.guild.id,)
+                        )
 
                 await inter.response.edit_message(
                     content="🗑️ Automod wurde vollständig zurückgesetzt.",
@@ -1161,6 +1267,209 @@ class Warn(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    @commands.Cog.listener()
+    async def on_message(self, msg):
+
+        if msg.author.bot:
+            return
+
+        if not msg.guild:
+            return
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+
+                # =====================================================
+                # ================= CAPS FILTER =======================
+                # =====================================================
+
+                if msg.author.id != msg.guild.owner.id:
+
+                    await cursor.execute(
+                        "SELECT percent FROM capslock WHERE guildID = (%s)",
+                        (msg.guild.id,)
+                    )
+                    result = await cursor.fetchone()
+
+                    if result:
+                        percent1 = result[0]
+
+                        upper = 0
+                        for char in msg.content:
+                            if char.isupper():
+                                pass
+                            else:
+                                upper += 1
+
+                        if len(msg.content) >= 6:
+
+                            multiplication = 100 / len(msg.content)
+                            procent = (len(msg.content) - upper) * multiplication
+
+                            if int(percent1) < round(procent):
+
+                                channel = self.bot.get_channel(msg.channel.id)
+                                message = await channel.fetch_message(msg.id)
+
+                                embed = discord.Embed(
+                                    title="Bitte unterlasse übermäßige Caps!",
+                                    description=f"Die Nachricht hatte `{round(procent)}%` Caps!\nDu wurdest verwarnt {msg.author.mention}!",
+                                    colour=discord.Colour.blue(),
+                                    timestamp=discord.utils.utcnow()
+                                )
+                                embed.set_author(name=msg.author, icon_url=msg.author.avatar)
+                                embed.add_field(
+                                    name=f"User: {msg.author}",
+                                    value=f"Nachricht: {msg.content}"
+                                )
+                                embed.set_footer(
+                                    text=f"User: {msg.author} | ID: {msg.author.id}"
+                                )
+
+                                await msg.channel.send(embed=embed)
+                                await message.delete()
+
+                                await cursor.execute(
+                                    "SELECT reason FROM warns WHERE userID = (%s) AND guildID = (%s)",
+                                    (msg.author.id, msg.guild.id)
+                                )
+                                result2 = await cursor.fetchall()
+
+                                reason = (
+                                    f"{msg.author.name} überschritt das Caps Limit von "
+                                    f"`{int(percent1)}%`. Die Nachricht hatte `{round(procent)}%` Caps!"
+                                )
+
+                                if result2 == ():
+                                    await cursor.execute(
+                                        "INSERT INTO warns (guildID, userID, reason, warnID) VALUES (%s, %s, %s, %s)",
+                                        (msg.guild.id, msg.author.id, reason, 1)
+                                    )
+                                else:
+                                    await cursor.execute(
+                                        "INSERT INTO warns (guildID, userID, reason, warnID) VALUES (%s, %s, %s, %s)",
+                                        (msg.guild.id, msg.author.id, reason, len(result2) + 1)
+                                    )
+
+                                await cursor.execute(
+                                    "SELECT channelID FROM modlog WHERE serverID = (%s)",
+                                    (msg.guild.id,)
+                                )
+                                result3 = await cursor.fetchone()
+
+                                if result3 is not None:
+                                    channel = msg.guild.get_channel(int(result3[0]))
+
+                                    embed = discord.Embed(
+                                        colour=discord.Colour.orange(),
+                                        description=f"Der User {msg.author} (`{msg.author.id}`) wurde verwarnt."
+                                    )
+                                    embed.add_field(
+                                        name="👤 User:",
+                                        value=f"{msg.author.mention}",
+                                        inline=False
+                                    )
+                                    embed.add_field(
+                                        name="👮 Moderator:",
+                                        value=f"{self.bot.user} (`{self.bot.user.id}`)",
+                                        inline=False
+                                    )
+                                    embed.add_field(
+                                        name="📄 Grund:",
+                                        value=f"{reason}",
+                                        inline=False
+                                    )
+                                    embed.set_author(
+                                        name=msg.author,
+                                        icon_url=msg.author.avatar
+                                    )
+
+                                    await channel.send(embed=embed)
+
+                # =====================================================
+                # ================= BLACKLIST =========================
+                # =====================================================
+
+                await cursor.execute(
+                    "SELECT status FROM blacklist_settings WHERE serverID = (%s)",
+                    (msg.guild.id,)
+                )
+                status_row = await cursor.fetchone()
+
+                if not status_row or status_row[0] != 1:
+                    return
+
+                await cursor.execute(
+                    "SELECT word FROM blacklist_words WHERE serverID = (%s)",
+                    (msg.guild.id,)
+                )
+                result = await cursor.fetchall()
+
+                if not result:
+                    return
+
+                for eintrag in result:
+
+                    word = eintrag[0]
+                    lowerword = word.lower()
+                    lowercontent = msg.content.lower()
+
+                    if lowerword in lowercontent:
+
+                        embed = discord.Embed(
+                            title="Bitte unterlasse die Schimpfwörter",
+                            description=f"{msg.author.mention} nutze ein Wort: ``{word}`` welches hier nicht erlaubt ist!",
+                            colour=discord.Colour.red(),
+                            timestamp=discord.utils.utcnow()
+                        )
+                        embed.set_author(name=msg.author, icon_url=msg.author.avatar)
+
+                        delete = await msg.channel.send(embed=embed)
+
+                        channel = msg.channel
+                        message = await channel.fetch_message(msg.id)
+                        await message.delete()
+
+                        # ================= MODLOG BLACKLIST =================
+
+                        await cursor.execute(
+                            "SELECT channelID FROM modlog WHERE serverID = (%s)",
+                            (msg.guild.id,)
+                        )
+                        result_modlog = await cursor.fetchone()
+
+                        if result_modlog is not None:
+                            log_channel = msg.guild.get_channel(int(result_modlog[0]))
+
+                            log_embed = discord.Embed(
+                                colour=discord.Colour.orange(),
+                                description=f"Der User {msg.author} (`{msg.author.id}`) nutzte ein verbotenes Wort."
+                            )
+                            log_embed.add_field(
+                                name="👤 User:",
+                                value=f"{msg.author.mention}",
+                                inline=False
+                            )
+                            log_embed.add_field(
+                                name="📄 Wort:",
+                                value=f"{word}",
+                                inline=False
+                            )
+                            log_embed.add_field(
+                                name="🔔 Auslöser:",
+                                value="Blacklist",
+                                inline=False
+                            )
+                            log_embed.set_author(
+                                name=msg.author,
+                                icon_url=msg.author.avatar
+                            )
+
+                            await log_channel.send(embed=log_embed)
+
+                        await asyncio.sleep(7)
+                        await delete.delete()
+
     @app_commands.command(name="warn", description="Warne einen User.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
@@ -1169,131 +1478,89 @@ class Warn(commands.Cog):
         """Warne einen User."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
+
+                # ─────────────────────────────
+                # WARN COUNT HOLEN
+                # ─────────────────────────────
                 await cursor.execute(
-                    "SELECT reason FROM warns WHERE userID = (%s) AND guildID = (%s)",
+                    "SELECT COUNT(*) FROM warns WHERE userID=%s AND guildID=%s",
                     (member.id, interaction.guild.id)
                 )
-                result = await cursor.fetchall()
+                count_row = await cursor.fetchone()
+                current_warns = count_row[0] if count_row else 0
+
+                warnid = current_warns + 1
+
+                await cursor.execute(
+                    "INSERT INTO warns (guildID, userID, reason, warnID) VALUES (%s,%s,%s,%s)",
+                    (interaction.guild.id, member.id, reason, warnid)
+                )
 
                 # ─────────────────────────────
-                # ERSTE VERWARNUNG
+                # RESPONSE EMBED
                 # ─────────────────────────────
-                if result == ():
-                    warnid = 1
-                    await cursor.execute(
-                        "INSERT INTO warns (guildID, userID, reason, warnID) VALUES (%s, %s, %s, %s)",
-                        (interaction.guild.id, member.id, reason, 1)
-                    )
+                title = "Neue Verwarnung" if warnid == 1 else "Verwarnung hinzugefügt"
 
-                    embed = discord.Embed(
-                        title="Neue Verwarnung",
-                        description=(
-                            f"Der User {member.mention} wurde mit der Warn-ID ``{warnid}`` "
-                            f"für folgenden Grund verwarnt:\n\n"
-                            f"📄 **Grund:** `{reason}`\n\n"
-                            f"Nutze `/warn`, um weitere Verwarnungen auszusprechen."
-                        ),
-                        color=discord.Color.red()
-                    )
-                    await interaction.response.send_message(embed=embed)
+                embed = discord.Embed(
+                    title=title,
+                    description=(
+                        f"Der User {member.mention} wurde mit der Warn-ID ``{warnid}``\n\n"
+                        f"📄 **Grund:** `{reason}`\n\n"
+                        f"Nutze `/warn`, um weitere Verwarnungen zu vergeben."
+                    ),
+                    color=discord.Color.red()
+                )
 
-                    await cursor.execute(
-                        "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                        (interaction.guild.id,)
-                    )
-                    modlog = await cursor.fetchone()
-
-                    if modlog is not None:
-                        channel = interaction.guild.get_channel(int(modlog[0]))
-                        log_embed = discord.Embed(
-                            colour=discord.Colour.orange(),
-                            description=f"Der User {member} (`{member.id}`) wurde verwarnt."
-                        )
-                        log_embed.add_field(name="👤 Member", value=member.mention, inline=False)
-                        log_embed.add_field(
-                            name="👮 Moderator",
-                            value=f"{interaction.user} (`{interaction.user.id}`)",
-                            inline=False
-                        )
-                        log_embed.add_field(name="📄 Grund", value=reason, inline=False)
-                        log_embed.set_author(name=member, icon_url=member.avatar)
-                        await channel.send(embed=log_embed)
+                await interaction.response.send_message(embed=embed)
 
                 # ─────────────────────────────
-                # WEITERE VERWARNUNGEN
-                # ─────────────────────────────
-                if result:
-                    warnid = len(result) + 1
-                    await cursor.execute(
-                        "INSERT INTO warns (guildID, userID, reason, warnID) VALUES (%s, %s, %s, %s)",
-                        (interaction.guild.id, member.id, reason, warnid)
-                    )
-
-                    embed2 = discord.Embed(
-                        title="Verwarnung hinzugefügt",
-                        description=(
-                            f"Der User {member.mention} wurde erfolgreich verwarnt.\n\n"
-                            f"🆔 **Warn-ID:** ``{warnid}``\n"
-                            f"📄 **Grund:** `{reason}`\n\n"
-                            f"Nutze `/warn`, um weitere Verwarnungen zu vergeben."
-                        ),
-                        color=discord.Color.red()
-                    )
-                    await interaction.response.send_message(embed=embed2)
-
-                    await cursor.execute(
-                        "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                        (interaction.guild.id,)
-                    )
-                    modlog = await cursor.fetchone()
-
-                    if modlog is not None:
-                        channel = interaction.guild.get_channel(int(modlog[0]))
-                        log_embed = discord.Embed(
-                            colour=discord.Colour.orange(),
-                            description=f"Der User {member} (`{member.id}`) wurde erneut verwarnt."
-                        )
-                        log_embed.add_field(name="👤 Member", value=member.mention, inline=False)
-                        log_embed.add_field(
-                            name="👮 Moderator",
-                            value=f"{interaction.user} (`{interaction.user.id}`)",
-                            inline=False
-                        )
-                        log_embed.add_field(name="📄 Grund", value=reason, inline=False)
-                        log_embed.set_author(name=member, icon_url=member.avatar)
-                        await channel.send(embed=log_embed)
-
-                # ─────────────────────────────
-                # AUTOMOD CHECK
+                # MODLOG
                 # ─────────────────────────────
                 await cursor.execute(
-                    "SELECT action, warns FROM automod WHERE guildID = (%s)",
+                    "SELECT channelID FROM modlog WHERE serverID=%s",
                     (interaction.guild.id,)
                 )
-                result3 = await cursor.fetchall()
+                modlog = await cursor.fetchone()
 
-                if result3:
-                    await cursor.execute(
-                        "SELECT max(warnID) FROM warns WHERE guildID = (%s) AND userID = (%s)",
-                        (interaction.guild.id, member.id)
-                    )
-                    warnings = await cursor.fetchone()
-                    warns2 = warnings[0]
+                if modlog:
+                    channel = interaction.guild.get_channel(int(modlog[0]))
+                    if channel:
+                        log_embed = discord.Embed(
+                            colour=discord.Colour.orange(),
+                            description=f"{member} (`{member.id}`) wurde verwarnt."
+                        )
+                        log_embed.add_field(name="👤 Member", value=member.mention, inline=False)
+                        log_embed.add_field(
+                            name="👮 Moderator",
+                            value=f"{interaction.user} (`{interaction.user.id}`)",
+                            inline=False
+                        )
+                        log_embed.add_field(name="📄 Grund", value=reason, inline=False)
+                        log_embed.set_author(name=member, icon_url=member.avatar)
+                        await channel.send(embed=log_embed)
 
-                    for eintrag in result3:
-                        action = eintrag[0]
-                        warns = eintrag[1]
+                # ─────────────────────────────
+                # AUTOMOD CHECK (ESKALIEREND)
+                # ─────────────────────────────
+                await cursor.execute(
+                    "SELECT action, warns, timeout_seconds FROM automod WHERE guildID=%s",
+                    (interaction.guild.id,)
+                )
+                rules = await cursor.fetchall()
 
-                        if int(warns2) >= int(warns):
-                            await cursor.execute(
-                                "SELECT channelID FROM modlog WHERE serverID = (%s)",
-                                (interaction.guild.id,)
-                            )
-                            modlog = await cursor.fetchone()
+                if not rules:
+                    return
 
-                            # ── AUTOMOD LOG ──
-                            if modlog is not None:
-                                channel = interaction.guild.get_channel(int(modlog[0]))
+                # höchste Regel zuerst
+                rules = sorted(rules, key=lambda x: int(x[1]), reverse=True)
+
+                for action, warn_limit, timeout_seconds in rules:
+                    if warnid >= int(warn_limit):
+
+                        # Automod Log
+                        if modlog:
+                            channel = interaction.guild.get_channel(int(modlog[0]))
+                            if channel:
                                 auto_embed = discord.Embed(
                                     title="🤖 Automod ausgelöst",
                                     colour=discord.Colour.dark_orange(),
@@ -1302,49 +1569,62 @@ class Warn(commands.Cog):
                                 auto_embed.add_field(name="👤 Member", value=member.mention, inline=False)
                                 auto_embed.add_field(
                                     name="📊 Verwarnungen",
-                                    value=f"{warns2} / {warns}",
+                                    value=f"{warnid} / {warn_limit}",
                                     inline=True
                                 )
                                 auto_embed.add_field(name="⚙️ Aktion", value=action, inline=True)
                                 auto_embed.add_field(name="🔔 Auslöser", value="Warn-System", inline=False)
                                 await channel.send(embed=auto_embed)
 
-                            # ── AKTION ──
-                            if action == "Kick":
-                                await member.kick(reason="Automod")
+                        # Aktion ausführen (nur höchste!)
+                        if action == "Kick":
+                            await member.kick(reason="Automod")
 
-                            if action == "Ban":
-                                await member.ban(reason="Automod")
+                        elif action == "Ban":
+                            await member.ban(reason="Automod")
 
-                            if action == "Timeout":
-                                await member.timeout(
-                                    timedelta(seconds=30),
-                                    reason="Automod"
-                                )
+                        elif action == "Timeout":
+                            duration = timeout_seconds if timeout_seconds else 30
+                            await member.timeout(
+                                timedelta(seconds=int(duration)),
+                                reason="Automod"
+                            )
+
+                        break  # ← nur höchste Regel!
 
     @app_commands.command(name="unwarn", description="Entferne Warns von einem User.")
     @app_commands.guild_only()
     @app_commands.checks.cooldown(1, 5, key=lambda i: (i.guild_id, i.user.id))
     @app_commands.checks.has_permissions(moderate_members=True)
     async def unwarn(self, interaction: discord.Interaction, member: discord.Member, warnid: int):
-        """Entferne Warns von einem User.."""
+        """Entferne Warns von einem User."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("SELECT warnID, userID FROM warns WHERE guildID = (%s)", (interaction.guild.id))
-                result = await cursor.fetchall()
+                await cursor.execute(
+                    "DELETE FROM warns WHERE guildID=%s AND warnID=%s AND userID=%s",
+                    (interaction.guild.id, warnid, member.id)
+                )
 
-                if result:
-                    await cursor.execute("DELETE FROM warns WHERE guildID = (%s) AND warnID = (%s) AND userID = (%s)",
-                                         (interaction.guild.id, warnid, member.id))
-                    embed2 = discord.Embed(title="Verwarnung gelöscht",
-                                           description=f"Die Verwarnung des Users {member.mention} mit der ID: ``{warnid}``wurde gelöscht.\nUm jemanden zu warnen nutze `/warn`.",
-                                           color=discord.Color.green())
-                    await interaction.response.send_message(embed=embed2)
-                if not result:
-                    embed2 = discord.Embed(title="Keine Aktuellen erwarnungen",
-                                           description=f"Es gibt aktuell keine Verwarnungen für den User {member.mention} mit der WarnID: ``{warnid}``!\nUm jemanden zu warnen nutze `/warn`.",
-                                           color=discord.Color.green())
-                    await interaction.response.send_message(embed=embed2)
+                if cursor.rowcount > 0:
+                    embed = discord.Embed(
+                        title="Verwarnung gelöscht",
+                        description=(
+                            f"Die Verwarnung des Users {member.mention} mit der ID: ``{warnid}`` "
+                            f"wurde gelöscht.\nUm jemanden zu warnen nutze `/warn`."
+                        ),
+                        color=discord.Color.green()
+                    )
+                else:
+                    embed = discord.Embed(
+                        title="Keine Aktuellen erwarnungen",
+                        description=(
+                            f"Es gibt aktuell keine Verwarnungen für den User {member.mention} "
+                            f"mit der WarnID: ``{warnid}``!\nUm jemanden zu warnen nutze `/warn`."
+                        ),
+                        color=discord.Color.green()
+                    )
+
+                await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="warns", description="Erhalte eine Liste mit allen Warns eines Users.")
     @app_commands.guild_only()
@@ -1354,28 +1634,41 @@ class Warn(commands.Cog):
         """Erhalte eine Liste mit allen Warns eines Users."""
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("SELECT reason, warnID FROM warns WHERE guildID = (%s) AND userID = (%s)",
-                                     (interaction.guild.id, member.id))
+                await cursor.execute(
+                    "SELECT reason, warnID FROM warns WHERE guildID=%s AND userID=%s",
+                    (interaction.guild.id, member.id)
+                )
                 result = await cursor.fetchall()
-                if result == ():
-                    embed2 = discord.Embed(title=f"Verwarnungen für {member.name}, {member.id}",
-                                           description=f"Der User {member.name} hat keine Verwarnungen.\nUm jemanden zu warnen nutze `/warn`.",
-                                           color=discord.Color.blue())
-                    await interaction.response.send_message(embed=embed2)
 
+                if not result:
+                    embed = discord.Embed(
+                        title=f"Verwarnungen für {member.name}, {member.id}",
+                        description=(
+                            f"Der User {member.name} hat keine Verwarnungen.\n"
+                            f"Um jemanden zu warnen nutze `/warn`."
+                        ),
+                        color=discord.Color.blue()
+                    )
                 else:
-                    embed = discord.Embed(title=f"Verwarnungen für {member.name}, {member.id}",
-                                          description=f"Um jemanden zu warnen nutze `/warn`.\nUm jemanden eine Verwarnung zu entfernen nutze `/unwarn`.",
-                                          color=discord.Color.blue(), timestamp=discord.utils.utcnow())
+                    embed = discord.Embed(
+                        title=f"Verwarnungen für {member.name}, {member.id}",
+                        description=(
+                            "Um jemanden zu warnen nutze `/warn`.\n"
+                            "Um jemanden eine Verwarnung zu entfernen nutze `/unwarn`."
+                        ),
+                        color=discord.Color.blue(),
+                        timestamp=discord.utils.utcnow()
+                    )
                     embed.set_author(name=interaction.user, icon_url=interaction.user.avatar)
-                    for eintrag in result:
-                        reason = eintrag[0]
-                        warnID = eintrag[1]
 
-                        embed.add_field(name=f"WarnID: {warnID}", value=f"Grund: {reason}",
-                                        inline=True)
+                    for reason, warnID in result:
+                        embed.add_field(
+                            name=f"WarnID: {warnID}",
+                            value=f"Grund: {reason}",
+                            inline=True
+                        )
 
-                    await interaction.response.send_message(embed=embed)
+                await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: commands.Bot) -> None:
