@@ -347,7 +347,7 @@ class SetupWizardView(ui.LayoutView):
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                f"<:Astra_arrow:1141303823600717885> Du kannst jederzeit zurückgehen "
+                f"<:Astra_light_on:1141303864134467675> Du kannst jederzeit zurückgehen "
                 "und Einstellungen ändern, bevor das Panel erstellt wird."
             ))
 
@@ -395,6 +395,12 @@ class SetupWizardView(ui.LayoutView):
                 f"<:Astra_punkt:1141303896745201696> Hier kannst du Hinweise oder Regeln einfügen\n"
                 f"<:Astra_x:1141303954555289600> Pflichtfeld"
             ))
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                f"<:Astra_light_on:1141303864134467675> Du kannst jederzeit zurückgehen "
+                "und Einstellungen ändern, bevor das Panel erstellt wird."
+            ))
 
         # =====================================================
         # PAGE 2 – Automatische Funktionen
@@ -438,6 +444,12 @@ class SetupWizardView(ui.LayoutView):
                 f"<:Astra_punkt:1141303896745201696> Begrenzt Support-Pings\n"
                 f"<:Astra_punkt:1141303896745201696> Verhindert Spam"
             ))
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                f"<:Astra_light_on:1141303864134467675> Du kannst jederzeit zurückgehen "
+                "und Einstellungen ändern, bevor das Panel erstellt wird."
+            ))
 
         # =====================================================
         # PAGE 3 – Abschluss
@@ -471,6 +483,12 @@ class SetupWizardView(ui.LayoutView):
             help_container.add_item(discord.ui.TextDisplay(
                 f"<:Astra_accept:1141303821176422460> Wenn alles korrekt ist, "
                 "kann das Ticket-Panel erstellt werden."
+            ))
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                f"<:Astra_light_on:1141303864134467675> Du kannst jederzeit zurückgehen "
+                "und Einstellungen ändern, bevor das Panel erstellt wird."
             ))
 
         # =====================================================
@@ -905,7 +923,7 @@ class SetupWizardView(ui.LayoutView):
             back.callback = back_cb
             nav.append(back)
 
-        if 0 < self.page < self.TOTAL_STEPS - 1:
+        if 1 <= self.page < self.TOTAL_STEPS:
             nxt = discord.ui.Button(label="Weiter", emoji="<:Astra_arrow:1141303823600717885>", style=discord.ButtonStyle.primary)
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
