@@ -700,7 +700,8 @@ class AutomodConfigView(discord.ui.LayoutView):
         set_percent = discord.ui.Button(
             label="Prozent ändern",
             emoji="<:Astra_arrow:1141303823600717885>",
-            style=discord.ButtonStyle.primary
+            style=discord.ButtonStyle.primary,
+            disabled=not caps_enabled  # <-- DAS IST DIE LÖSUNG
         )
 
         async def percent_cb(interaction):
@@ -758,9 +759,17 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         # ---------- TOGGLE BUTTON ----------
 
+        toggle_label = "Aus" if blacklist_enabled else "Ein"
+
+        toggle_style = (
+            discord.ButtonStyle.danger  # Rot wenn aktiv
+            if blacklist_enabled else
+            discord.ButtonStyle.success  # Grün wenn deaktiviert
+        )
+
         toggle_blacklist = discord.ui.Button(
-            label="Aus" if blacklist_enabled else "Ein",
-            style=discord.ButtonStyle.secondary if blacklist_enabled else discord.ButtonStyle.success
+            label=toggle_label,
+            style=toggle_style
         )
 
         async def toggle_blacklist_cb(interaction):
