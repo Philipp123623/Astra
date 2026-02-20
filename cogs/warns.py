@@ -108,7 +108,7 @@ class AutomodSetupView(discord.ui.LayoutView):
                     or blacklist_words_exists
                 )
 
-    async def start(self, interaction: discord.Interaction):
+    async def start(self, interaction: discord.Interaction) -> bool:
 
         exists = await self._already_configured(interaction.guild.id)
 
@@ -132,13 +132,16 @@ class AutomodSetupView(discord.ui.LayoutView):
                 view=red_view,
                 ephemeral=True
             )
-            return
+
+            return False  # ← WICHTIG
 
         self._build()
         await interaction.response.send_message(
             view=self,
             ephemeral=True
         )
+
+        return True  # ← WICHTIG
 
     # =========================================================
     # PROGRESS BAR
@@ -1118,7 +1121,10 @@ class Automod(app_commands.Group):
     async def setup(self, interaction: discord.Interaction):
 
         view = AutomodSetupView(self.bot, interaction.user)
-        await view.start(interaction)
+        started = await view.start(interaction)
+
+        if not started:
+            return  # ← KEIN Modlog senden
 
         # ── MODLOG ──
         async with self.bot.pool.acquire() as conn:
