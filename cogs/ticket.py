@@ -268,7 +268,6 @@ class SetupWizardView(ui.LayoutView):
         self.panel_desc = None
 
         self.cached_config = {}
-
         self._build()
 
     # =========================================================
@@ -406,8 +405,17 @@ class SetupWizardView(ui.LayoutView):
             cfg = self.cached_config or {}
 
             def show_status(key):
-                val = cfg.get(key, 0)
-                return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
+                raw = cfg.get(key)
+
+                try:
+                    val = int(raw)
+                except (TypeError, ValueError):
+                    val = 0
+
+                if val <= 0:
+                    return "🔴 Deaktiviert"
+
+                return f"🟢 Aktiv (`{val}`)"
 
             children.append(
                 discord.ui.TextDisplay(
@@ -475,7 +483,7 @@ class SetupWizardView(ui.LayoutView):
                         self.bot.pool,
                         interaction.guild.id
                     )
-
+                    print("CONFIG:", self.cached_config)
                     self._build()
                     await interaction.response.edit_message(view=self)
 
