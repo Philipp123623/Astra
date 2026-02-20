@@ -1027,11 +1027,7 @@ class Automod(app_commands.Group):
     async def setup(self, interaction: discord.Interaction):
 
         view = AutomodSetupView(self.bot, interaction.user)
-
-        await interaction.response.send_message(
-            view=view,
-            ephemeral=True
-        )
+        await view.start(interaction)
 
         # ── MODLOG ──
         async with self.bot.pool.acquire() as conn:
