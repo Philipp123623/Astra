@@ -24,44 +24,30 @@ class AutomodSetupView(discord.ui.LayoutView):
         self.already_configured: bool = False
 
         self.warn_rules: list[tuple[int, str, int | None]] = []
-
         self.caps_enabled: bool = False
         self.caps_percent: int = 50
-
         self.blacklist_enabled: bool = False
         self.blacklist_words: list[str] = []
 
-        # View wird normal gebaut
+    # =========================================================
+    # PUBLIC START (WIRD VOM COMMAND AUFGERUFEN)
+    # =========================================================
+
+    async def start(self, interaction: discord.Interaction):
+
+        # DB prüfen
+        await self._check_existing(interaction.guild.id)
+
+        # Danach View bauen
         self._build()
 
-    # =========================================================
-    # INTERACTION CHECK (DB CHECK BEIM ERSTEN KLICK)
-    # =========================================================
-
-    async def interaction_check(self, interaction: discord.Interaction):
-
-        if interaction.user.id != self.invoker.id:
-            await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> Nur der Command-Ersteller darf dieses Panel bedienen.",
-                ephemeral=True
-            )
-            return False
-
-        # DB nur einmal prüfen
-        if not hasattr(self, "_checked"):
-            await self._check_existing(interaction.guild.id)
-            self._checked = True
-
-            # Falls bereits konfiguriert -> neu bauen
-            if self.already_configured:
-                self._build()
-                await interaction.response.edit_message(view=self)
-                return False
-
-        return True
+        await interaction.response.send_message(
+            view=self,
+            ephemeral=True
+        )
 
     # =========================================================
-    # CHECK OB BEREITS KONFIGURIERT
+    # DB CHECK
     # =========================================================
 
     async def _check_existing(self, guild_id: int):
@@ -102,20 +88,16 @@ class AutomodSetupView(discord.ui.LayoutView):
         return "█" * filled + "░" * (14 - filled)
 
     # =========================================================
-    # BUILD (DEINE TEXTE 1:1 UNVERÄNDERT)
+    # BUILD
     # =========================================================
 
-    async def _switch(self, interaction, page: int):
-        self.page = page
-        self._build()
-        await interaction.response.edit_message(view=self)
-
     def _build(self):
+
         self.clear_items()
 
-        container = discord.ui.Container(
-            accent_color=discord.Colour.orange().value
-        )
+        # -----------------------------------------------------
+        # WENN BEREITS KONFIGURIERT
+        # -----------------------------------------------------
 
         if self.already_configured:
 
@@ -132,6 +114,14 @@ class AutomodSetupView(discord.ui.LayoutView):
 
             self.add_item(container)
             return
+
+        # -----------------------------------------------------
+        # NORMALES SETUP
+        # -----------------------------------------------------
+
+        container = discord.ui.Container(
+            accent_color=discord.Colour.orange().value
+        )
 
         container.add_item(discord.ui.TextDisplay(
             "# 🤖 Automod Setup\n"
@@ -157,11 +147,14 @@ class AutomodSetupView(discord.ui.LayoutView):
             start = discord.ui.Button(
                 label="Setup starten",
                 emoji="<:Astra_boost:1141303827107164270>",
-                style=discord.ButtonStyle.success
+                style=discord.ButtonStyle.success,
+                custom_id="automod_start"
             )
 
             async def start_cb(interaction):
-                await self._switch(interaction, 1)
+                self.page = 1
+                self._build()
+                await interaction.response.edit_message(view=self)
 
             start.callback = start_cb
             container.add_item(discord.ui.ActionRow(start))
@@ -1088,11 +1081,7 @@ class Automod(app_commands.Group):
     async def setup(self, interaction: discord.Interaction):
 
         view = AutomodSetupView(self.bot, interaction.user)
-
-        await interaction.response.send_message(
-            view=view,
-            ephemeral=True
-        )
+        await view.start(interaction)
 
         # ── MODLOG ──
         async with self.bot.pool.acquire() as conn:
