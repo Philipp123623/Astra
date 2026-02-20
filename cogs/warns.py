@@ -735,7 +735,9 @@ class AutomodConfigView(discord.ui.LayoutView):
         # BLACKLIST
         # =====================================================
 
-        blacklist_enabled = len(self.words) > 0
+        # Status getrennt vom Wort-Inhalt behandeln
+        blacklist_enabled = "__enabled__" in self.words
+        real_words = [w for w in self.words if w != "__enabled__"]
 
         status_emoji = (
             "<:Astra_accept:1141303821176422460>"
@@ -748,9 +750,9 @@ class AutomodConfigView(discord.ui.LayoutView):
         words_text = (
             "\n".join(
                 f"<:Astra_punkt:1141303896745201696> `{w}`"
-                for w in self.words
+                for w in real_words
             )
-            if self.words
+            if real_words
             else "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
         )
 
@@ -767,15 +769,17 @@ class AutomodConfigView(discord.ui.LayoutView):
                 async with conn.cursor() as cursor:
 
                     if blacklist_enabled:
-                        # komplett deaktivieren
+                        # deaktivieren → alles löschen
                         await cursor.execute(
                             "DELETE FROM blacklist WHERE serverID=%s",
                             (self.guild.id,)
                         )
                     else:
-                        # aktivieren ohne Wörter (nur Status)
-                        # hier nichts einfügen – Wörter kommen später
-                        pass
+                        # aktivieren → Status-Eintrag setzen
+                        await cursor.execute(
+                            "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                            (self.guild.id, "__enabled__")
+                        )
 
             await self.refresh_view(interaction)
 
@@ -827,6 +831,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                     self.parent = parent
 
                 async def on_submit(self, inter):
+
                     entries = [
                         w.strip().lower()
                         for w in self.words.value.split(",")
@@ -835,10 +840,19 @@ class AutomodConfigView(discord.ui.LayoutView):
 
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
+
+                            # sicherstellen dass Status existiert
+                            await cursor.execute(
+                                "INSERT IGNORE INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                (self.parent.guild.id, "__enabled__")
+                            )
+
                             for word in entries:
+                                if word == "__enabled__":
+                                    continue
+
                                 await cursor.execute(
-                                    "INSERT INTO blacklist "
-                                    "(serverID, word) VALUES (%s,%s)",
+                                    "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
                                     (self.parent.guild.id, word)
                                 )
 
@@ -862,7 +876,7 @@ class AutomodConfigView(discord.ui.LayoutView):
                         async with conn.cursor() as cursor:
                             await cursor.execute(
                                 "DELETE FROM blacklist "
-                                "WHERE serverID=%s AND word=%s",
+                                "WHERE serverID=%s AND word=%s AND word != '__enabled__'",
                                 (self.parent.guild.id, self.word.value.lower())
                             )
 
@@ -875,15 +889,6 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         container.add_item(discord.ui.ActionRow(add_word, remove_word))
         self.add_item(container)
-
-    # =========================================================
-    # REFRESH
-    # =========================================================
-
-    async def refresh_view(self, interaction: discord.Interaction):
-        await self._load_data()
-        self._build()
-        await interaction.response.edit_message(view=self)
 
 
 @app_commands.guild_only()
