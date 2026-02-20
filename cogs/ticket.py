@@ -213,16 +213,26 @@ async def get_guild_config(pool, guild_id: int) -> dict:
 async def set_guild_config(pool, guild_id: int, **kwargs):
     fields = []
     vals: List = []
+
     for k, v in kwargs.items():
         if k in DEFAULT_CFG:
             fields.append(f"{k}=%s")
             vals.append(int(v))
+
     if not fields:
         return
-    vals.append(guild_id)
-    q = f"UPDATE ticket_config SET {', '.join(fields)} WHERE guildID=%s"
+
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
+
+            # 🔥 Stelle sicher, dass Eintrag existiert
+            await cur.execute(
+                "INSERT IGNORE INTO ticket_config (guildID) VALUES (%s)",
+                (guild_id,)
+            )
+
+            vals.append(guild_id)
+            q = f"UPDATE ticket_config SET {', '.join(fields)} WHERE guildID=%s"
             await cur.execute(q, tuple(vals))
 
 
