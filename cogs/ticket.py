@@ -315,16 +315,12 @@ class SetupWizardView(ui.LayoutView):
         # HEADER
         # =====================================================
 
-        header_section = discord.ui.Section(
-            discord.ui.TextDisplay(
-                "# Ticket Setup – Hilfe\n"
-                f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
-                "Erklärung zu dieser Seite"
-            ),
-            accessory=None
-        )
+        help_container.add_item(discord.ui.TextDisplay(
+            "# Ticket Setup – Hilfe\n"
+            f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
+            "Erklärung zu dieser Seite"
+        ))
 
-        help_container.add_item(header_section)
         help_container.add_item(discord.ui.Separator())
 
         # =====================================================
