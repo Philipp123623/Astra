@@ -439,7 +439,7 @@ class SetupWizardView(ui.LayoutView):
 
             container.add_item(discord.ui.Separator())
 
-            options = [
+            reminder_ping_options = [
                 ("15 Minuten", "15m"),
                 ("30 Minuten", "30m"),
                 ("1 Stunde", "1h"),
@@ -451,6 +451,26 @@ class SetupWizardView(ui.LayoutView):
                 ("7 Tage", "7d"),
                 ("Deaktivieren", "0"),
             ]
+            autoclose_options = [
+                ("1 Stunde", "1h"),
+                ("2 Stunden", "2h"),
+                ("6 Stunden", "6h"),
+                ("12 Stunden", "12h"),
+                ("1 Tag", "1d"),
+                ("2 Tage", "2d"),
+                ("7 Tage", "7d"),
+                ("Deaktivieren", "0"),
+            ]
+            reopen_options = [
+                ("1 Stunde", "1h"),
+                ("12 Stunden", "12h"),
+                ("1 Tag", "1d"),
+                ("2 Tage", "2d"),
+                ("3 Tage", "3d"),
+                ("7 Tage", "7d"),
+                ("14 Tage", "14d"),
+                ("Deaktivieren", "0"),
+            ]
 
             for label, key in [
                 ("Auto-Close", "autoclose_hours"),
@@ -459,11 +479,19 @@ class SetupWizardView(ui.LayoutView):
                 ("Ping-Throttle", "ping_throttle_minutes"),
             ]:
 
+                # 🔥 Richtige Options pro Config wählen
+                if key == "autoclose_hours":
+                    used_options = autoclose_options
+                elif key == "reopen_hours":
+                    used_options = reopen_options
+                else:  # Reminder & Ping
+                    used_options = reminder_ping_options
+
                 select = discord.ui.Select(
                     placeholder=f"{label} einstellen",
                     options=[
                         discord.SelectOption(label=o[0], value=o[1])
-                        for o in options
+                        for o in used_options
                     ]
                 )
 
