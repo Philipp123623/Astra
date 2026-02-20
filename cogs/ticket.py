@@ -425,9 +425,15 @@ class SetupWizardView(ui.LayoutView):
         # =====================================================
         elif self.page == 2:
 
+            # 🔥 Schöne Anzeige
             def show_status(key):
                 val = int(self.cached_config.get(key, 0) or 0)
-                return "🔴 Deaktiviert" if val <= 0 else f"🟢 Aktiv (`{val}`)"
+
+                if val <= 0:
+                    return "🔴 Deaktiviert"
+
+                pretty = format_native_value(key, val)
+                return f"🟢 Aktiv ({pretty})"
 
             container.add_item(discord.ui.TextDisplay(
                 "## ⚙ Automatische Funktionen\n\n"
@@ -438,6 +444,10 @@ class SetupWizardView(ui.LayoutView):
             ))
 
             container.add_item(discord.ui.Separator())
+
+            # ============================
+            # OPTIONS
+            # ============================
 
             reminder_ping_options = [
                 ("15 Minuten", "15m"),
@@ -451,6 +461,7 @@ class SetupWizardView(ui.LayoutView):
                 ("7 Tage", "7d"),
                 ("Deaktivieren", "0"),
             ]
+
             autoclose_options = [
                 ("1 Stunde", "1h"),
                 ("2 Stunden", "2h"),
@@ -461,6 +472,7 @@ class SetupWizardView(ui.LayoutView):
                 ("7 Tage", "7d"),
                 ("Deaktivieren", "0"),
             ]
+
             reopen_options = [
                 ("1 Stunde", "1h"),
                 ("12 Stunden", "12h"),
@@ -472,6 +484,10 @@ class SetupWizardView(ui.LayoutView):
                 ("Deaktivieren", "0"),
             ]
 
+            # ============================
+            # SELECT BUILDER
+            # ============================
+
             for label, key in [
                 ("Auto-Close", "autoclose_hours"),
                 ("Reminder", "remind_minutes"),
@@ -479,12 +495,11 @@ class SetupWizardView(ui.LayoutView):
                 ("Ping-Throttle", "ping_throttle_minutes"),
             ]:
 
-                # 🔥 Richtige Options pro Config wählen
                 if key == "autoclose_hours":
                     used_options = autoclose_options
                 elif key == "reopen_hours":
                     used_options = reopen_options
-                else:  # Reminder & Ping
+                else:
                     used_options = reminder_ping_options
 
                 select = discord.ui.Select(
@@ -506,10 +521,8 @@ class SetupWizardView(ui.LayoutView):
                             ephemeral=True
                         )
 
-                    # 🔥 Nur im Wizard speichern
                     self.cached_config[key] = parsed or 0
 
-                    # 🔥 Sofort neu rendern
                     self._build()
                     await interaction.response.edit_message(view=self)
 
