@@ -512,7 +512,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             back = discord.ui.Button(
                 label="Zurück",
                 emoji="<:Astra_arrow_backwards:1392540551546671348>",
-                style=discord.ButtonStyle.secondary
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"automod_back_{self.page}"
             )
 
             async def back_cb(interaction):
@@ -525,7 +526,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             nxt = discord.ui.Button(
                 label="Weiter",
                 emoji="<:Astra_arrow:1141303823600717885>",
-                style=discord.ButtonStyle.primary
+                style=discord.ButtonStyle.primary,
+                custom_id=f"automod_next_{self.page}"
             )
 
             async def next_cb(interaction):
@@ -537,7 +539,8 @@ class AutomodSetupView(discord.ui.LayoutView):
         cancel = discord.ui.Button(
             label="Abbrechen",
             emoji="<:Astra_x:1141303954555289600>",
-            style=discord.ButtonStyle.danger
+            style=discord.ButtonStyle.danger,
+            custom_id=f"automod_cancel_{self.page}"
         )
 
         async def cancel_cb(interaction):
