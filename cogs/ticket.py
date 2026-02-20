@@ -392,13 +392,11 @@ class SetupWizardView(ui.LayoutView):
 
         try:
             await interaction.response.edit_message(
-                content=f"<:Astra_accept:1141303821176422460> Panel erfolgreich erstellt!",
                 embed=done,
                 view=None,
             )
         except discord.InteractionResponded:
             await interaction.edit_original_response(
-                content=f"<:Astra_accept:1141303821176422460> Panel erfolgreich erstellt!",
                 embed=done,
                 view=None,
             )
