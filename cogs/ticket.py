@@ -470,8 +470,11 @@ class SetupWizardView(ui.LayoutView):
                         **{key: parsed}
                     )
 
-                    # WICHTIG: Nicht blind new_val speichern
-                    self.cached_config[key] = parsed
+                    # 🔥 Nach dem Speichern IMMER neu laden
+                    self.cached_config = await get_guild_config(
+                        self.bot.pool,
+                        interaction.guild.id
+                    )
 
                     self._build()
                     await interaction.response.defer()
