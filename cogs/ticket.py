@@ -229,43 +229,6 @@ async def set_guild_config(pool, guild_id: int, **kwargs):
 #                 SETUP WIZARD (VIEWS/MODAL)
 # =========================================================
 
-class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
-
-    def __init__(self, view: "SetupWizardView"):
-        super().__init__(timeout=180)
-        self.view = view
-
-        self.inp_title = discord.ui.TextInput(
-            label="Panel-Titel",
-            placeholder="z. B. Support, Bewerben …",
-            max_length=100,
-            required=True,
-            default=view.panel_title or None
-        )
-
-        self.inp_desc = discord.ui.TextInput(
-            label="Panel-Beschreibung",
-            style=discord.TextStyle.paragraph,
-            placeholder="Beschreibe kurz den Zweck des Tickets.",
-            max_length=1024,
-            required=True,
-            default=view.panel_desc or None
-        )
-
-        self.add_item(self.inp_title)
-        self.add_item(self.inp_desc)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        self.view.panel_title = str(self.inp_title.value)
-        self.view.panel_desc = str(self.inp_desc.value)
-
-        self.view._build()
-        await interaction.response.edit_message(view=self.view)
-
-
-# =====================================================================
-
-
 class SetupWizardView(ui.LayoutView):
 
     TOTAL_STEPS = 4
@@ -283,7 +246,9 @@ class SetupWizardView(ui.LayoutView):
         self.panel_title = None
         self.panel_desc = None
 
-        self.cached_config = {}
+        # 🔥 WICHTIG: Wizard-State, NICHT DB
+        self.cached_config = DEFAULT_CFG.copy()
+
         self._build()
 
     # =========================================================
@@ -298,7 +263,12 @@ class SetupWizardView(ui.LayoutView):
         self.clear_items()
         children = []
 
-        # ---------------- HEADER ----------------
+        def fmt(x):
+            if not x:
+                return "`Nicht gesetzt`"
+            return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
+
+        # Header
         children.append(
             discord.ui.TextDisplay(
                 f"# 🎫 Ticket Setup\n"
@@ -306,15 +276,9 @@ class SetupWizardView(ui.LayoutView):
                 f"`{self._progress_bar()}`"
             )
         )
-
         children.append(discord.ui.Separator())
 
-        # ---------------- STATUS ----------------
-        def fmt(x):
-            if not x:
-                return "`Nicht gesetzt`"
-            return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
-
+        # Aktuelle Panel-Daten
         children.append(
             discord.ui.TextDisplay(
                 "## 📌 Aktuelle Konfiguration\n"
@@ -325,7 +289,6 @@ class SetupWizardView(ui.LayoutView):
                 f"**Beschreibung:** {'Gesetzt' if self.panel_desc else '`Nicht gesetzt`'}"
             )
         )
-
         children.append(discord.ui.Separator())
 
         # =========================================================
@@ -359,7 +322,6 @@ class SetupWizardView(ui.LayoutView):
 
             children.append(discord.ui.TextDisplay("## 📦 Panel Einstellungen"))
 
-            # Channel
             ch = discord.ui.ChannelSelect(
                 placeholder="📢 Panel-Kanal wählen",
                 channel_types=[discord.ChannelType.text]
@@ -373,7 +335,6 @@ class SetupWizardView(ui.LayoutView):
             ch.callback = ch_cb
             children.append(discord.ui.ActionRow(ch))
 
-            # Category
             cat = discord.ui.ChannelSelect(
                 placeholder="🗂 Ticket-Kategorie wählen",
                 channel_types=[discord.ChannelType.category]
@@ -387,7 +348,6 @@ class SetupWizardView(ui.LayoutView):
             cat.callback = cat_cb
             children.append(discord.ui.ActionRow(cat))
 
-            # Role
             role = discord.ui.RoleSelect(
                 placeholder="🛡 Support-Rolle wählen"
             )
@@ -400,7 +360,6 @@ class SetupWizardView(ui.LayoutView):
             role.callback = role_cb
             children.append(discord.ui.ActionRow(role))
 
-            # Text Button
             text_btn = discord.ui.Button(
                 label="Titel & Beschreibung bearbeiten",
                 emoji="📝",
@@ -414,24 +373,13 @@ class SetupWizardView(ui.LayoutView):
             children.append(discord.ui.ActionRow(text_btn))
 
         # =========================================================
-        # PAGE 2 – SYSTEM
+        # PAGE 2 – SYSTEM (NUR WIZARD-STATE)
         # =========================================================
         elif self.page == 2:
 
-            cfg = self.cached_config or {}
-
             def show_status(key):
-                raw = cfg.get(key)
-
-                try:
-                    val = int(raw)
-                except (TypeError, ValueError):
-                    val = 0
-
-                if val <= 0:
-                    return "🔴 Deaktiviert"
-
-                return f"🟢 Aktiv (`{val}`)"
+                val = int(self.cached_config.get(key, 0) or 0)
+                return "🔴 Deaktiviert" if val <= 0 else f"🟢 Aktiv (`{val}`)"
 
             children.append(
                 discord.ui.TextDisplay(
@@ -484,22 +432,8 @@ class SetupWizardView(ui.LayoutView):
                             ephemeral=True
                         )
 
-                    # Wenn Parser None oder 0 liefert → prüfen
-                    if parsed is None:
-                        parsed = 0
+                    self.cached_config[key] = parsed or 0
 
-                    await set_guild_config(
-                        self.bot.pool,
-                        interaction.guild.id,
-                        **{key: parsed}
-                    )
-
-                    # 🔥 Nach dem Speichern IMMER neu laden
-                    self.cached_config = await get_guild_config(
-                        self.bot.pool,
-                        interaction.guild.id
-                    )
-                    print("CONFIG:", self.cached_config)
                     self._build()
                     await interaction.response.edit_message(view=self)
 
@@ -507,11 +441,11 @@ class SetupWizardView(ui.LayoutView):
                 children.append(discord.ui.ActionRow(select))
 
         # =========================================================
-        # PAGE 3 – FINAL REVIEW
+        # PAGE 3 – FINAL (JETZT ERST SPEICHERN)
         # =========================================================
         elif self.page == 3:
 
-            cfg = self.cached_config or {}
+            cfg = self.cached_config
 
             def show(val):
                 return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
@@ -545,12 +479,20 @@ class SetupWizardView(ui.LayoutView):
                         "⚠ Pflichtfelder fehlen.",
                         ephemeral=True
                     )
+
+                # 🔥 JETZT ERST DB SPEICHERN
+                await set_guild_config(
+                    self.bot.pool,
+                    interaction.guild.id,
+                    **self.cached_config
+                )
+
                 await self._create_panel(interaction)
 
             create.callback = create_cb
             children.append(discord.ui.ActionRow(create))
 
-        # ---------------- NAVIGATION ----------------
+        # Navigation
         nav = []
 
         if self.page > 0:
@@ -591,18 +533,8 @@ class SetupWizardView(ui.LayoutView):
             )
         )
 
-    # =========================================================
-    # SWITCH
-    # =========================================================
     async def _switch(self, interaction, page: int):
         self.page = page
-
-        if self.page >= 2 and hasattr(self.bot, "pool"):
-            self.cached_config = await get_guild_config(
-                self.bot.pool,
-                interaction.guild.id
-            )
-
         self._build()
         await interaction.response.edit_message(view=self)
 
