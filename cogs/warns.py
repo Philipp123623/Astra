@@ -496,6 +496,13 @@ class AutomodConfigView(discord.ui.LayoutView):
                 words = await cursor.fetchall()
                 self.words = [w[0] for w in words]
 
+                await cursor.execute(
+                    "SELECT COUNT(*) FROM blacklist WHERE serverID=%s AND status=1",
+                    (self.guild.id,)
+                )
+                count = await cursor.fetchone()
+                self.blacklist_status = 1 if count[0] > 0 else 0
+
     # =========================================================
     # PERMISSION CHECK
     # =========================================================
@@ -642,7 +649,9 @@ class AutomodConfigView(discord.ui.LayoutView):
         # CAPS FILTER
         # =====================================================
 
-        caps_enabled = self.caps_percent is not None
+        # Status und Prozent aus geladenen Daten
+        caps_enabled = getattr(self, "caps_status", 0) == 1
+        current_percent = self.caps_percent if self.caps_percent is not None else 50
 
         status_emoji = (
             "<:Astra_accept:1141303821176422460>"
@@ -652,11 +661,11 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         status_text = "Aktiv" if caps_enabled else "Deaktiviert"
 
-        toggle_label = "Ein" if not caps_enabled else "Aus"
+        toggle_label = "Aus" if caps_enabled else "Ein"
         toggle_style = (
-            discord.ButtonStyle.success
-            if not caps_enabled else
             discord.ButtonStyle.danger
+            if caps_enabled else
+            discord.ButtonStyle.success
         )
 
         toggle_btn = discord.ui.Button(
@@ -664,31 +673,47 @@ class AutomodConfigView(discord.ui.LayoutView):
             style=toggle_style
         )
 
+        # ---------- TOGGLE STATUS ----------
+
         async def toggle_caps(interaction):
+
+            new_status = 0 if caps_enabled else 1
+
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    if caps_enabled:
+
+                    # Prüfen ob Eintrag existiert
+                    await cursor.execute(
+                        "SELECT guildID FROM capslock WHERE guildID=%s",
+                        (self.guild.id,)
+                    )
+                    exists = await cursor.fetchone()
+
+                    if exists:
+                        # Nur Status ändern
                         await cursor.execute(
-                            "DELETE FROM capslock WHERE guildID=%s",
-                            (self.guild.id,)
+                            "UPDATE capslock SET status=%s WHERE guildID=%s",
+                            (new_status, self.guild.id)
                         )
                     else:
+                        # Neu anlegen mit Default-Prozent
                         await cursor.execute(
-                            "INSERT INTO capslock (guildID, percent) "
-                            "VALUES (%s,%s)",
-                            (self.guild.id, 50)
+                            "INSERT INTO capslock (guildID, percent, status) VALUES (%s,%s,%s)",
+                            (self.guild.id, current_percent, new_status)
                         )
 
             await self.refresh_view(interaction)
 
         toggle_btn.callback = toggle_caps
 
+        # ---------- SECTION ----------
+
         section = discord.ui.Section(
             discord.ui.TextDisplay(
                 "## Caps-Filter\n\n"
                 f"{status_emoji} **Status:** {status_text}\n"
                 f"<:Astra_punkt:1141303896745201696> "
-                f"Limit: **{self.caps_percent or 50}%**\n\n"
+                f"Limit: **{current_percent}%**\n\n"
                 "<:Astra_light_on:1141303864134467675> "
                 "Nach Überschreitung wird die Nachricht entfernt."
             ),
@@ -697,48 +722,52 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         container.add_item(section)
 
-        set_percent = discord.ui.Button(
-            label="Prozent ändern",
-            emoji="<:Astra_arrow:1141303823600717885>",
-            style=discord.ButtonStyle.primary,
-            disabled=not caps_enabled  # <-- DAS IST DIE LÖSUNG
-        )
+        # ---------- SELECT MENU (NUR WENN AKTIV) ----------
 
-        async def percent_cb(interaction):
+        if caps_enabled:
+            options = [
+                discord.SelectOption(
+                    label=f"{i}%",
+                    value=str(i),
+                    default=(current_percent == i)
+                )
+                for i in range(10, 101, 10)
+            ]
 
-            class PercentModal(discord.ui.Modal, title="Caps Prozent ändern"):
+            percent_select = discord.ui.Select(
+                placeholder="Prozent wählen...",
+                min_values=1,
+                max_values=1,
+                options=options
+            )
 
-                percent = discord.ui.TextInput(label="Neuer Prozentwert")
+            async def percent_select_cb(interaction):
+                value = int(percent_select.values[0])
 
-                def __init__(self, parent):
-                    super().__init__()
-                    self.parent = parent
+                async with self.bot.pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        await cursor.execute(
+                            "UPDATE capslock SET percent=%s WHERE guildID=%s",
+                            (value, self.guild.id)
+                        )
 
-                async def on_submit(self, inter):
-                    async with self.parent.bot.pool.acquire() as conn:
-                        async with conn.cursor() as cursor:
-                            await cursor.execute(
-                                "UPDATE capslock SET percent=%s "
-                                "WHERE guildID=%s",
-                                (self.percent.value, self.parent.guild.id)
-                            )
+                await self.refresh_view(interaction)
 
-                    await self.parent.refresh_view(inter)
+            percent_select.callback = percent_select_cb
 
-            await interaction.response.send_modal(PercentModal(self))
+            container.add_item(discord.ui.ActionRow(percent_select))
 
-        set_percent.callback = percent_cb
-
-        container.add_item(discord.ui.ActionRow(set_percent))
         container.add_item(discord.ui.Separator())
 
         # =====================================================
         # BLACKLIST
         # =====================================================
 
-        # Status getrennt vom Wort-Inhalt behandeln
-        blacklist_enabled = "__enabled__" in self.words
-        real_words = [w for w in self.words if w != "__enabled__"]
+        # Status aus geladenen Daten (muss in _load_data gesetzt werden)
+        blacklist_enabled = getattr(self, "blacklist_status", 0) == 1
+
+        # Alle Wörter laden (unabhängig vom Status)
+        real_words = sorted(self.words)
 
         status_emoji = (
             "<:Astra_accept:1141303821176422460>"
@@ -762,9 +791,9 @@ class AutomodConfigView(discord.ui.LayoutView):
         toggle_label = "Aus" if blacklist_enabled else "Ein"
 
         toggle_style = (
-            discord.ButtonStyle.danger  # Rot wenn aktiv
+            discord.ButtonStyle.danger
             if blacklist_enabled else
-            discord.ButtonStyle.success  # Grün wenn deaktiviert
+            discord.ButtonStyle.success
         )
 
         toggle_blacklist = discord.ui.Button(
@@ -774,21 +803,30 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         async def toggle_blacklist_cb(interaction):
 
+            new_status = 0 if blacklist_enabled else 1
+
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
 
-                    if blacklist_enabled:
-                        # deaktivieren → alles löschen
+                    # Prüfen ob Eintrag existiert
+                    await cursor.execute(
+                        "SELECT serverID FROM blacklist WHERE serverID=%s LIMIT 1",
+                        (self.guild.id,)
+                    )
+                    exists = await cursor.fetchone()
+
+                    if exists:
+                        # Status für alle Wörter setzen
                         await cursor.execute(
-                            "DELETE FROM blacklist WHERE serverID=%s",
-                            (self.guild.id,)
+                            "UPDATE blacklist SET status=%s WHERE serverID=%s",
+                            (new_status, self.guild.id)
                         )
                     else:
-                        # aktivieren → Status-Eintrag setzen
-                        await cursor.execute(
-                            "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
-                            (self.guild.id, "__enabled__")
-                        )
+                        # Falls noch keine Wörter existieren → nur Status-Row anlegen
+                        # (leerer Zustand, aber Status steuerbar)
+                        if new_status == 1:
+                            # Aktivieren ohne Wörter → keine Insert notwendig
+                            pass
 
             await self.refresh_view(interaction)
 
@@ -840,7 +878,6 @@ class AutomodConfigView(discord.ui.LayoutView):
                     self.parent = parent
 
                 async def on_submit(self, inter):
-
                     entries = [
                         w.strip().lower()
                         for w in self.words.value.split(",")
@@ -849,19 +886,11 @@ class AutomodConfigView(discord.ui.LayoutView):
 
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
-
-                            # sicherstellen dass Status existiert
-                            await cursor.execute(
-                                "INSERT IGNORE INTO blacklist (serverID, word) VALUES (%s,%s)",
-                                (self.parent.guild.id, "__enabled__")
-                            )
-
                             for word in entries:
-                                if word == "__enabled__":
-                                    continue
-
                                 await cursor.execute(
-                                    "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                    "INSERT INTO blacklist (serverID, word, status) "
+                                    "VALUES (%s,%s,1) "
+                                    "ON DUPLICATE KEY UPDATE status=1",
                                     (self.parent.guild.id, word)
                                 )
 
@@ -884,10 +913,22 @@ class AutomodConfigView(discord.ui.LayoutView):
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "DELETE FROM blacklist "
-                                "WHERE serverID=%s AND word=%s AND word != '__enabled__'",
+                                "DELETE FROM blacklist WHERE serverID=%s AND word=%s",
                                 (self.parent.guild.id, self.word.value.lower())
                             )
+
+                            # Falls keine Wörter mehr existieren → Status automatisch 0
+                            await cursor.execute(
+                                "SELECT COUNT(*) FROM blacklist WHERE serverID=%s",
+                                (self.parent.guild.id,)
+                            )
+                            count = await cursor.fetchone()
+
+                            if count[0] == 0:
+                                await cursor.execute(
+                                    "UPDATE blacklist SET status=0 WHERE serverID=%s",
+                                    (self.parent.guild.id,)
+                                )
 
                     await self.parent.refresh_view(inter)
 
