@@ -280,13 +280,18 @@ class SetupWizardView(ui.LayoutView):
         self.panel_title = None
         self.panel_desc = None
 
-        # 🔥 WICHTIG: Wizard-State, NICHT DB
-        self.cached_config = DEFAULT_CFG.copy()
+        # 🔥 Alles deaktiviert beim Start
+        self.cached_config = {
+            "autoclose_hours": 0,
+            "remind_minutes": 0,
+            "reopen_hours": 0,
+            "ping_throttle_minutes": 0,
+        }
 
         self._build()
 
     # =========================================================
-    # UI BUILD
+    # BUILD
     # =========================================================
 
     def _progress_bar(self):
@@ -295,7 +300,10 @@ class SetupWizardView(ui.LayoutView):
 
     def _build(self):
         self.clear_items()
-        children = []
+
+        container = discord.ui.Container(
+            accent_color=discord.Colour.blue().value
+        )
 
         def fmt(x):
             if not x:
@@ -303,39 +311,35 @@ class SetupWizardView(ui.LayoutView):
             return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
 
         # Header
-        children.append(
-            discord.ui.TextDisplay(
-                f"# 🎫 Ticket Setup\n"
-                f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
-                f"`{self._progress_bar()}`"
-            )
-        )
-        children.append(discord.ui.Separator())
+        container.add_item(discord.ui.TextDisplay(
+            f"# 🎫 Ticket Setup\n"
+            f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
+            f"`{self._progress_bar()}`"
+        ))
 
-        # Aktuelle Panel-Daten
-        children.append(
-            discord.ui.TextDisplay(
-                "## 📌 Aktuelle Konfiguration\n"
-                f"**Kanal:** {fmt(self.target_channel)}\n"
-                f"**Kategorie:** {fmt(self.category)}\n"
-                f"**Support-Rolle:** {fmt(self.role)}\n\n"
-                f"**Titel:** {self.panel_title or '`Nicht gesetzt`'}\n"
-                f"**Beschreibung:** {'Gesetzt' if self.panel_desc else '`Nicht gesetzt`'}"
-            )
-        )
-        children.append(discord.ui.Separator())
+        container.add_item(discord.ui.Separator())
 
-        # =========================================================
-        # PAGE 0
-        # =========================================================
+        # Aktuelle Panel Daten
+        container.add_item(discord.ui.TextDisplay(
+            "## 📌 Aktuelle Konfiguration\n"
+            f"**Kanal:** {fmt(self.target_channel)}\n"
+            f"**Kategorie:** {fmt(self.category)}\n"
+            f"**Support-Rolle:** {fmt(self.role)}\n\n"
+            f"**Titel:** {self.panel_title or '`Nicht gesetzt`'}\n"
+            f"**Beschreibung:** {'Gesetzt' if self.panel_desc else '`Nicht gesetzt`'}"
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        # =====================================================
+        # PAGE 0 – Willkommen
+        # =====================================================
         if self.page == 0:
 
-            children.append(
-                discord.ui.TextDisplay(
-                    "## 🚀 Willkommen\n"
-                    "Dieser Wizard führt dich Schritt für Schritt durch das Setup."
-                )
-            )
+            container.add_item(discord.ui.TextDisplay(
+                "## 🚀 Willkommen\n"
+                "Dieser Wizard führt dich Schritt für Schritt durch das Setup."
+            ))
 
             start = discord.ui.Button(
                 label="Setup starten",
@@ -347,14 +351,14 @@ class SetupWizardView(ui.LayoutView):
                 await self._switch(interaction, 1)
 
             start.callback = start_cb
-            children.append(discord.ui.ActionRow(start))
+            container.add_item(discord.ui.ActionRow(start))
 
-        # =========================================================
-        # PAGE 1 – PANEL
-        # =========================================================
+        # =====================================================
+        # PAGE 1 – Panel Settings
+        # =====================================================
         elif self.page == 1:
 
-            children.append(discord.ui.TextDisplay("## 📦 Panel Einstellungen"))
+            container.add_item(discord.ui.TextDisplay("## 📦 Panel Einstellungen"))
 
             ch = discord.ui.ChannelSelect(
                 placeholder="📢 Panel-Kanal wählen",
@@ -367,7 +371,7 @@ class SetupWizardView(ui.LayoutView):
                 await interaction.response.edit_message(view=self)
 
             ch.callback = ch_cb
-            children.append(discord.ui.ActionRow(ch))
+            container.add_item(discord.ui.ActionRow(ch))
 
             cat = discord.ui.ChannelSelect(
                 placeholder="🗂 Ticket-Kategorie wählen",
@@ -380,7 +384,7 @@ class SetupWizardView(ui.LayoutView):
                 await interaction.response.edit_message(view=self)
 
             cat.callback = cat_cb
-            children.append(discord.ui.ActionRow(cat))
+            container.add_item(discord.ui.ActionRow(cat))
 
             role = discord.ui.RoleSelect(
                 placeholder="🛡 Support-Rolle wählen"
@@ -392,7 +396,7 @@ class SetupWizardView(ui.LayoutView):
                 await interaction.response.edit_message(view=self)
 
             role.callback = role_cb
-            children.append(discord.ui.ActionRow(role))
+            container.add_item(discord.ui.ActionRow(role))
 
             text_btn = discord.ui.Button(
                 label="Titel & Beschreibung bearbeiten",
@@ -404,28 +408,26 @@ class SetupWizardView(ui.LayoutView):
                 await interaction.response.send_modal(PanelTextModal(self))
 
             text_btn.callback = text_cb
-            children.append(discord.ui.ActionRow(text_btn))
+            container.add_item(discord.ui.ActionRow(text_btn))
 
-        # =========================================================
-        # PAGE 2 – SYSTEM (NUR WIZARD-STATE)
-        # =========================================================
+        # =====================================================
+        # PAGE 2 – System Settings (Wizard Only)
+        # =====================================================
         elif self.page == 2:
 
             def show_status(key):
                 val = int(self.cached_config.get(key, 0) or 0)
                 return "🔴 Deaktiviert" if val <= 0 else f"🟢 Aktiv (`{val}`)"
 
-            children.append(
-                discord.ui.TextDisplay(
-                    "## ⚙ Automatische Funktionen\n\n"
-                    f"**Auto-Close:** {show_status('autoclose_hours')}\n"
-                    f"**Reminder:** {show_status('remind_minutes')}\n"
-                    f"**Reopen:** {show_status('reopen_hours')}\n"
-                    f"**Ping-Throttle:** {show_status('ping_throttle_minutes')}"
-                )
-            )
+            container.add_item(discord.ui.TextDisplay(
+                "## ⚙ Automatische Funktionen\n\n"
+                f"**Auto-Close:** {show_status('autoclose_hours')}\n"
+                f"**Reminder:** {show_status('remind_minutes')}\n"
+                f"**Reopen:** {show_status('reopen_hours')}\n"
+                f"**Ping-Throttle:** {show_status('ping_throttle_minutes')}"
+            ))
 
-            children.append(discord.ui.Separator())
+            container.add_item(discord.ui.Separator())
 
             options = [
                 ("15 Minuten", "15m"),
@@ -466,40 +468,35 @@ class SetupWizardView(ui.LayoutView):
                             ephemeral=True
                         )
 
+                    # 🔥 Nur im Wizard speichern
                     self.cached_config[key] = parsed or 0
 
+                    # 🔥 Sofort neu rendern
                     self._build()
                     await interaction.response.edit_message(view=self)
 
                 select.callback = cb
-                children.append(discord.ui.ActionRow(select))
+                container.add_item(discord.ui.ActionRow(select))
 
-        # =========================================================
-        # PAGE 3 – FINAL (JETZT ERST SPEICHERN)
-        # =========================================================
+        # =====================================================
+        # PAGE 3 – Final
+        # =====================================================
         elif self.page == 3:
-
-            cfg = self.cached_config
 
             def show(val):
                 return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
 
-            children.append(
-                discord.ui.TextDisplay(
-                    "## 🎯 Abschluss & Übersicht\n\n"
-                    f"**Kanal:** {fmt(self.target_channel)}\n"
-                    f"**Kategorie:** {fmt(self.category)}\n"
-                    f"**Support-Rolle:** {fmt(self.role)}\n\n"
-                    f"**Titel:** {self.panel_title or 'Nicht gesetzt'}\n"
-                    f"**Beschreibung:** {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}\n\n"
-                    f"**Auto-Close:** {show(cfg.get('autoclose_hours', 0))}\n"
-                    f"**Reminder:** {show(cfg.get('remind_minutes', 0))}\n"
-                    f"**Reopen:** {show(cfg.get('reopen_hours', 0))}\n"
-                    f"**Ping-Throttle:** {show(cfg.get('ping_throttle_minutes', 0))}"
-                )
-            )
+            cfg = self.cached_config
 
-            children.append(discord.ui.Separator())
+            container.add_item(discord.ui.TextDisplay(
+                "## 🎯 Abschluss & Übersicht\n\n"
+                f"**Auto-Close:** {show(cfg['autoclose_hours'])}\n"
+                f"**Reminder:** {show(cfg['remind_minutes'])}\n"
+                f"**Reopen:** {show(cfg['reopen_hours'])}\n"
+                f"**Ping-Throttle:** {show(cfg['ping_throttle_minutes'])}"
+            ))
+
+            container.add_item(discord.ui.Separator())
 
             create = discord.ui.Button(
                 label="Panel erstellen",
@@ -514,7 +511,7 @@ class SetupWizardView(ui.LayoutView):
                         ephemeral=True
                     )
 
-                # 🔥 JETZT ERST DB SPEICHERN
+                # 🔥 Erst hier DB schreiben
                 await set_guild_config(
                     self.bot.pool,
                     interaction.guild.id,
@@ -524,9 +521,12 @@ class SetupWizardView(ui.LayoutView):
                 await self._create_panel(interaction)
 
             create.callback = create_cb
-            children.append(discord.ui.ActionRow(create))
+            container.add_item(discord.ui.ActionRow(create))
 
+        # =====================================================
         # Navigation
+        # =====================================================
+
         nav = []
 
         if self.page > 0:
@@ -543,11 +543,7 @@ class SetupWizardView(ui.LayoutView):
             nxt.callback = next_cb
             nav.append(nxt)
 
-        cancel = discord.ui.Button(
-            label="Abbrechen",
-            emoji="❌",
-            style=discord.ButtonStyle.danger
-        )
+        cancel = discord.ui.Button(label="Abbrechen", emoji="❌", style=discord.ButtonStyle.danger)
 
         async def cancel_cb(interaction):
             await interaction.response.edit_message(
@@ -558,14 +554,9 @@ class SetupWizardView(ui.LayoutView):
         cancel.callback = cancel_cb
         nav.append(cancel)
 
-        children.append(discord.ui.ActionRow(*nav))
+        container.add_item(discord.ui.ActionRow(*nav))
 
-        self.add_item(
-            discord.ui.Container(
-                *children,
-                accent_color=discord.Colour.blue().value
-            )
-        )
+        self.add_item(container)
 
     async def _switch(self, interaction, page: int):
         self.page = page
@@ -580,15 +571,6 @@ class SetupWizardView(ui.LayoutView):
             self.panel_title,
             self.panel_desc
         ])
-
-    async def interaction_check(self, interaction):
-        if interaction.user.id != self.invoker.id:
-            await interaction.response.send_message(
-                "Nur der Ersteller darf diesen Wizard bedienen.",
-                ephemeral=True
-            )
-            return False
-        return True
 
 
 # =========================================================
