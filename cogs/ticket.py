@@ -903,7 +903,7 @@ class SetupWizardView(ui.LayoutView):
             async def create_cb(interaction):
                 if not await self.validate():
                     return await interaction.response.send_message(
-                        "⚠ Pflichtfelder fehlen!",
+                        "⚠ Pflichtfelder fehlen.",
                         ephemeral=True
                     )
 
