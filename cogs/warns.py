@@ -890,6 +890,15 @@ class AutomodConfigView(discord.ui.LayoutView):
         container.add_item(discord.ui.ActionRow(add_word, remove_word))
         self.add_item(container)
 
+    # =========================================================
+    # REFRESH
+    # =========================================================
+
+    async def refresh_view(self, interaction: discord.Interaction):
+        await self._load_data()
+        self._build()
+        await interaction.response.edit_message(view=self)
+
 
 @app_commands.guild_only()
 class Automod(app_commands.Group):
