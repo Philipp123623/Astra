@@ -573,16 +573,11 @@ class SetupWizardView(ui.LayoutView):
         current_step = self.page  # page 0 bleibt 0
 
         # =====================================================
-        # HEADER ROW (Titel + Help rechts)
+        # HEADER (Titel links, Help rechts)
         # =====================================================
 
-        header_row = discord.ui.ActionRow()
-
-        # Titel als deaktivierter Button (nur visuell)
-        title_btn = discord.ui.Button(
-            label="Ticket Setup",
-            style=discord.ButtonStyle.secondary,
-            disabled=True
+        title = discord.ui.TextDisplay(
+            "## Ticket Setup"
         )
 
         help_btn = discord.ui.Button(
@@ -598,17 +593,14 @@ class SetupWizardView(ui.LayoutView):
 
         help_btn.callback = help_cb
 
-        header_row.add_item(title_btn)
-        header_row.add_item(help_btn)
-
-        container.add_item(header_row)
+        # Wichtig: Direkt hintereinander adden (KEINE ActionRow!)
+        container.add_item(title)
+        container.add_item(help_btn)
 
         container.add_item(discord.ui.TextDisplay(
             f"**Schritt {current_step}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
-
-        container.add_item(discord.ui.Separator())
 
         container.add_item(discord.ui.Separator())
 
