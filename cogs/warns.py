@@ -40,9 +40,28 @@ class AutomodSetupView(discord.ui.LayoutView):
     # =========================================================
 
     async def start(self, interaction: discord.Interaction):
+
+        if not interaction.guild:
+            return await interaction.response.send_message(
+                "❌ Dieser Command funktioniert nur in Servern.",
+                ephemeral=True
+            )
+
         await self._check_existing(interaction.guild.id)
         self._build()
-        await interaction.response.send_message(view=self, ephemeral=True)
+
+        # Sicherheitscheck: Falls aus irgendeinem Grund nichts gebaut wurde
+        if not self.children:
+            return await interaction.response.send_message(
+                "❌ Interner Fehler: View konnte nicht erstellt werden.",
+                ephemeral=True
+            )
+
+        await interaction.response.send_message(
+            content="‎",  # unsichtbares Zeichen verhindert 50006
+            view=self,
+            ephemeral=True
+        )
 
     # =========================================================
     # CHECK OB BEREITS KONFIGURIERT
