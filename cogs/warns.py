@@ -15,13 +15,13 @@ class AutomodSetupView(discord.ui.LayoutView):
     TOTAL_STEPS = 4
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
-        super().__init__(timeout=None)
+        super().__init__(timeout=900)
 
         self.bot = bot
         self.invoker = invoker
         self.page = 0
 
-        # Warn System (warns, action, timeout_seconds)
+        # Warn-System
         self.warn_rules: list[tuple[int, str, int | None]] = []
 
         # Caps
@@ -54,32 +54,41 @@ class AutomodSetupView(discord.ui.LayoutView):
             accent_color=discord.Colour.orange().value
         )
 
-        # ================= HEADER =================
+        # =====================================================
+        # HEADER SECTION
+        # =====================================================
 
-        container.add_item(discord.ui.TextDisplay(
-            "# 🤖 Automod Setup\n"
-            f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
-            f"`{self._progress_bar()}`"
-        ))
+        header = discord.ui.Section(
+            discord.ui.TextDisplay(
+                "# 🤖 Automod Setup\n"
+                f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
+                f"`{self._progress_bar()}`"
+            )
+        )
 
+        container.add_item(header)
         container.add_item(discord.ui.Separator())
 
         # =====================================================
-        # PAGE 0 – WELCOME
+        # PAGE 0 – WILLKOMMEN
         # =====================================================
 
         if self.page == 0:
 
             container.add_item(discord.ui.TextDisplay(
-                "## Willkommen\n"
-                "• Warn-System konfigurieren\n"
-                "• Caps-Filter einstellen\n"
-                "• Blacklist verwalten\n\n"
-                "Alles zentral in einem Setup."
+                "## Überblick\n\n"
+                "<:Astra_punkt:1141303896745201696> **Warn-System konfigurieren**\n"
+                "<:Astra_punkt:1141303896745201696> **Caps-Filter einstellen**\n"
+                "<:Astra_punkt:1141303896745201696> **Blacklist verwalten**\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Alle Moderationsfunktionen werden hier zentral eingerichtet."
             ))
+
+            container.add_item(discord.ui.Separator())
 
             start = discord.ui.Button(
                 label="Setup starten",
+                emoji="<:Astra_boost:1141303827107164270>",
                 style=discord.ButtonStyle.success
             )
 
@@ -95,21 +104,29 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         elif self.page == 1:
 
-            if self.warn_rules:
-                rules_text = "\n".join(
-                    f"{warns} → {action}"
-                    + (f" ({timeout}s)" if timeout else "")
+            rules_text = (
+                "\n".join(
+                    f"<:Astra_punkt:1141303896745201696> "
+                    f"**{warns} Warns** → {action}"
+                    + (f" (`{timeout}s Timeout`)" if timeout else "")
                     for warns, action, timeout in self.warn_rules
                 )
-            else:
-                rules_text = "Keine Regeln gesetzt."
+                if self.warn_rules
+                else "<:Astra_x:1141303954555289600> Keine Regeln gesetzt."
+            )
 
             container.add_item(discord.ui.TextDisplay(
-                f"## Warn-Regeln\n{rules_text}"
+                "## Warn-System\n\n"
+                f"{rules_text}\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Du kannst mehrere Eskalationsstufen definieren."
             ))
+
+            container.add_item(discord.ui.Separator())
 
             add_btn = discord.ui.Button(
                 label="Regel hinzufügen",
+                emoji="<:Astra_accept:1141303821176422460>",
                 style=discord.ButtonStyle.success
             )
 
@@ -119,8 +136,8 @@ class AutomodSetupView(discord.ui.LayoutView):
 
                     warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
                     action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
-                    timeout = discord.ui.TextInput(
-                        label="Timeout Sekunden (nur bei Timeout)",
+                    timeout_input = discord.ui.TextInput(
+                        label="Timeout Sekunden (optional)",
                         required=False
                     )
 
@@ -130,12 +147,21 @@ class AutomodSetupView(discord.ui.LayoutView):
 
                     async def on_submit(self, inter):
 
-                        warns_val = int(self.warns.value)
-                        action_val = self.action.value.strip()
-                        timeout_val = int(self.timeout.value) if self.timeout.value else None
+                        try:
+                            warns_val = int(self.warns.value)
+                        except:
+                            return await inter.response.send_message(
+                                "<:Astra_x:1141303954555289600> Ungültige Warn-Zahl.",
+                                ephemeral=True
+                            )
+
+                        timeout_val = (
+                            int(self.timeout_input.value)
+                            if self.timeout_input.value else None
+                        )
 
                         self.parent.warn_rules.append(
-                            (warns_val, action_val, timeout_val)
+                            (warns_val, self.action.value.strip(), timeout_val)
                         )
 
                         self.parent._build()
@@ -152,11 +178,26 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         elif self.page == 2:
 
-            status_text = "Ein" if self.caps_enabled else "Aus"
+            active = self.caps_enabled
+
+            status_emoji = (
+                "<:Astra_accept:1141303821176422460>"
+                if active else
+                "<:Astra_x:1141303954555289600>"
+            )
+
+            status_text = "Aktiv" if active else "Deaktiviert"
+
+            toggle_label = "Ein" if not active else "Aus"
+            toggle_style = (
+                discord.ButtonStyle.success
+                if not active else
+                discord.ButtonStyle.danger
+            )
 
             toggle_btn = discord.ui.Button(
-                label=status_text,
-                style=discord.ButtonStyle.success if self.caps_enabled else discord.ButtonStyle.danger
+                label=toggle_label,
+                style=toggle_style
             )
 
             async def toggle_cb(interaction):
@@ -168,9 +209,12 @@ class AutomodSetupView(discord.ui.LayoutView):
 
             section = discord.ui.Section(
                 discord.ui.TextDisplay(
-                    f"## Caps-Filter\n"
-                    f"Status: {status_text}\n"
-                    f"Limit: {self.caps_percent}%"
+                    "## Caps-Filter\n\n"
+                    f"{status_emoji} **Status:** {status_text}\n"
+                    f"<:Astra_punkt:1141303896745201696> "
+                    f"Limit: **{self.caps_percent}% Großbuchstaben**\n\n"
+                    "<:Astra_light_on:1141303864134467675> "
+                    "Nach Überschreitung wird die Nachricht gelöscht."
                 ),
                 accessory=toggle_btn
             )
@@ -179,7 +223,7 @@ class AutomodSetupView(discord.ui.LayoutView):
             container.add_item(discord.ui.Separator())
 
             percent_select = discord.ui.Select(
-                placeholder="Prozent wählen",
+                placeholder="Caps-Limit ändern",
                 options=[
                     discord.SelectOption(label=f"{i}%", value=str(i))
                     for i in range(10, 101, 10)
@@ -200,15 +244,27 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         elif self.page == 3:
 
-            words = ", ".join(self.blacklist_words) if self.blacklist_words else "Keine"
+            words_text = (
+                "\n".join(
+                    f"<:Astra_punkt:1141303896745201696> `{w}`"
+                    for w in self.blacklist_words
+                )
+                if self.blacklist_words
+                else "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
+            )
 
             container.add_item(discord.ui.TextDisplay(
-                f"## Blacklist\n{words}\n\n"
-                "Mehrere Wörter mit , trennen."
+                "## Blacklist\n\n"
+                f"{words_text}\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Mehrere Wörter mit `,` trennen."
             ))
+
+            container.add_item(discord.ui.Separator())
 
             add_btn = discord.ui.Button(
                 label="Wörter hinzufügen",
+                emoji="<:Astra_accept:1141303821176422460>",
                 style=discord.ButtonStyle.primary
             )
 
@@ -242,20 +298,29 @@ class AutomodSetupView(discord.ui.LayoutView):
             container.add_item(discord.ui.ActionRow(add_btn))
 
         # =====================================================
-        # PAGE 4 – SAVE
+        # PAGE 4 – ÜBERSICHT & SPEICHERN
         # =====================================================
 
         elif self.page == 4:
 
             container.add_item(discord.ui.TextDisplay(
-                "## Übersicht\n\n"
-                f"Warn-Regeln: {len(self.warn_rules)}\n"
-                f"Caps: {self.caps_enabled} ({self.caps_percent}%)\n"
-                f"Blacklist: {len(self.blacklist_words)} Wörter"
+                "## Abschluss & Übersicht\n\n"
+                f"<:Astra_punkt:1141303896745201696> "
+                f"Warn-Regeln: **{len(self.warn_rules)}**\n"
+                f"<:Astra_punkt:1141303896745201696> "
+                f"Caps: **{'Aktiv' if self.caps_enabled else 'Deaktiviert'} "
+                f"({self.caps_percent}%)**\n"
+                f"<:Astra_punkt:1141303896745201696> "
+                f"Blacklist: **{len(self.blacklist_words)} Wörter**\n\n"
+                "<:Astra_accept:1141303821176422460> "
+                "Wenn alles korrekt ist, kann gespeichert werden."
             ))
 
+            container.add_item(discord.ui.Separator())
+
             save = discord.ui.Button(
-                label="Speichern",
+                label="Automod speichern",
+                emoji="<:Astra_accept:1141303821176422460>",
                 style=discord.ButtonStyle.success
             )
 
@@ -263,6 +328,7 @@ class AutomodSetupView(discord.ui.LayoutView):
 
                 if interaction.user.id != self.invoker.id:
                     return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> "
                         "Nur der Ersteller darf speichern.",
                         ephemeral=True
                     )
@@ -285,29 +351,31 @@ class AutomodSetupView(discord.ui.LayoutView):
                             (interaction.guild.id,)
                         )
 
-                        # Warn-Regeln speichern
                         for warns, action, timeout in self.warn_rules:
                             await cursor.execute(
-                                "INSERT INTO automod (guildID, warns, action, timeout_seconds) VALUES (%s,%s,%s,%s)",
+                                "INSERT INTO automod "
+                                "(guildID, warns, action, timeout_seconds) "
+                                "VALUES (%s,%s,%s,%s)",
                                 (interaction.guild.id, warns, action, timeout)
                             )
 
-                        # Caps speichern
                         if self.caps_enabled:
                             await cursor.execute(
-                                "INSERT INTO capslock (guildID, percent) VALUES (%s,%s)",
+                                "INSERT INTO capslock (guildID, percent) "
+                                "VALUES (%s,%s)",
                                 (interaction.guild.id, self.caps_percent)
                             )
 
-                        # Blacklist speichern
                         for word in self.blacklist_words:
                             await cursor.execute(
-                                "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                "INSERT INTO blacklist (serverID, word) "
+                                "VALUES (%s,%s)",
                                 (interaction.guild.id, word)
                             )
 
                 await interaction.response.edit_message(
-                    content="Automod erfolgreich eingerichtet.",
+                    content="<:Astra_accept:1141303821176422460> "
+                            "Automod erfolgreich eingerichtet.",
                     view=None
                 )
 
@@ -323,6 +391,7 @@ class AutomodSetupView(discord.ui.LayoutView):
         if self.page > 0:
             back = discord.ui.Button(
                 label="Zurück",
+                emoji="<:Astra_arrow_backwards:1392540551546671348>",
                 style=discord.ButtonStyle.secondary
             )
 
@@ -335,6 +404,7 @@ class AutomodSetupView(discord.ui.LayoutView):
         if self.page < self.TOTAL_STEPS:
             nxt = discord.ui.Button(
                 label="Weiter",
+                emoji="<:Astra_arrow:1141303823600717885>",
                 style=discord.ButtonStyle.primary
             )
 
@@ -346,6 +416,7 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         cancel = discord.ui.Button(
             label="Abbrechen",
+            emoji="<:Astra_x:1141303954555289600>",
             style=discord.ButtonStyle.danger
         )
 
@@ -368,13 +439,12 @@ class AutomodSetupView(discord.ui.LayoutView):
 class AutomodConfigView(discord.ui.LayoutView):
 
     def __init__(self, bot: commands.Bot, invoker: discord.User, guild: discord.Guild):
-        super().__init__(timeout=300)
+        super().__init__(timeout=600)
 
         self.bot = bot
         self.invoker = invoker
         self.guild = guild
 
-        # warns, action, timeout_seconds
         self.warn_rules: list[tuple[int, str, int | None]] = []
         self.caps_percent: int | None = None
         self.words: list[str] = []
@@ -423,7 +493,8 @@ class AutomodConfigView(discord.ui.LayoutView):
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self.invoker.id:
             await interaction.response.send_message(
-                "<:Astra_x:1141303954555289600> Nur der Command-Ersteller darf dieses Panel bedienen.",
+                "<:Astra_x:1141303954555289600> "
+                "Nur der Command-Ersteller darf dieses Panel bedienen.",
                 ephemeral=True
             )
             return False
@@ -441,31 +512,43 @@ class AutomodConfigView(discord.ui.LayoutView):
         )
 
         # =====================================================
-        # HEADER
+        # HEADER SECTION
         # =====================================================
 
-        container.add_item(discord.ui.TextDisplay(
-            "# ⚙️ Automod Konfiguration"
-        ))
+        header = discord.ui.Section(
+            discord.ui.TextDisplay(
+                "# ⚙️ Automod Konfiguration\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Hier kannst du bestehende Moderations-Regeln anpassen."
+            )
+        )
+
+        container.add_item(header)
         container.add_item(discord.ui.Separator())
 
         # =====================================================
-        # WARN REGELN
+        # WARN SYSTEM
         # =====================================================
 
         warn_text = (
             "\n".join(
-                f"<:Astra_punkt:1141303896745201696> {w} → {a}"
-                + (f" ({t}s)" if t else "")
+                f"<:Astra_punkt:1141303896745201696> "
+                f"**{w} Warns** → {a}"
+                + (f" (`{t}s Timeout`)" if t else "")
                 for w, a, t in self.warn_rules
             )
-            if self.warn_rules else
-            "<:Astra_x:1141303954555289600> Keine Regeln gesetzt."
+            if self.warn_rules
+            else "<:Astra_x:1141303954555289600> Keine Regeln gesetzt."
         )
 
         container.add_item(discord.ui.TextDisplay(
-            f"## Warn-Regeln\n{warn_text}"
+            "## Warn-System\n\n"
+            f"{warn_text}\n\n"
+            "<:Astra_light_on:1141303864134467675> "
+            "Regeln werden bei Erreichen der Warn-Grenze ausgelöst."
         ))
+
+        container.add_item(discord.ui.Separator())
 
         add_rule = discord.ui.Button(
             label="Regel hinzufügen",
@@ -479,16 +562,14 @@ class AutomodConfigView(discord.ui.LayoutView):
             style=discord.ButtonStyle.danger
         )
 
-        # -------- ADD RULE --------
-
         async def add_rule_cb(interaction):
 
             class RuleModal(discord.ui.Modal, title="Neue Warn-Regel"):
 
                 warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
                 action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
-                timeout = discord.ui.TextInput(
-                    label="Timeout Sekunden (nur bei Timeout)",
+                timeout_input = discord.ui.TextInput(
+                    label="Timeout Sekunden (optional)",
                     required=False
                 )
 
@@ -498,20 +579,28 @@ class AutomodConfigView(discord.ui.LayoutView):
 
                 async def on_submit(self, inter):
 
-                    timeout_val = int(self.timeout.value) if self.timeout.value else None
+                    timeout_val = (
+                        int(self.timeout_input.value)
+                        if self.timeout_input.value else None
+                    )
 
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "INSERT INTO automod (guildID, warns, action, timeout_seconds) VALUES (%s,%s,%s,%s)",
-                                (self.parent.guild.id, self.warns.value, self.action.value, timeout_val)
+                                "INSERT INTO automod "
+                                "(guildID, warns, action, timeout_seconds) "
+                                "VALUES (%s,%s,%s,%s)",
+                                (
+                                    self.parent.guild.id,
+                                    self.warns.value,
+                                    self.action.value,
+                                    timeout_val
+                                )
                             )
 
                     await self.parent._refresh(inter)
 
             await interaction.response.send_modal(RuleModal(self))
-
-        # -------- REMOVE RULE --------
 
         async def remove_rule_cb(interaction):
 
@@ -527,7 +616,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "DELETE FROM automod WHERE guildID=%s AND warns=%s",
+                                "DELETE FROM automod "
+                                "WHERE guildID=%s AND warns=%s",
                                 (self.parent.guild.id, self.warns.value)
                             )
 
@@ -542,24 +632,32 @@ class AutomodConfigView(discord.ui.LayoutView):
         container.add_item(discord.ui.Separator())
 
         # =====================================================
-        # CAPS FILTER (SECTION TOGGLE)
+        # CAPS FILTER
         # =====================================================
 
         caps_enabled = self.caps_percent is not None
-        status_text = "Ein" if caps_enabled else "Aus"
+
         status_emoji = (
             "<:Astra_accept:1141303821176422460>"
             if caps_enabled else
             "<:Astra_x:1141303954555289600>"
         )
 
+        status_text = "Aktiv" if caps_enabled else "Deaktiviert"
+
+        toggle_label = "Ein" if not caps_enabled else "Aus"
+        toggle_style = (
+            discord.ButtonStyle.success
+            if not caps_enabled else
+            discord.ButtonStyle.danger
+        )
+
         toggle_btn = discord.ui.Button(
-            label=status_text,
-            style=discord.ButtonStyle.success if caps_enabled else discord.ButtonStyle.danger
+            label=toggle_label,
+            style=toggle_style
         )
 
         async def toggle_caps(interaction):
-
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     if caps_enabled:
@@ -569,7 +667,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                         )
                     else:
                         await cursor.execute(
-                            "INSERT INTO capslock (guildID, percent) VALUES (%s,%s)",
+                            "INSERT INTO capslock (guildID, percent) "
+                            "VALUES (%s,%s)",
                             (self.guild.id, 50)
                         )
 
@@ -579,9 +678,12 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         section = discord.ui.Section(
             discord.ui.TextDisplay(
-                f"## Caps-Filter\n"
-                f"{status_emoji} Status: **{status_text}**\n"
-                f"Limit: {self.caps_percent or 50}%"
+                "## Caps-Filter\n\n"
+                f"{status_emoji} **Status:** {status_text}\n"
+                f"<:Astra_punkt:1141303896745201696> "
+                f"Limit: **{self.caps_percent or 50}%**\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Nach Überschreitung wird die Nachricht entfernt."
             ),
             accessory=toggle_btn
         )
@@ -590,6 +692,7 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         set_percent = discord.ui.Button(
             label="Prozent ändern",
+            emoji="<:Astra_arrow:1141303823600717885>",
             style=discord.ButtonStyle.primary
         )
 
@@ -607,7 +710,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "UPDATE capslock SET percent=%s WHERE guildID=%s",
+                                "UPDATE capslock SET percent=%s "
+                                "WHERE guildID=%s",
                                 (self.percent.value, self.parent.guild.id)
                             )
 
@@ -625,14 +729,22 @@ class AutomodConfigView(discord.ui.LayoutView):
         # =====================================================
 
         words_text = (
-            ", ".join(self.words)
-            if self.words else
-            "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
+            "\n".join(
+                f"<:Astra_punkt:1141303896745201696> `{w}`"
+                for w in self.words
+            )
+            if self.words
+            else "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
         )
 
         container.add_item(discord.ui.TextDisplay(
-            f"## Blacklist\n{words_text}"
+            "## Blacklist\n\n"
+            f"{words_text}\n\n"
+            "<:Astra_light_on:1141303864134467675> "
+            "Nachrichten mit diesen Wörtern werden gelöscht."
         ))
+
+        container.add_item(discord.ui.Separator())
 
         add_word = discord.ui.Button(
             label="Wörter hinzufügen",
@@ -670,7 +782,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                         async with conn.cursor() as cursor:
                             for word in entries:
                                 await cursor.execute(
-                                    "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                    "INSERT INTO blacklist "
+                                    "(serverID, word) VALUES (%s,%s)",
                                     (self.parent.guild.id, word)
                                 )
 
@@ -692,7 +805,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "DELETE FROM blacklist WHERE serverID=%s AND word=%s",
+                                "DELETE FROM blacklist "
+                                "WHERE serverID=%s AND word=%s",
                                 (self.parent.guild.id, self.word.value.lower())
                             )
 
