@@ -320,7 +320,8 @@ class SetupWizardView(ui.LayoutView):
                 "# Ticket Setup – Hilfe\n"
                 f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
                 "Erklärung zu dieser Seite"
-            )
+            ),
+            accessory=None
         )
 
         help_container.add_item(header_section)
