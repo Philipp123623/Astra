@@ -369,10 +369,24 @@ class AutomodSetupView(discord.ui.LayoutView):
                                 (interaction.guild.id, word)
                             )
 
-                await interaction.response.edit_message(
-                    content="<:Astra_accept:1141303821176422460> "
-                            "Automod erfolgreich eingerichtet.",
-                    view=None
+                success_view = discord.ui.LayoutView()
+
+                success_container = discord.ui.Container(
+                    accent_color=discord.Colour.green().value
+                )
+
+                success_container.add_item(discord.ui.TextDisplay(
+                    "## <:Astra_accept:1141303821176422460> Automod eingerichtet\n\n"
+                    "Die Konfiguration wurde erfolgreich gespeichert.\n\n"
+                    "Alle Moderationsfunktionen sind nun aktiv."
+                ))
+
+                success_view.add_item(success_container)
+
+                await interaction.response.defer()
+
+                await interaction.edit_original_response(
+                    view=success_view
                 )
 
             save.callback = save_cb
