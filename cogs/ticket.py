@@ -277,7 +277,7 @@ class SetupWizardView(ui.LayoutView):
 
 
 
-    TOTAL_STEPS = 4
+    TOTAL_STEPS = 3
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
         super().__init__(timeout=None)
@@ -285,6 +285,9 @@ class SetupWizardView(ui.LayoutView):
         self.bot = bot
         self.invoker = invoker
         self.page = 0
+
+        self.help_mode = False
+        self._previous_page = None
 
         self.target_channel = None
         self.category = None
@@ -301,6 +304,152 @@ class SetupWizardView(ui.LayoutView):
         }
 
         self._build()
+
+    def _build_help_container(self):
+
+        help_container = discord.ui.Container(
+            accent_color=discord.Colour.blurple().value
+        )
+
+        # ==============================
+        # PAGE 0
+        # ==============================
+        if self.page == 0:
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "## ❓ Willkommen\n"
+                "Dieser Wizard richtet dein Ticket-System ein."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🚀 Was passiert hier?\n"
+                "• Du konfigurierst Kanal, Kategorie und Rolle\n"
+                "• Du definierst das Ticket-Panel\n"
+                "• Optional aktivierst du automatische Funktionen"
+            ))
+
+        # ==============================
+        # PAGE 1
+        # ==============================
+        elif self.page == 1:
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "## ❓ Panel Einstellungen"
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 📢 Panel-Kanal\n"
+                "Hier wird das Ticket-Panel gepostet."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🗂 Ticket-Kategorie\n"
+                "Neue Tickets werden automatisch in dieser Kategorie erstellt."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🛡 Support-Rolle\n"
+                "Mitglieder mit dieser Rolle dürfen Tickets sehen und bearbeiten."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 📝 Titel & Beschreibung\n"
+                "Das ist der Inhalt des Ticket-Embeds."
+            ))
+
+        # ==============================
+        # PAGE 2
+        # ==============================
+        elif self.page == 2:
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "## ❓ Automatische Funktionen"
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### ⏱ Auto-Close\n"
+                "Schließt Tickets automatisch nach Inaktivität."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🔔 Reminder\n"
+                "Sendet Erinnerungen bei Inaktivität."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🔓 Reopen\n"
+                "Erlaubt das Wiederöffnen eines geschlossenen Tickets."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### 🚦 Ping-Throttle\n"
+                "Begrenzt wie oft Support gepingt werden darf."
+            ))
+
+        # ==============================
+        # PAGE 3
+        # ==============================
+        else:
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "## ❓ Abschluss"
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "Hier siehst du eine Übersicht aller Einstellungen."
+            ))
+
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                "### ✅ Panel erstellen\n"
+                "Erstellt das Ticket-Panel im gewählten Kanal.\n"
+                "Pflichtfelder müssen gesetzt sein."
+            ))
+
+        # ==============================
+        # BACK BUTTON
+        # ==============================
+
+        help_container.add_item(discord.ui.Separator())
+
+        back_btn = discord.ui.Button(
+            label="Zurück",
+            emoji="↩️",
+            style=discord.ButtonStyle.primary
+        )
+
+        async def back_cb(interaction):
+            self.help_mode = False
+            self.page = self._previous_page
+            self._build()
+            await interaction.response.edit_message(view=self)
+
+        back_btn.callback = back_cb
+
+        help_container.add_item(discord.ui.ActionRow(back_btn))
+
+        return help_container
 
     async def _create_panel(self, interaction: discord.Interaction):
 
@@ -398,25 +547,63 @@ class SetupWizardView(ui.LayoutView):
     # =========================================================
 
     def _progress_bar(self):
-        filled = int((self.page + 1) / self.TOTAL_STEPS * 14)
+        if self.page == 0:
+            return "░" * 14
+
+        filled = int(self.page / self.TOTAL_STEPS * 14)
         return "█" * filled + "░" * (14 - filled)
 
     def _build(self):
         self.clear_items()
 
+        if self.help_mode:
+            help_container = self._build_help_container()
+            self.add_item(help_container)
+            return
+
         container = discord.ui.Container(
             accent_color=discord.Colour.blue().value
         )
+
+        # =====================================================
+        # TOP BAR – Help Button rechts
+        # =====================================================
+
+        top_row = discord.ui.ActionRow()
+
+        # Unsichtbarer Spacer (Zero Width Space)
+        spacer = discord.ui.TextDisplay("\u200b")
+
+        help_btn = discord.ui.Button(
+            emoji="❓",
+            style=discord.ButtonStyle.secondary
+        )
+
+        async def help_cb(interaction):
+            self.help_mode = True
+            self._previous_page = self.page
+            self._build()
+            await interaction.response.edit_message(view=self)
+
+        help_btn.callback = help_cb
+
+        top_row.add_item(spacer)
+        top_row.add_item(help_btn)
+
+        container.add_item(top_row)
+
+        container.add_item(discord.ui.Separator())
 
         def fmt(x):
             if not x:
                 return "`Nicht gesetzt`"
             return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
 
-        # Header
+        current_step = self.page  # page 0 bleibt 0
+
         container.add_item(discord.ui.TextDisplay(
             f"# Ticket Setup\n"
-            f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
+            f"**Schritt {current_step}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
 
