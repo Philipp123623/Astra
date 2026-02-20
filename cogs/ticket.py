@@ -474,16 +474,41 @@ class SetupWizardView(ui.LayoutView):
             children.append(discord.ui.ActionRow(config_select("Ping-Throttle", "ping_throttle_minutes")))
 
         # =========================================================
-        # PAGE 3 – FINAL
+        # PAGE 3 – FINAL REVIEW
         # =========================================================
         elif self.page == 3:
 
+            cfg = self.cached_config or {}
+
+            def show(val):
+                if not val:
+                    return "🔴 Deaktiviert"
+                return f"🟢 Aktiv (`{val}`)"
+
+            def fmt(x):
+                if not x:
+                    return "Nicht gesetzt"
+                return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
+
             children.append(
                 discord.ui.TextDisplay(
-                    "## 🎯 Abschluss\n"
-                    "Wenn alles korrekt ist, erstelle das Panel."
+                    "## 🎯 Abschluss & Übersicht\n"
+                    "Bitte überprüfe alle Einstellungen:\n\n"
+                    "### 📦 Panel\n"
+                    f"**Kanal:** {fmt(self.target_channel)}\n"
+                    f"**Kategorie:** {fmt(self.category)}\n"
+                    f"**Support-Rolle:** {fmt(self.role)}\n\n"
+                    f"**Titel:** {self.panel_title or 'Nicht gesetzt'}\n"
+                    f"**Beschreibung:** {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}\n\n"
+                    "### ⚙ Automatische Funktionen\n"
+                    f"**Auto-Close:** {show(cfg.get('autoclose_hours', 0))}\n"
+                    f"**Reminder:** {show(cfg.get('remind_minutes', 0))}\n"
+                    f"**Reopen:** {show(cfg.get('reopen_hours', 0))}\n"
+                    f"**Ping-Throttle:** {show(cfg.get('ping_throttle_minutes', 0))}"
                 )
             )
+
+            children.append(discord.ui.Separator())
 
             create = discord.ui.Button(
                 label="Panel erstellen",
@@ -501,6 +526,7 @@ class SetupWizardView(ui.LayoutView):
                 await self._create_panel(interaction)
 
             create.callback = create_cb
+
             children.append(discord.ui.ActionRow(create))
 
         # ---------------- NAVIGATION ----------------
