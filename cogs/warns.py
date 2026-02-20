@@ -58,15 +58,11 @@ class AutomodSetupView(discord.ui.LayoutView):
         # HEADER SECTION
         # =====================================================
 
-        header = discord.ui.Section(
-            discord.ui.TextDisplay(
-                "# 🤖 Automod Setup\n"
-                f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
-                f"`{self._progress_bar()}`"
-            )
-        )
-
-        container.add_item(header)
+        container.add_item(discord.ui.TextDisplay(
+            "# 🤖 Automod Setup\n"
+            f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
+            f"`{self._progress_bar()}`"
+        ))
         container.add_item(discord.ui.Separator())
 
         # =====================================================
