@@ -626,7 +626,7 @@ class SetupWizardView(ui.LayoutView):
         # =====================================================
 
         help_btn = discord.ui.Button(
-            emoji="❓",
+            emoji="<:Astra_support:1141303923752325210>",
             style=discord.ButtonStyle.secondary
         )
 
