@@ -477,8 +477,7 @@ class SetupWizardView(ui.LayoutView):
                     )
 
                     self._build()
-                    await interaction.response.defer()
-                    await interaction.message.edit(view=self)
+                    await interaction.response.edit_message(view=self)
 
                 select.callback = cb
                 children.append(discord.ui.ActionRow(select))
