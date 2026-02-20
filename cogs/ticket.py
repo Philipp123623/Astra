@@ -390,14 +390,23 @@ class SetupWizardView(ui.LayoutView):
             color=discord.Colour.green(),
         )
 
-        # Wizard entfernen
-        await interaction.response.edit_message(view=None)
+        # Neue Erfolgs-View bauen
+        success_view = discord.ui.LayoutView()
 
-        # Erfolgsnachricht separat senden
-        await interaction.followup.send(
-            embed=done,
-            ephemeral=True
+        container = discord.ui.Container(
+            accent_color=discord.Colour.green().value
         )
+
+        container.add_item(discord.ui.TextDisplay(
+            "## ✅ Ticket-Panel erstellt\n\n"
+            f"Das Panel wurde erfolgreich in {chan.mention} erstellt.\n\n"
+            "Der Setup-Wizard ist abgeschlossen."
+        ))
+
+        success_view.add_item(container)
+
+        # Wizard ersetzen durch Erfolgsanzeige
+        await interaction.response.edit_message(view=success_view)
 
     # =========================================================
     # BUILD
