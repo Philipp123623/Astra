@@ -275,8 +275,6 @@ class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
 
 class SetupWizardView(ui.LayoutView):
 
-
-
     TOTAL_STEPS = 3
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
@@ -304,6 +302,17 @@ class SetupWizardView(ui.LayoutView):
         }
 
         self._build()
+
+    def _can_continue_from_page(self) -> bool:
+        if self.page == 1:
+            return all([
+                self.target_channel,
+                self.category,
+                self.role,
+                self.panel_title,
+                self.panel_desc
+            ])
+        return True
 
     def _build_help_container(self):
 
@@ -914,6 +923,12 @@ class SetupWizardView(ui.LayoutView):
         # Navigation
         # =====================================================
 
+        if self.page == 1 and not self._can_continue_from_page():
+            container.add_item(discord.ui.TextDisplay(
+                "<:Astra_x:1141303954555289600> Alle Pflichtfelder müssen gesetzt sein, um fortzufahren."
+            ))
+            container.add_item(discord.ui.Separator())
+
         nav = []
 
         if self.page > 0:
@@ -924,9 +939,18 @@ class SetupWizardView(ui.LayoutView):
             nav.append(back)
 
         if 1 <= self.page < self.TOTAL_STEPS:
-            nxt = discord.ui.Button(label="Weiter", emoji="<:Astra_arrow:1141303823600717885>", style=discord.ButtonStyle.primary)
+            can_continue = self._can_continue_from_page()
+
+            nxt = discord.ui.Button(
+                label="Weiter",
+                emoji="<:Astra_arrow:1141303823600717885>",
+                style=discord.ButtonStyle.primary,
+                disabled=not can_continue
+            )
+
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
+
             nxt.callback = next_cb
             nav.append(nxt)
 
