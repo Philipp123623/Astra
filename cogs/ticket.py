@@ -680,7 +680,7 @@ class SetupWizardView(ui.LayoutView):
             back.callback = back_cb
             nav.append(back)
 
-        if self.page < self.TOTAL_STEPS - 1:
+        if 0 < self.page < self.TOTAL_STEPS - 1:
             nxt = discord.ui.Button(label="Weiter", emoji="<:Astra_arrow:1141303823600717885>", style=discord.ButtonStyle.primary)
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
@@ -691,7 +691,7 @@ class SetupWizardView(ui.LayoutView):
 
         async def cancel_cb(interaction):
             await interaction.response.edit_message(
-                content="❌ Setup abgebrochen.",
+                content="<:Astra_x:1141303954555289600> Setup abgebrochen.",
                 view=None
             )
 
