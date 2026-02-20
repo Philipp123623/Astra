@@ -934,12 +934,14 @@ class SetupWizardView(ui.LayoutView):
 
         async def cancel_cb(interaction: discord.Interaction):
             try:
+                await interaction.response.defer()
+            except:
+                pass
+
+            try:
                 await interaction.message.delete()
             except:
-                try:
-                    await interaction.delete_original_response()
-                except:
-                    pass
+                pass
 
         cancel.callback = cancel_cb
         nav.append(cancel)
