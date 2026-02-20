@@ -225,6 +225,40 @@ async def set_guild_config(pool, guild_id: int, **kwargs):
         async with conn.cursor() as cur:
             await cur.execute(q, tuple(vals))
 
+
+class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
+
+    def __init__(self, view: "SetupWizardView"):
+        super().__init__(timeout=180)
+        self.view = view
+
+        self.inp_title = discord.ui.TextInput(
+            label="Panel-Titel",
+            placeholder="z. B. Support, Bewerben …",
+            max_length=100,
+            required=True,
+            default=view.panel_title or None
+        )
+
+        self.inp_desc = discord.ui.TextInput(
+            label="Panel-Beschreibung",
+            style=discord.TextStyle.paragraph,
+            placeholder="Beschreibe kurz den Zweck des Tickets.",
+            max_length=1024,
+            required=True,
+            default=view.panel_desc or None
+        )
+
+        self.add_item(self.inp_title)
+        self.add_item(self.inp_desc)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.panel_title = str(self.inp_title.value)
+        self.view.panel_desc = str(self.inp_desc.value)
+
+        self.view._build()
+        await interaction.response.edit_message(view=self.view)
+
 # =========================================================
 #                 SETUP WIZARD (VIEWS/MODAL)
 # =========================================================
