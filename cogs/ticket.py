@@ -565,9 +565,25 @@ class SetupWizardView(ui.LayoutView):
             accent_color=discord.Colour.blue().value
         )
 
+        def fmt(x):
+            if not x:
+                return "`Nicht gesetzt`"
+            return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
+
+        current_step = self.page  # page 0 bleibt 0
+
         # =====================================================
-        # TOP BAR – Help Button rechts
+        # HEADER ROW (Titel + Help rechts)
         # =====================================================
+
+        header_row = discord.ui.ActionRow()
+
+        # Titel als deaktivierter Button (nur visuell)
+        title_btn = discord.ui.Button(
+            label="Ticket Setup",
+            style=discord.ButtonStyle.secondary,
+            disabled=True
+        )
 
         help_btn = discord.ui.Button(
             emoji="❓",
@@ -582,21 +598,17 @@ class SetupWizardView(ui.LayoutView):
 
         help_btn.callback = help_cb
 
-        container.add_item(discord.ui.ActionRow(help_btn))
-        container.add_item(discord.ui.Separator())
+        header_row.add_item(title_btn)
+        header_row.add_item(help_btn)
 
-        def fmt(x):
-            if not x:
-                return "`Nicht gesetzt`"
-            return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
-
-        current_step = self.page  # page 0 bleibt 0
+        container.add_item(header_row)
 
         container.add_item(discord.ui.TextDisplay(
-            f"# Ticket Setup\n"
             f"**Schritt {current_step}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
+
+        container.add_item(discord.ui.Separator())
 
         container.add_item(discord.ui.Separator())
 
