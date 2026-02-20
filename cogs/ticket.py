@@ -474,7 +474,8 @@ class SetupWizardView(ui.LayoutView):
                     self.cached_config[key] = parsed
 
                     self._build()
-                    await interaction.response.edit_message(view=self)
+                    await interaction.response.defer()
+                    await interaction.message.edit(view=self)
 
                 select.callback = cb
                 children.append(discord.ui.ActionRow(select))
