@@ -476,32 +476,58 @@ class AutomodConfigView(discord.ui.LayoutView):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
 
-                await cursor.execute(
-                    "SELECT warns, action, timeout_seconds FROM automod WHERE guildID=%s",
-                    (self.guild.id,)
-                )
-                self.warn_rules = await cursor.fetchall()
+                # =========================================================
+                # WARN SYSTEM
+                # =========================================================
 
                 await cursor.execute(
-                    "SELECT percent FROM capslock WHERE guildID=%s",
+                    "SELECT warns, action, timeout_seconds "
+                    "FROM automod WHERE guildID=%s",
+                    (self.guild.id,)
+                )
+                self.warn_rules = await cursor.fetchall() or []
+
+                # =========================================================
+                # CAPSLOCK
+                # =========================================================
+
+                await cursor.execute(
+                    "SELECT percent, status FROM capslock WHERE guildID=%s",
                     (self.guild.id,)
                 )
                 caps = await cursor.fetchone()
-                self.caps_percent = caps[0] if caps else None
 
+                if caps:
+                    self.caps_percent = caps[0]
+                    self.caps_status = caps[1]
+                else:
+                    # Defaultwerte wenn noch kein Eintrag existiert
+                    self.caps_percent = 50
+                    self.caps_status = 0
+
+                # =========================================================
+                # BLACKLIST
+                # =========================================================
+
+                # Status laden
                 await cursor.execute(
-                    "SELECT word FROM blacklist WHERE serverID=%s",
+                    "SELECT status FROM blacklist_settings WHERE serverID=%s",
+                    (self.guild.id,)
+                )
+                row = await cursor.fetchone()
+
+                if row:
+                    self.blacklist_status = row[0]
+                else:
+                    self.blacklist_status = 0
+
+                # Wörter laden
+                await cursor.execute(
+                    "SELECT word FROM blacklist_words WHERE serverID=%s",
                     (self.guild.id,)
                 )
                 words = await cursor.fetchall()
-                self.words = [w[0] for w in words]
-
-                await cursor.execute(
-                    "SELECT COUNT(*) FROM blacklist WHERE serverID=%s AND status=1",
-                    (self.guild.id,)
-                )
-                count = await cursor.fetchone()
-                self.blacklist_status = 1 if count[0] > 0 else 0
+                self.words = [w[0] for w in words] if words else []
 
     # =========================================================
     # PERMISSION CHECK
@@ -763,10 +789,10 @@ class AutomodConfigView(discord.ui.LayoutView):
         # BLACKLIST
         # =====================================================
 
-        # Status aus geladenen Daten (muss in _load_data gesetzt werden)
+        # Status aus _load_data()
         blacklist_enabled = getattr(self, "blacklist_status", 0) == 1
 
-        # Alle Wörter laden (unabhängig vom Status)
+        # Wörter aus blacklist_words
         real_words = sorted(self.words)
 
         status_emoji = (
@@ -789,7 +815,6 @@ class AutomodConfigView(discord.ui.LayoutView):
         # ---------- TOGGLE BUTTON ----------
 
         toggle_label = "Aus" if blacklist_enabled else "Ein"
-
         toggle_style = (
             discord.ButtonStyle.danger
             if blacklist_enabled else
@@ -807,26 +832,12 @@ class AutomodConfigView(discord.ui.LayoutView):
 
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-
-                    # Prüfen ob Eintrag existiert
                     await cursor.execute(
-                        "SELECT serverID FROM blacklist WHERE serverID=%s LIMIT 1",
-                        (self.guild.id,)
+                        "INSERT INTO blacklist_settings (serverID, status) "
+                        "VALUES (%s,%s) "
+                        "ON DUPLICATE KEY UPDATE status=%s",
+                        (self.guild.id, new_status, new_status)
                     )
-                    exists = await cursor.fetchone()
-
-                    if exists:
-                        # Status für alle Wörter setzen
-                        await cursor.execute(
-                            "UPDATE blacklist SET status=%s WHERE serverID=%s",
-                            (new_status, self.guild.id)
-                        )
-                    else:
-                        # Falls noch keine Wörter existieren → nur Status-Row anlegen
-                        # (leerer Zustand, aber Status steuerbar)
-                        if new_status == 1:
-                            # Aktivieren ohne Wörter → keine Insert notwendig
-                            pass
 
             await self.refresh_view(interaction)
 
@@ -888,9 +899,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                         async with conn.cursor() as cursor:
                             for word in entries:
                                 await cursor.execute(
-                                    "INSERT INTO blacklist (serverID, word, status) "
-                                    "VALUES (%s,%s,1) "
-                                    "ON DUPLICATE KEY UPDATE status=1",
+                                    "INSERT IGNORE INTO blacklist_words (serverID, word) "
+                                    "VALUES (%s,%s)",
                                     (self.parent.guild.id, word)
                                 )
 
@@ -913,22 +923,10 @@ class AutomodConfigView(discord.ui.LayoutView):
                     async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "DELETE FROM blacklist WHERE serverID=%s AND word=%s",
+                                "DELETE FROM blacklist_words "
+                                "WHERE serverID=%s AND word=%s",
                                 (self.parent.guild.id, self.word.value.lower())
                             )
-
-                            # Falls keine Wörter mehr existieren → Status automatisch 0
-                            await cursor.execute(
-                                "SELECT COUNT(*) FROM blacklist WHERE serverID=%s",
-                                (self.parent.guild.id,)
-                            )
-                            count = await cursor.fetchone()
-
-                            if count[0] == 0:
-                                await cursor.execute(
-                                    "UPDATE blacklist SET status=0 WHERE serverID=%s",
-                                    (self.parent.guild.id,)
-                                )
 
                     await self.parent.refresh_view(inter)
 
