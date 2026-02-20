@@ -21,47 +21,44 @@ class AutomodSetupView(discord.ui.LayoutView):
         self.invoker = invoker
         self.page = 0
 
-        # Falls bereits konfiguriert
         self.already_configured: bool = False
 
-        # Warn-System
         self.warn_rules: list[tuple[int, str, int | None]] = []
 
-        # Caps
         self.caps_enabled: bool = False
         self.caps_percent: int = 50
 
-        # Blacklist
         self.blacklist_enabled: bool = False
         self.blacklist_words: list[str] = []
 
-    # =========================================================
-    # START (WICHTIG!)
-    # =========================================================
-
-    async def start(self, interaction: discord.Interaction):
-
-        if not interaction.guild:
-            return await interaction.response.send_message(
-                "❌ Dieser Command funktioniert nur in Servern.",
-                ephemeral=True
-            )
-
-        await self._check_existing(interaction.guild.id)
+        # View wird normal gebaut
         self._build()
 
-        # Sicherheitscheck: Falls aus irgendeinem Grund nichts gebaut wurde
-        if not self.children:
-            return await interaction.response.send_message(
-                "❌ Interner Fehler: View konnte nicht erstellt werden.",
+    # =========================================================
+    # INTERACTION CHECK (DB CHECK BEIM ERSTEN KLICK)
+    # =========================================================
+
+    async def interaction_check(self, interaction: discord.Interaction):
+
+        if interaction.user.id != self.invoker.id:
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Nur der Command-Ersteller darf dieses Panel bedienen.",
                 ephemeral=True
             )
+            return False
 
-        await interaction.response.send_message(
-            content="‎",  # unsichtbares Zeichen verhindert 50006
-            view=self,
-            ephemeral=True
-        )
+        # DB nur einmal prüfen
+        if not hasattr(self, "_checked"):
+            await self._check_existing(interaction.guild.id)
+            self._checked = True
+
+            # Falls bereits konfiguriert -> neu bauen
+            if self.already_configured:
+                self._build()
+                await interaction.response.edit_message(view=self)
+                return False
+
+        return True
 
     # =========================================================
     # CHECK OB BEREITS KONFIGURIERT
@@ -72,31 +69,27 @@ class AutomodSetupView(discord.ui.LayoutView):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
 
-                # Warn-System prüfen
                 await cursor.execute(
                     "SELECT guildID FROM automod WHERE guildID=%s LIMIT 1",
                     (guild_id,)
                 )
                 warn_exists = await cursor.fetchone()
 
-                # Caps prüfen
                 await cursor.execute(
                     "SELECT guildID FROM capslock WHERE guildID=%s LIMIT 1",
                     (guild_id,)
                 )
                 caps_exists = await cursor.fetchone()
 
-                # Blacklist prüfen
                 await cursor.execute(
                     "SELECT serverID FROM blacklist_settings WHERE serverID=%s LIMIT 1",
                     (guild_id,)
                 )
                 blacklist_exists = await cursor.fetchone()
 
-                if warn_exists or caps_exists or blacklist_exists:
-                    self.already_configured = True
-                else:
-                    self.already_configured = False
+                self.already_configured = bool(
+                    warn_exists or caps_exists or blacklist_exists
+                )
 
     # =========================================================
     # PROGRESS BAR
@@ -109,7 +102,7 @@ class AutomodSetupView(discord.ui.LayoutView):
         return "█" * filled + "░" * (14 - filled)
 
     # =========================================================
-    # BUILD
+    # BUILD (DEINE TEXTE 1:1 UNVERÄNDERT)
     # =========================================================
 
     def _build(self):
@@ -118,10 +111,6 @@ class AutomodSetupView(discord.ui.LayoutView):
         container = discord.ui.Container(
             accent_color=discord.Colour.orange().value
         )
-
-        # =====================================================
-        # WENN BEREITS KONFIGURIERT
-        # =====================================================
 
         if self.already_configured:
 
@@ -139,20 +128,13 @@ class AutomodSetupView(discord.ui.LayoutView):
             self.add_item(container)
             return
 
-        # =====================================================
-        # HEADER SECTION
-        # =====================================================
-
         container.add_item(discord.ui.TextDisplay(
             "# 🤖 Automod Setup\n"
             f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
-        container.add_item(discord.ui.Separator())
 
-        # =====================================================
-        # PAGE 0 – WILLKOMMEN
-        # =====================================================
+        container.add_item(discord.ui.Separator())
 
         if self.page == 0:
 
@@ -178,6 +160,13 @@ class AutomodSetupView(discord.ui.LayoutView):
 
             start.callback = start_cb
             container.add_item(discord.ui.ActionRow(start))
+
+        self.add_item(container)
+
+    async def _switch(self, interaction, page: int):
+        self.page = page
+        self._build()
+        await interaction.response.edit_message(view=self)
 
         # =====================================================
         # PAGE 1 – WARN SYSTEM
