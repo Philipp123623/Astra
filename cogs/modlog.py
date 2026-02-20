@@ -285,7 +285,7 @@ class modlog(commands.Cog):
                 channel = guild.get_channel(int(channel2[0]))
 
                 async for entry in guild.audit_logs(
-                    action=discord.AuditLogAction.role_create,
+                    action=discord.AuditLogAction.role_delete,
                     limit=1
                 ):
                     embed = discord.Embed(
@@ -334,16 +334,16 @@ class modlog(commands.Cog):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT word FROM blacklist WHERE serverID = (%s)",
+                    "SELECT word FROM blacklist_words WHERE serverID = (%s)",
                     (message.guild.id,)
                 )
                 result2 = await cursor.fetchall()
                 if not result2:
-                    return
-
-                for eintrag2 in result2:
-                    if eintrag2[0].lower() in message.content.lower():
-                        return
+                    pass
+                else:
+                    for eintrag2 in result2:
+                        if eintrag2[0].lower() in message.content.lower():
+                            return
 
                 await cursor.execute(
                     "SELECT channelID FROM modlog WHERE serverID = (%s)",
