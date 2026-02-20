@@ -390,16 +390,14 @@ class SetupWizardView(ui.LayoutView):
             color=discord.Colour.green(),
         )
 
-        try:
-            await interaction.response.edit_message(
-                embed=done,
-                view=None,
-            )
-        except discord.InteractionResponded:
-            await interaction.edit_original_response(
-                embed=done,
-                view=None,
-            )
+        # Wizard entfernen
+        await interaction.response.edit_message(view=None)
+
+        # Erfolgsnachricht separat senden
+        await interaction.followup.send(
+            embed=done,
+            ephemeral=True
+        )
 
     # =========================================================
     # BUILD
