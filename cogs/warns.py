@@ -90,7 +90,6 @@ class AutomodSetupView(discord.ui.LayoutView):
             red_view.add_item(container)
 
             await interaction.response.send_message(
-                content="‎",
                 view=red_view,
                 ephemeral=True
             )
@@ -98,7 +97,6 @@ class AutomodSetupView(discord.ui.LayoutView):
 
         self._build()
         await interaction.response.send_message(
-            content="‎",
             view=self,
             ephemeral=True
         )
