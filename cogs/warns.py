@@ -735,6 +735,16 @@ class AutomodConfigView(discord.ui.LayoutView):
         # BLACKLIST
         # =====================================================
 
+        blacklist_enabled = len(self.words) > 0
+
+        status_emoji = (
+            "<:Astra_accept:1141303821176422460>"
+            if blacklist_enabled else
+            "<:Astra_x:1141303954555289600>"
+        )
+
+        status_text = "Aktiv" if blacklist_enabled else "Deaktiviert"
+
         words_text = (
             "\n".join(
                 f"<:Astra_punkt:1141303896745201696> `{w}`"
@@ -744,31 +754,70 @@ class AutomodConfigView(discord.ui.LayoutView):
             else "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
         )
 
-        container.add_item(discord.ui.TextDisplay(
-            "## Blacklist\n\n"
-            f"{words_text}\n\n"
-            "<:Astra_light_on:1141303864134467675> "
-            "Nachrichten mit diesen Wörtern werden gelöscht."
-        ))
+        # ---------- TOGGLE BUTTON ----------
 
+        toggle_blacklist = discord.ui.Button(
+            label="Aus" if blacklist_enabled else "Ein",
+            style=discord.ButtonStyle.secondary if blacklist_enabled else discord.ButtonStyle.success
+        )
+
+        async def toggle_blacklist_cb(interaction):
+
+            async with self.bot.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+
+                    if blacklist_enabled:
+                        # komplett deaktivieren
+                        await cursor.execute(
+                            "DELETE FROM blacklist WHERE serverID=%s",
+                            (self.guild.id,)
+                        )
+                    else:
+                        # aktivieren ohne Wörter (nur Status)
+                        # hier nichts einfügen – Wörter kommen später
+                        pass
+
+            await self._refresh(interaction)
+
+        toggle_blacklist.callback = toggle_blacklist_cb
+
+        # ---------- SECTION ----------
+
+        blacklist_section = discord.ui.Section(
+            discord.ui.TextDisplay(
+                "## Blacklist\n\n"
+                f"{status_emoji} Status: **{status_text}**\n\n"
+                f"{words_text}\n\n"
+                "<:Astra_light_on:1141303864134467675> "
+                "Nachrichten mit diesen Wörtern werden automatisch gelöscht."
+            ),
+            accessory=toggle_blacklist
+        )
+
+        container.add_item(blacklist_section)
         container.add_item(discord.ui.Separator())
+
+        # ---------- BUTTONS ----------
 
         add_word = discord.ui.Button(
             label="Wörter hinzufügen",
             emoji="<:Astra_accept:1141303821176422460>",
-            style=discord.ButtonStyle.success
+            style=discord.ButtonStyle.success,
+            disabled=not blacklist_enabled
         )
 
         remove_word = discord.ui.Button(
             label="Wort entfernen",
             emoji="<:Astra_x:1141303954555289600>",
-            style=discord.ButtonStyle.danger
+            style=discord.ButtonStyle.danger,
+            disabled=not blacklist_enabled
         )
+
+        # ---------- ADD WORD ----------
 
         async def add_word_cb(interaction):
 
             class AddWord(discord.ui.Modal, title="Blacklist Wörter hinzufügen"):
-
                 words = discord.ui.TextInput(
                     label="Wörter (mit , trennen)"
                 )
@@ -778,7 +827,6 @@ class AutomodConfigView(discord.ui.LayoutView):
                     self.parent = parent
 
                 async def on_submit(self, inter):
-
                     entries = [
                         w.strip().lower()
                         for w in self.words.value.split(",")
@@ -798,10 +846,11 @@ class AutomodConfigView(discord.ui.LayoutView):
 
             await interaction.response.send_modal(AddWord(self))
 
+        # ---------- REMOVE WORD ----------
+
         async def remove_word_cb(interaction):
 
             class RemoveWord(discord.ui.Modal, title="Blacklist Wort entfernen"):
-
                 word = discord.ui.TextInput(label="Wort")
 
                 def __init__(self, parent):
@@ -825,8 +874,6 @@ class AutomodConfigView(discord.ui.LayoutView):
         remove_word.callback = remove_word_cb
 
         container.add_item(discord.ui.ActionRow(add_word, remove_word))
-
-        self.add_item(container)
 
     # =========================================================
     # REFRESH
