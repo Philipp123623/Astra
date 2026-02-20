@@ -342,11 +342,7 @@ class SetupWizardView(ui.LayoutView):
         # =========================================================
         elif self.page == 1:
 
-            children.append(
-                discord.ui.TextDisplay(
-                    "## 📦 Panel Einstellungen"
-                )
-            )
+            children.append(discord.ui.TextDisplay("## 📦 Panel Einstellungen"))
 
             # Channel
             ch = discord.ui.ChannelSelect(
@@ -405,23 +401,17 @@ class SetupWizardView(ui.LayoutView):
         # =========================================================
         # PAGE 2 – SYSTEM
         # =========================================================
-        # =========================================================
-        # PAGE 2 – SYSTEM
-        # =========================================================
         elif self.page == 2:
 
             cfg = self.cached_config or {}
 
             def show_status(key):
                 val = cfg.get(key, 0)
-                if not val:
-                    return "🔴 **Deaktiviert**"
-                return f"🟢 **Aktiv** (`{val}`)"
+                return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
 
             children.append(
                 discord.ui.TextDisplay(
-                    "## ⚙ Automatische Funktionen\n"
-                    "`30m`, `2h`, `1d`, `0` = deaktiviert\n\n"
+                    "## ⚙ Automatische Funktionen\n\n"
                     f"**Auto-Close:** {show_status('autoclose_hours')}\n"
                     f"**Reminder:** {show_status('remind_minutes')}\n"
                     f"**Reopen:** {show_status('reopen_hours')}\n"
@@ -431,18 +421,35 @@ class SetupWizardView(ui.LayoutView):
 
             children.append(discord.ui.Separator())
 
-            def config_select(label, key):
+            options = [
+                ("15 Minuten", "15m"),
+                ("30 Minuten", "30m"),
+                ("1 Stunde", "1h"),
+                ("2 Stunden", "2h"),
+                ("6 Stunden", "6h"),
+                ("12 Stunden", "12h"),
+                ("1 Tag", "1d"),
+                ("2 Tage", "2d"),
+                ("7 Tage", "7d"),
+                ("Deaktivieren", "0"),
+            ]
+
+            for label, key in [
+                ("Auto-Close", "autoclose_hours"),
+                ("Reminder", "remind_minutes"),
+                ("Reopen", "reopen_hours"),
+                ("Ping-Throttle", "ping_throttle_minutes"),
+            ]:
+
                 select = discord.ui.Select(
                     placeholder=f"{label} einstellen",
                     options=[
-                        discord.SelectOption(label="30 Minuten", value="30m"),
-                        discord.SelectOption(label="2 Stunden", value="2h"),
-                        discord.SelectOption(label="1 Tag", value="1d"),
-                        discord.SelectOption(label="Deaktivieren", value="0"),
+                        discord.SelectOption(label=o[0], value=o[1])
+                        for o in options
                     ]
                 )
 
-                async def cb(interaction):
+                async def cb(interaction, select=select, key=key):
                     val = select.values[0]
 
                     try:
@@ -459,19 +466,12 @@ class SetupWizardView(ui.LayoutView):
                         **{key: new_val}
                     )
 
-                    # Cache aktualisieren
                     self.cached_config[key] = new_val
-
                     self._build()
                     await interaction.response.edit_message(view=self)
 
                 select.callback = cb
-                return select
-
-            children.append(discord.ui.ActionRow(config_select("Auto-Close", "autoclose_hours")))
-            children.append(discord.ui.ActionRow(config_select("Reminder", "remind_minutes")))
-            children.append(discord.ui.ActionRow(config_select("Reopen", "reopen_hours")))
-            children.append(discord.ui.ActionRow(config_select("Ping-Throttle", "ping_throttle_minutes")))
+                children.append(discord.ui.ActionRow(select))
 
         # =========================================================
         # PAGE 3 – FINAL REVIEW
@@ -481,26 +481,16 @@ class SetupWizardView(ui.LayoutView):
             cfg = self.cached_config or {}
 
             def show(val):
-                if not val:
-                    return "🔴 Deaktiviert"
-                return f"🟢 Aktiv (`{val}`)"
-
-            def fmt(x):
-                if not x:
-                    return "Nicht gesetzt"
-                return getattr(x, "mention", getattr(x, "name", "Gesetzt"))
+                return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
 
             children.append(
                 discord.ui.TextDisplay(
-                    "## 🎯 Abschluss & Übersicht\n"
-                    "Bitte überprüfe alle Einstellungen:\n\n"
-                    "### 📦 Panel\n"
+                    "## 🎯 Abschluss & Übersicht\n\n"
                     f"**Kanal:** {fmt(self.target_channel)}\n"
                     f"**Kategorie:** {fmt(self.category)}\n"
                     f"**Support-Rolle:** {fmt(self.role)}\n\n"
                     f"**Titel:** {self.panel_title or 'Nicht gesetzt'}\n"
                     f"**Beschreibung:** {'Gesetzt' if self.panel_desc else 'Nicht gesetzt'}\n\n"
-                    "### ⚙ Automatische Funktionen\n"
                     f"**Auto-Close:** {show(cfg.get('autoclose_hours', 0))}\n"
                     f"**Reminder:** {show(cfg.get('remind_minutes', 0))}\n"
                     f"**Reopen:** {show(cfg.get('reopen_hours', 0))}\n"
@@ -522,11 +512,9 @@ class SetupWizardView(ui.LayoutView):
                         "⚠ Pflichtfelder fehlen.",
                         ephemeral=True
                     )
-
                 await self._create_panel(interaction)
 
             create.callback = create_cb
-
             children.append(discord.ui.ActionRow(create))
 
         # ---------------- NAVIGATION ----------------
@@ -534,19 +522,15 @@ class SetupWizardView(ui.LayoutView):
 
         if self.page > 0:
             back = discord.ui.Button(label="Zurück", emoji="⬅", style=discord.ButtonStyle.secondary)
-
             async def back_cb(interaction):
                 await self._switch(interaction, self.page - 1)
-
             back.callback = back_cb
             nav.append(back)
 
         if self.page < self.TOTAL_STEPS - 1:
             nxt = discord.ui.Button(label="Weiter", emoji="➡", style=discord.ButtonStyle.primary)
-
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
-
             nxt.callback = next_cb
             nav.append(nxt)
 
@@ -567,7 +551,6 @@ class SetupWizardView(ui.LayoutView):
 
         children.append(discord.ui.ActionRow(*nav))
 
-        # ---------------- ROOT CONTAINER ----------------
         self.add_item(
             discord.ui.Container(
                 *children,
