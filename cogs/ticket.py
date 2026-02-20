@@ -933,15 +933,8 @@ class SetupWizardView(ui.LayoutView):
         cancel = discord.ui.Button(label="Abbrechen", emoji="<:Astra_x:1141303954555289600>", style=discord.ButtonStyle.danger)
 
         async def cancel_cb(interaction: discord.Interaction):
-            try:
-                await interaction.response.defer()
-            except:
-                pass
-
-            try:
-                await interaction.message.delete()
-            except:
-                pass
+            await interaction.response.defer()
+            await interaction.delete_original_response()
 
         cancel.callback = cancel_cb
         nav.append(cancel)
