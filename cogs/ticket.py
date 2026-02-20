@@ -925,7 +925,7 @@ class SetupWizardView(ui.LayoutView):
 
         if self.page == 1 and not self._can_continue_from_page():
             container.add_item(discord.ui.TextDisplay(
-                "<:Astra_x:1141303954555289600> Alle Pflichtfelder müssen gesetzt sein, um fortzufahren."
+                "<:Astra_x:1141303954555289600> Alle Pflichtfelder müssen gesetzt sein, um fortzufahren!"
             ))
             container.add_item(discord.ui.Separator())
 
