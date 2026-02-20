@@ -374,21 +374,6 @@ class SetupWizardView(ui.LayoutView):
             view=TicketOpenView(self.bot)
         )
 
-        # =========================
-        # Abschlussmeldung im Wizard
-        # =========================
-        done = mk_embed(
-            title="Ticket-Panel erstellt",
-            description=(
-                f"<:Astra_punkt:1141303896745201696> Kanal: {chan.mention}\n"
-                f"<:Astra_punkt:1141303896745201696> Kategorie: {cat.name}\n"
-                f"<:Astra_punkt:1141303896745201696> Support-Rolle: {role.mention}\n"
-                f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title}\n"
-                f"<:Astra_punkt:1141303896745201696> Beschreibung: {self.panel_desc}\n\n"
-                "Der Setup-Wizard kann nun geschlossen werden."
-            ),
-            color=discord.Colour.green(),
-        )
 
         # Neue Erfolgs-View bauen
         success_view = discord.ui.LayoutView()
@@ -430,7 +415,7 @@ class SetupWizardView(ui.LayoutView):
 
         # Header
         container.add_item(discord.ui.TextDisplay(
-            f"# 🎫 Ticket Setup\n"
+            f"<:Astra_ticket:1141833836204937347> # Ticket Setup\n"
             f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
             f"`{self._progress_bar()}`"
         ))
@@ -439,12 +424,12 @@ class SetupWizardView(ui.LayoutView):
 
         # Aktuelle Panel Daten
         container.add_item(discord.ui.TextDisplay(
-            "## 📌 Aktuelle Konfiguration\n"
-            f"**Kanal:** {fmt(self.target_channel)}\n"
-            f"**Kategorie:** {fmt(self.category)}\n"
-            f"**Support-Rolle:** {fmt(self.role)}\n\n"
-            f"**Titel:** {self.panel_title or '`Nicht gesetzt`'}\n"
-            f"**Beschreibung:** {'Gesetzt' if self.panel_desc else '`Nicht gesetzt`'}"
+            "<:Astra_pin:1141303893616250900> ## Aktuelle Konfiguration\n"
+            f"<:Astra_punkt:1141303896745201696> **Kanal:** {fmt(self.target_channel)}\n"
+            f"<:Astra_punkt:1141303896745201696> **Kategorie:** {fmt(self.category)}\n"
+            f"<:Astra_punkt:1141303896745201696> **Support-Rolle:** {fmt(self.role)}\n\n"
+            f"<:Astra_punkt:1141303896745201696> **Titel:** {self.panel_title or '`Nicht gesetzt`'}\n"
+            f"<:Astra_punkt:1141303896745201696> **Beschreibung:** {self.panel_desc or '`Nicht gesetzt`'}"
         ))
 
         container.add_item(discord.ui.Separator())
@@ -455,13 +440,13 @@ class SetupWizardView(ui.LayoutView):
         if self.page == 0:
 
             container.add_item(discord.ui.TextDisplay(
-                "## 🚀 Willkommen\n"
+                "<:Astra_boost:1141303827107164270> ## Willkommen\n"
                 "Dieser Wizard führt dich Schritt für Schritt durch das Setup."
             ))
 
             start = discord.ui.Button(
                 label="Setup starten",
-                emoji="🚀",
+                emoji="<:Astra_boost:1141303827107164270>",
                 style=discord.ButtonStyle.success
             )
 
@@ -476,7 +461,7 @@ class SetupWizardView(ui.LayoutView):
         # =====================================================
         elif self.page == 1:
 
-            container.add_item(discord.ui.TextDisplay("## 📦 Panel Einstellungen"))
+            container.add_item(discord.ui.TextDisplay("<:Astra_settings:1141303908778639490> ## Panel Einstellungen"))
 
             ch = discord.ui.ChannelSelect(
                 placeholder="📢 Panel-Kanal wählen",
@@ -538,17 +523,17 @@ class SetupWizardView(ui.LayoutView):
                 val = int(self.cached_config.get(key, 0) or 0)
 
                 if val <= 0:
-                    return "🔴 Deaktiviert"
+                    return "<:Astra_x:1141303954555289600> Deaktiviert"
 
                 pretty = format_native_value(key, val)
-                return f"🟢 Aktiv ({pretty})"
+                return f"<:Astra_accept:1141303821176422460> Aktiv ({pretty})"
 
             container.add_item(discord.ui.TextDisplay(
-                "## ⚙ Automatische Funktionen\n\n"
-                f"**Auto-Close:** {show_status('autoclose_hours')}\n"
-                f"**Reminder:** {show_status('remind_minutes')}\n"
-                f"**Reopen:** {show_status('reopen_hours')}\n"
-                f"**Ping-Throttle:** {show_status('ping_throttle_minutes')}"
+                "<:Astra_settings:1141303908778639490> ## Automatische Funktionen\n\n"
+                f"<:Astra_punkt:1141303896745201696> **Auto-Close:** {show_status('autoclose_hours')}\n"
+                f"<:Astra_punkt:1141303896745201696> **Reminder:** {show_status('remind_minutes')}\n"
+                f"<:Astra_punkt:1141303896745201696> **Reopen:** {show_status('reopen_hours')}\n"
+                f"<:Astra_punkt:1141303896745201696> **Ping-Throttle:** {show_status('ping_throttle_minutes')}"
             ))
 
             container.add_item(discord.ui.Separator())
@@ -643,23 +628,23 @@ class SetupWizardView(ui.LayoutView):
         elif self.page == 3:
 
             def show(val):
-                return "🔴 Deaktiviert" if not val else f"🟢 Aktiv (`{val}`)"
+                return "<:Astra_x:1141303954555289600> Deaktiviert" if not val else f"<:Astra_accept:1141303821176422460> Aktiv (`{val}`)"
 
             cfg = self.cached_config
 
             container.add_item(discord.ui.TextDisplay(
-                "## 🎯 Abschluss & Übersicht\n\n"
-                f"**Auto-Close:** {show(cfg['autoclose_hours'])}\n"
-                f"**Reminder:** {show(cfg['remind_minutes'])}\n"
-                f"**Reopen:** {show(cfg['reopen_hours'])}\n"
-                f"**Ping-Throttle:** {show(cfg['ping_throttle_minutes'])}"
+                "<:Astra_file1:1141303837181886494> ## Abschluss & Übersicht\n\n"
+                f"<:Astra_punkt:1141303896745201696> **Auto-Close:** {show(cfg['autoclose_hours'])}\n"
+                f"<:Astra_punkt:1141303896745201696> **Reminder:** {show(cfg['remind_minutes'])}\n"
+                f"<:Astra_punkt:1141303896745201696> **Reopen:** {show(cfg['reopen_hours'])}\n"
+                f"<:Astra_punkt:1141303896745201696> **Ping-Throttle:** {show(cfg['ping_throttle_minutes'])}"
             ))
 
             container.add_item(discord.ui.Separator())
 
             create = discord.ui.Button(
                 label="Panel erstellen",
-                emoji="🎯",
+                emoji="<:Astra_accept:1141303821176422460>",
                 style=discord.ButtonStyle.success
             )
 
@@ -689,20 +674,20 @@ class SetupWizardView(ui.LayoutView):
         nav = []
 
         if self.page > 0:
-            back = discord.ui.Button(label="Zurück", emoji="⬅", style=discord.ButtonStyle.secondary)
+            back = discord.ui.Button(label="Zurück", emoji="<:Astra_arrow_backwards:1392540551546671348>", style=discord.ButtonStyle.secondary)
             async def back_cb(interaction):
                 await self._switch(interaction, self.page - 1)
             back.callback = back_cb
             nav.append(back)
 
         if self.page < self.TOTAL_STEPS - 1:
-            nxt = discord.ui.Button(label="Weiter", emoji="➡", style=discord.ButtonStyle.primary)
+            nxt = discord.ui.Button(label="Weiter", emoji="<:Astra_arrow:1141303823600717885>", style=discord.ButtonStyle.primary)
             async def next_cb(interaction):
                 await self._switch(interaction, self.page + 1)
             nxt.callback = next_cb
             nav.append(nxt)
 
-        cancel = discord.ui.Button(label="Abbrechen", emoji="❌", style=discord.ButtonStyle.danger)
+        cancel = discord.ui.Button(label="Abbrechen", emoji="<:Astra_x:1141303954555289600>", style=discord.ButtonStyle.danger)
 
         async def cancel_cb(interaction):
             await interaction.response.edit_message(
