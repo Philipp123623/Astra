@@ -105,6 +105,11 @@ class AutomodSetupView(discord.ui.LayoutView):
     # BUILD (DEINE TEXTE 1:1 UNVERÄNDERT)
     # =========================================================
 
+    async def _switch(self, interaction, page: int):
+        self.page = page
+        self._build()
+        await interaction.response.edit_message(view=self)
+
     def _build(self):
         self.clear_items()
 
@@ -161,12 +166,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             start.callback = start_cb
             container.add_item(discord.ui.ActionRow(start))
 
-        self.add_item(container)
+            self.add_item(container)
 
-    async def _switch(self, interaction, page: int):
-        self.page = page
-        self._build()
-        await interaction.response.edit_message(view=self)
 
         # =====================================================
         # PAGE 1 – WARN SYSTEM
