@@ -405,39 +405,48 @@ class SetupWizardView(ui.LayoutView):
         # =========================================================
         # PAGE 2 – SYSTEM
         # =========================================================
+        # =========================================================
+        # PAGE 2 – SYSTEM
+        # =========================================================
         elif self.page == 2:
+
+            cfg = self.cached_config or {}
+
+            def show_status(key):
+                val = cfg.get(key, 0)
+                if not val:
+                    return "🔴 **Deaktiviert**"
+                return f"🟢 **Aktiv** (`{val}`)"
 
             children.append(
                 discord.ui.TextDisplay(
                     "## ⚙ Automatische Funktionen\n"
-                    "`30m`, `2h`, `1d`, `0` = deaktiviert"
+                    "`30m`, `2h`, `1d`, `0` = deaktiviert\n\n"
+                    f"**Auto-Close:** {show_status('autoclose_hours')}\n"
+                    f"**Reminder:** {show_status('remind_minutes')}\n"
+                    f"**Reopen:** {show_status('reopen_hours')}\n"
+                    f"**Ping-Throttle:** {show_status('ping_throttle_minutes')}"
                 )
             )
 
+            children.append(discord.ui.Separator())
+
             def config_select(label, key):
-                return discord.ui.Select(
-                    placeholder=label,
+                select = discord.ui.Select(
+                    placeholder=f"{label} einstellen",
                     options=[
                         discord.SelectOption(label="30 Minuten", value="30m"),
                         discord.SelectOption(label="2 Stunden", value="2h"),
                         discord.SelectOption(label="1 Tag", value="1d"),
                         discord.SelectOption(label="Deaktivieren", value="0"),
                     ]
-                ), key
+                )
 
-            selects = [
-                config_select("Auto-Close", "autoclose_hours"),
-                config_select("Reminder", "remind_minutes"),
-                config_select("Reopen", "reopen_hours"),
-                config_select("Ping-Throttle", "ping_throttle_minutes"),
-            ]
+                async def cb(interaction):
+                    val = select.values[0]
 
-            for select, key in selects:
-
-                async def make_cb(interaction, s=select, k=key):
-                    val = s.values[0]
                     try:
-                        new_val = parse_duration_to_native(k, val, None)
+                        new_val = parse_duration_to_native(key, val, None)
                     except Exception:
                         return await interaction.response.send_message(
                             "Ungültiges Format.",
@@ -447,15 +456,22 @@ class SetupWizardView(ui.LayoutView):
                     await set_guild_config(
                         self.bot.pool,
                         interaction.guild.id,
-                        **{k: new_val}
+                        **{key: new_val}
                     )
 
-                    self.cached_config[k] = new_val
+                    # Cache aktualisieren
+                    self.cached_config[key] = new_val
+
                     self._build()
                     await interaction.response.edit_message(view=self)
 
-                select.callback = make_cb
-                children.append(discord.ui.ActionRow(select))
+                select.callback = cb
+                return select
+
+            children.append(discord.ui.ActionRow(config_select("Auto-Close", "autoclose_hours")))
+            children.append(discord.ui.ActionRow(config_select("Reminder", "remind_minutes")))
+            children.append(discord.ui.ActionRow(config_select("Reopen", "reopen_hours")))
+            children.append(discord.ui.ActionRow(config_select("Ping-Throttle", "ping_throttle_minutes")))
 
         # =========================================================
         # PAGE 3 – FINAL
