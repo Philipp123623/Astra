@@ -311,132 +311,181 @@ class SetupWizardView(ui.LayoutView):
             accent_color=discord.Colour.blurple().value
         )
 
-        # ==============================
-        # PAGE 0
-        # ==============================
+        # =====================================================
+        # HEADER
+        # =====================================================
+
+        header_section = discord.ui.Section(
+            discord.ui.TextDisplay(
+                "# Ticket Setup – Hilfe\n"
+                f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
+                "Erklärung zu dieser Seite"
+            )
+        )
+
+        help_container.add_item(header_section)
+        help_container.add_item(discord.ui.Separator())
+
+        # =====================================================
+        # PAGE 0 – Willkommen
+        # =====================================================
+
         if self.page == 0:
 
             help_container.add_item(discord.ui.TextDisplay(
-                "## ❓ Willkommen\n"
-                "Dieser Wizard richtet dein Ticket-System ein."
+                "## Überblick\n\n"
+                "Dieser Wizard richtet dein komplettes Ticket-System ein."
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🚀 Was passiert hier?\n"
-                "• Du konfigurierst Kanal, Kategorie und Rolle\n"
-                "• Du definierst das Ticket-Panel\n"
-                "• Optional aktivierst du automatische Funktionen"
+                f"<:Astra_punkt:1141303896745201696> **Panel-Kanal** festlegen\n"
+                f"<:Astra_punkt:1141303896745201696> **Ticket-Kategorie** definieren\n"
+                f"<:Astra_punkt:1141303896745201696> **Support-Rolle** bestimmen\n"
+                f"<:Astra_punkt:1141303896745201696> Embed-Inhalt anpassen\n"
+                f"<:Astra_punkt:1141303896745201696> Optionale Automationen aktivieren"
             ))
 
-        # ==============================
-        # PAGE 1
-        # ==============================
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                f"<:Astra_arrow:1141303823600717885> Du kannst jederzeit zurückgehen "
+                "und Einstellungen ändern, bevor das Panel erstellt wird."
+            ))
+
+        # =====================================================
+        # PAGE 1 – Panel Einstellungen
+        # =====================================================
+
         elif self.page == 1:
 
             help_container.add_item(discord.ui.TextDisplay(
-                "## ❓ Panel Einstellungen"
+                "## Panel Einstellungen"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 📢 Panel-Kanal\n"
-                "Hier wird das Ticket-Panel gepostet."
+                "### Panel-Kanal\n"
+                f"<:Astra_punkt:1141303896745201696> Hier wird das Ticket-Panel gepostet\n"
+                f"<:Astra_punkt:1141303896745201696> Nutzer starten Tickets von dort\n"
+                f"<:Astra_punkt:1141303896745201696> Sollte öffentlich sichtbar sein"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🗂 Ticket-Kategorie\n"
-                "Neue Tickets werden automatisch in dieser Kategorie erstellt."
+                "### Ticket-Kategorie\n"
+                f"<:Astra_punkt:1141303896745201696> Neue Tickets landen automatisch hier\n"
+                f"<:Astra_punkt:1141303896745201696> Empfehlung: Eigene Kategorie nur für Tickets"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🛡 Support-Rolle\n"
-                "Mitglieder mit dieser Rolle dürfen Tickets sehen und bearbeiten."
+                "### Support-Rolle\n"
+                f"<:Astra_punkt:1141303896745201696> Diese Rolle erhält Zugriff auf Tickets\n"
+                f"<:Astra_punkt:1141303896745201696> Ohne Rolle kann kein Support arbeiten\n"
+                f"<:Astra_x:1141303954555289600> Pflichtfeld"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 📝 Titel & Beschreibung\n"
-                "Das ist der Inhalt des Ticket-Embeds."
+                "### Titel & Beschreibung\n"
+                f"<:Astra_punkt:1141303896745201696> Bestimmt das Aussehen deines Panels\n"
+                f"<:Astra_punkt:1141303896745201696> Hier kannst du Hinweise oder Regeln einfügen\n"
+                f"<:Astra_x:1141303954555289600> Pflichtfeld"
             ))
 
-        # ==============================
-        # PAGE 2
-        # ==============================
+        # =====================================================
+        # PAGE 2 – Automatische Funktionen
+        # =====================================================
+
         elif self.page == 2:
 
             help_container.add_item(discord.ui.TextDisplay(
-                "## ❓ Automatische Funktionen"
+                "## Automatische Funktionen"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### ⏱ Auto-Close\n"
-                "Schließt Tickets automatisch nach Inaktivität."
+                "### Auto-Close\n"
+                f"<:Astra_punkt:1141303896745201696> Schließt Tickets nach Inaktivität\n"
+                f"<:Astra_punkt:1141303896745201696> Hilft, alte Tickets automatisch aufzuräumen\n"
+                f"<:Astra_accept:1141303821176422460> Empfohlen bei großen Servern"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🔔 Reminder\n"
-                "Sendet Erinnerungen bei Inaktivität."
+                "### Reminder\n"
+                f"<:Astra_punkt:1141303896745201696> Sendet Erinnerungen bei Inaktivität\n"
+                f"<:Astra_punkt:1141303896745201696> Kann Support oder User benachrichtigen"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🔓 Reopen\n"
-                "Erlaubt das Wiederöffnen eines geschlossenen Tickets."
+                "### Reopen\n"
+                f"<:Astra_punkt:1141303896745201696> Erlaubt Wiederöffnen geschlossener Tickets\n"
+                f"<:Astra_punkt:1141303896745201696> Innerhalb eines definierten Zeitraums"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### 🚦 Ping-Throttle\n"
-                "Begrenzt wie oft Support gepingt werden darf."
+                "### Ping-Throttle\n"
+                f"<:Astra_punkt:1141303896745201696> Begrenzt Support-Pings\n"
+                f"<:Astra_punkt:1141303896745201696> Verhindert Spam"
             ))
 
-        # ==============================
-        # PAGE 3
-        # ==============================
+        # =====================================================
+        # PAGE 3 – Abschluss
+        # =====================================================
+
         else:
 
             help_container.add_item(discord.ui.TextDisplay(
-                "## ❓ Abschluss"
+                "## Abschluss & Erstellung"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "Hier siehst du eine Übersicht aller Einstellungen."
+                "Hier siehst du eine Zusammenfassung aller Einstellungen.\n\n"
+                "Folgende Felder müssen gesetzt sein:"
             ))
 
             help_container.add_item(discord.ui.Separator())
 
             help_container.add_item(discord.ui.TextDisplay(
-                "### ✅ Panel erstellen\n"
-                "Erstellt das Ticket-Panel im gewählten Kanal.\n"
-                "Pflichtfelder müssen gesetzt sein."
+                f"<:Astra_punkt:1141303896745201696> Panel-Kanal\n"
+                f"<:Astra_punkt:1141303896745201696> Ticket-Kategorie\n"
+                f"<:Astra_punkt:1141303896745201696> Support-Rolle\n"
+                f"<:Astra_punkt:1141303896745201696> Titel\n"
+                f"<:Astra_punkt:1141303896745201696> Beschreibung"
             ))
 
-        # ==============================
+            help_container.add_item(discord.ui.Separator())
+
+            help_container.add_item(discord.ui.TextDisplay(
+                f"<:Astra_accept:1141303821176422460> Wenn alles korrekt ist, "
+                "kann das Ticket-Panel erstellt werden."
+            ))
+
+        # =====================================================
         # BACK BUTTON
-        # ==============================
+        # =====================================================
 
         help_container.add_item(discord.ui.Separator())
 
         back_btn = discord.ui.Button(
             label="Zurück",
-            emoji="↩️",
-            style=discord.ButtonStyle.primary
+            emoji="<:Astra_arrow_backwards:1392540551546671348>",
+            style=discord.ButtonStyle.secondary
         )
 
         async def back_cb(interaction):
