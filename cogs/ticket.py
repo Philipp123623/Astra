@@ -187,12 +187,28 @@ DEFAULT_CFG = dict(autoclose_hours=0, remind_minutes=0, reopen_hours=24, ping_th
 async def get_guild_config(pool, guild_id: int) -> dict:
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT autoclose_hours, remind_minutes, reopen_hours, ping_throttle_minutes FROM ticket_config WHERE guildID=%s", (guild_id,))
+            await cur.execute(
+                "SELECT autoclose_hours, remind_minutes, reopen_hours, ping_throttle_minutes "
+                "FROM ticket_config WHERE guildID=%s",
+                (guild_id,)
+            )
             row = await cur.fetchone()
+
             if not row:
-                await cur.execute("INSERT INTO ticket_config (guildID) VALUES (%s)", (guild_id,))
+                await cur.execute(
+                    "INSERT INTO ticket_config (guildID, autoclose_hours, remind_minutes, reopen_hours, ping_throttle_minutes) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (guild_id, 0, 0, 24, 0)
+                )
                 return DEFAULT_CFG.copy()
-    return dict(autoclose_hours=row[0], remind_minutes=row[1], reopen_hours=row[2], ping_throttle_minutes=row[3])
+
+    # 🔥 NULL absichern
+    return {
+        "autoclose_hours": row[0] or 0,
+        "remind_minutes": row[1] or 0,
+        "reopen_hours": row[2] or 0,
+        "ping_throttle_minutes": row[3] or 0,
+    }
 
 async def set_guild_config(pool, guild_id: int, **kwargs):
     fields = []
