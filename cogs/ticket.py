@@ -275,6 +275,8 @@ class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
 
 class SetupWizardView(ui.LayoutView):
 
+
+
     TOTAL_STEPS = 4
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
@@ -299,6 +301,107 @@ class SetupWizardView(ui.LayoutView):
         }
 
         self._build()
+
+    async def _create_panel(self, interaction: discord.Interaction):
+
+        # Nur Ersteller darf
+        if interaction.user.id != self.invoker.id:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Nur der Ersteller darf diesen Wizard bedienen.",
+                ephemeral=True
+            )
+
+        guild = interaction.guild
+        if not guild:
+            return
+
+        # Sicherheit
+        assert self.target_channel and self.category and self.role
+        assert self.panel_title and self.panel_desc
+
+        chan = guild.get_channel(int(self.target_channel.id)) \
+               or await guild.fetch_channel(int(self.target_channel.id))
+        cat = guild.get_channel(int(self.category.id))
+        role = guild.get_role(int(self.role.id))
+
+        if not isinstance(chan, discord.TextChannel):
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Der gewählte Kanal ist kein Textkanal.",
+                ephemeral=True
+            )
+
+        if not isinstance(cat, discord.CategoryChannel):
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Die gewählte Kategorie existiert nicht mehr.",
+                ephemeral=True
+            )
+
+        if role is None:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Die gewählte Rolle existiert nicht mehr.",
+                ephemeral=True
+            )
+
+        # =========================
+        # DB speichern
+        # =========================
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    INSERT INTO ticketsystem(guildID, channelID, thema, roleID, categoryID)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE thema      = VALUES(thema),
+                                            roleID     = VALUES(roleID),
+                                            categoryID = VALUES(categoryID)
+                    """,
+                    (guild.id, chan.id, self.panel_title, role.id, cat.id),
+                )
+
+        # =========================
+        # Panel Embed (wie im Screenshot)
+        # =========================
+        panel = mk_embed(
+            title=self.panel_title,
+            description=self.panel_desc,
+            color=ASTRA_BLUE,
+            thumb=guild.icon.url if guild.icon else None,
+            footer="Klicke auf den Button, um ein Ticket zu erstellen!"
+        )
+
+        await chan.send(
+            embed=panel,
+            view=TicketOpenView(self.bot)
+        )
+
+        # =========================
+        # Abschlussmeldung im Wizard
+        # =========================
+        done = mk_embed(
+            title="Ticket-Panel erstellt",
+            description=(
+                f"<:Astra_punkt:1141303896745201696> Kanal: {chan.mention}\n"
+                f"<:Astra_punkt:1141303896745201696> Kategorie: {cat.name}\n"
+                f"<:Astra_punkt:1141303896745201696> Support-Rolle: {role.mention}\n"
+                f"<:Astra_punkt:1141303896745201696> Titel: {self.panel_title}\n"
+                f"<:Astra_punkt:1141303896745201696> Beschreibung: {self.panel_desc}\n\n"
+                "Der Setup-Wizard kann nun geschlossen werden."
+            ),
+            color=discord.Colour.green(),
+        )
+
+        try:
+            await interaction.response.edit_message(
+                content=f"<:Astra_accept:1141303821176422460> Panel erfolgreich erstellt!",
+                embed=done,
+                view=None,
+            )
+        except discord.InteractionResponded:
+            await interaction.edit_original_response(
+                content=f"<:Astra_accept:1141303821176422460> Panel erfolgreich erstellt!",
+                embed=done,
+                view=None,
+            )
 
     # =========================================================
     # BUILD
