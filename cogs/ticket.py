@@ -214,27 +214,40 @@ async def set_guild_config(pool, guild_id: int, **kwargs):
 # =========================================================
 
 class PanelTextModal(discord.ui.Modal, title="Ticket-Panel Texte"):
-    def __init__(self, cb_submit):
+
+    def __init__(self, view: "SetupWizardView"):
         super().__init__(timeout=180)
-        self._cb_submit = cb_submit
+        self.view = view
+
         self.inp_title = discord.ui.TextInput(
             label="Panel-Titel",
-            placeholder="z. B. Support, Teamkontakt, Bewerben …",
+            placeholder="z. B. Support, Bewerben …",
             max_length=100,
             required=True,
+            default=view.panel_title or None
         )
+
         self.inp_desc = discord.ui.TextInput(
             label="Panel-Beschreibung",
             style=discord.TextStyle.paragraph,
-            placeholder="Beschreibe kurz, wofür dieses Ticket gedacht ist.",
+            placeholder="Beschreibe kurz den Zweck des Tickets.",
             max_length=1024,
             required=True,
+            default=view.panel_desc or None
         )
+
         self.add_item(self.inp_title)
         self.add_item(self.inp_desc)
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        await self._cb_submit(interaction, str(self.inp_title.value), str(self.inp_desc.value))
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.panel_title = str(self.inp_title.value)
+        self.view.panel_desc = str(self.inp_desc.value)
+
+        self.view._build()
+        await interaction.response.edit_message(view=self.view)
+
+
+# =====================================================================
 
 
 class SetupWizardView(ui.LayoutView):
@@ -243,6 +256,7 @@ class SetupWizardView(ui.LayoutView):
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
         super().__init__(timeout=None)
+
         self.bot = bot
         self.invoker = invoker
         self.page = 0
@@ -253,36 +267,34 @@ class SetupWizardView(ui.LayoutView):
         self.panel_title = None
         self.panel_desc = None
 
-        # 🔥 Cache für Config (Fix für await Problem)
         self.cached_config = {}
 
         self._build()
 
     # =========================================================
-    # BUILD
+    # UI BUILD
     # =========================================================
 
     def _progress_bar(self):
-        filled = int((self.page + 1) / self.TOTAL_STEPS * 12)
-        empty = 12 - filled
-        return "█" * filled + "░" * empty
+        filled = int((self.page + 1) / self.TOTAL_STEPS * 14)
+        return "█" * filled + "░" * (14 - filled)
 
     def _build(self):
         self.clear_items()
         children = []
 
-        # ================= HEADER =================
+        # ---------------- HEADER ----------------
         children.append(
             discord.ui.TextDisplay(
                 f"# 🎫 Ticket Setup\n"
-                f"**Schritt {self.page+1} von {self.TOTAL_STEPS}**\n"
+                f"**Schritt {self.page+1}/{self.TOTAL_STEPS}**\n"
                 f"`{self._progress_bar()}`"
             )
         )
 
         children.append(discord.ui.Separator())
 
-        # ================= STATUS =================
+        # ---------------- STATUS ----------------
         def fmt(x):
             if not x:
                 return "`Nicht gesetzt`"
@@ -309,8 +321,7 @@ class SetupWizardView(ui.LayoutView):
             children.append(
                 discord.ui.TextDisplay(
                     "## 🚀 Willkommen\n"
-                    "Dieser Assistent hilft dir, dein Ticketsystem sauber einzurichten.\n"
-                    "Folge einfach den Schritten."
+                    "Dieser Wizard führt dich Schritt für Schritt durch das Setup."
                 )
             )
 
@@ -327,175 +338,156 @@ class SetupWizardView(ui.LayoutView):
             children.append(discord.ui.ActionRow(start))
 
         # =========================================================
-        # PAGE 1
+        # PAGE 1 – PANEL
         # =========================================================
         elif self.page == 1:
 
             children.append(
                 discord.ui.TextDisplay(
-                    "## 📦 Panel Einstellungen\n"
-                    "Definiere, wo das Panel erscheint und wer Tickets bearbeiten darf."
+                    "## 📦 Panel Einstellungen"
                 )
             )
 
+            # Channel
             ch = discord.ui.ChannelSelect(
-                placeholder="📢 Kanal für das Ticket-Panel auswählen",
+                placeholder="📢 Panel-Kanal wählen",
                 channel_types=[discord.ChannelType.text]
             )
 
             async def ch_cb(interaction):
                 self.target_channel = ch.values[0]
-                await self._switch(interaction, self.page)
+                self._build()
+                await interaction.response.edit_message(view=self)
 
             ch.callback = ch_cb
             children.append(discord.ui.ActionRow(ch))
 
+            # Category
             cat = discord.ui.ChannelSelect(
-                placeholder="🗂 Kategorie auswählen, in der Tickets erstellt werden",
+                placeholder="🗂 Ticket-Kategorie wählen",
                 channel_types=[discord.ChannelType.category]
             )
 
             async def cat_cb(interaction):
                 self.category = cat.values[0]
-                await self._switch(interaction, self.page)
+                self._build()
+                await interaction.response.edit_message(view=self)
 
             cat.callback = cat_cb
             children.append(discord.ui.ActionRow(cat))
 
+            # Role
             role = discord.ui.RoleSelect(
-                placeholder="🛡 Support-Rolle auswählen (darf Tickets sehen & schließen)"
+                placeholder="🛡 Support-Rolle wählen"
             )
 
             async def role_cb(interaction):
                 self.role = role.values[0]
-                await self._switch(interaction, self.page)
+                self._build()
+                await interaction.response.edit_message(view=self)
 
             role.callback = role_cb
             children.append(discord.ui.ActionRow(role))
 
+            # Text Button
             text_btn = discord.ui.Button(
-                label="Titel & Beschreibung setzen",
+                label="Titel & Beschreibung bearbeiten",
                 emoji="📝",
                 style=discord.ButtonStyle.primary
             )
 
             async def text_cb(interaction):
-
-                class PanelModal(discord.ui.Modal, title="Panel Texte"):
-                    title_input = discord.ui.TextInput(
-                        label="Panel Titel",
-                        required=True
-                    )
-                    desc_input = discord.ui.TextInput(
-                        label="Panel Beschreibung",
-                        style=discord.TextStyle.paragraph,
-                        required=True
-                    )
-
-                    async def on_submit(modal_self, inter2):
-                        self.panel_title = str(modal_self.title_input.value)
-                        self.panel_desc = str(modal_self.desc_input.value)
-                        await inter2.response.edit_message(view=self)
-
-                await interaction.response.send_modal(PanelModal())
+                await interaction.response.send_modal(PanelTextModal(self))
 
             text_btn.callback = text_cb
             children.append(discord.ui.ActionRow(text_btn))
 
         # =========================================================
-        # PAGE 2
+        # PAGE 2 – SYSTEM
         # =========================================================
         elif self.page == 2:
 
             children.append(
                 discord.ui.TextDisplay(
-                    "## ⚙ System Optionen\n"
-                    "Optional: Automatische Funktionen konfigurieren."
+                    "## ⚙ Automatische Funktionen\n"
+                    "`30m`, `2h`, `1d`, `0` = deaktiviert"
                 )
             )
 
-            select = discord.ui.Select(
-                placeholder="🔧 Einstellung auswählen",
-                options=[
-                    discord.SelectOption(
-                        label="Auto-Close",
-                        description="Schließt inaktive Tickets automatisch",
-                        value="autoclose_hours"
-                    ),
-                    discord.SelectOption(
-                        label="Reminder",
-                        description="Sendet Erinnerung bei Inaktivität",
-                        value="remind_minutes"
-                    ),
-                    discord.SelectOption(
-                        label="Reopen",
-                        description="Zeitfenster zum Wiederöffnen",
-                        value="reopen_hours"
-                    ),
-                    discord.SelectOption(
-                        label="Ping-Throttle",
-                        description="Limit für Support-Pings",
-                        value="ping_throttle_minutes"
-                    ),
-                ]
-            )
+            def config_select(label, key):
+                return discord.ui.Select(
+                    placeholder=label,
+                    options=[
+                        discord.SelectOption(label="30 Minuten", value="30m"),
+                        discord.SelectOption(label="2 Stunden", value="2h"),
+                        discord.SelectOption(label="1 Tag", value="1d"),
+                        discord.SelectOption(label="Deaktivieren", value="0"),
+                    ]
+                ), key
 
-            async def select_cb(interaction):
-                key = select.values[0]
+            selects = [
+                config_select("Auto-Close", "autoclose_hours"),
+                config_select("Reminder", "remind_minutes"),
+                config_select("Reopen", "reopen_hours"),
+                config_select("Ping-Throttle", "ping_throttle_minutes"),
+            ]
 
-                class ConfigModal(discord.ui.Modal, title="Wert setzen"):
-                    value = discord.ui.TextInput(label="Zeitwert")
+            for select, key in selects:
 
-                    async def on_submit(modal_self, inter2):
-                        try:
-                            new_val = parse_duration_to_native(
-                                key,
-                                str(modal_self.value.value),
-                                None
-                            )
-                        except Exception:
-                            return await inter2.response.send_message(
-                                "Ungültiges Format.",
-                                ephemeral=True
-                            )
-
-                        await set_guild_config(
-                            self.bot.pool,
-                            inter2.guild.id,
-                            **{key: new_val}
+                async def make_cb(interaction, s=select, k=key):
+                    val = s.values[0]
+                    try:
+                        new_val = parse_duration_to_native(k, val, None)
+                    except Exception:
+                        return await interaction.response.send_message(
+                            "Ungültiges Format.",
+                            ephemeral=True
                         )
 
-                        await inter2.response.send_message("Gespeichert.", ephemeral=True)
+                    await set_guild_config(
+                        self.bot.pool,
+                        interaction.guild.id,
+                        **{k: new_val}
+                    )
 
-                await interaction.response.send_modal(ConfigModal())
+                    self.cached_config[k] = new_val
+                    self._build()
+                    await interaction.response.edit_message(view=self)
 
-            select.callback = select_cb
-            children.append(discord.ui.ActionRow(select))
+                select.callback = make_cb
+                children.append(discord.ui.ActionRow(select))
 
         # =========================================================
-        # PAGE 3 – FINAL CONFIG PANEL (FIXED)
+        # PAGE 3 – FINAL
         # =========================================================
         elif self.page == 3:
 
-            cfg = self.cached_config or {}
-
-            def show(key):
-                val = cfg.get(key, 0)
-                return "`Deaktiviert`" if not val else f"`{val}`"
-
             children.append(
                 discord.ui.TextDisplay(
-                    "## ⚙ Erweiterte Einstellungen\n\n"
-                    f"**Auto-Close:** {show('autoclose_hours')}\n"
-                    f"**Reminder:** {show('remind_minutes')}\n"
-                    f"**Reopen:** {show('reopen_hours')}\n"
-                    f"**Ping-Throttle:** {show('ping_throttle_minutes')}"
+                    "## 🎯 Abschluss\n"
+                    "Wenn alles korrekt ist, erstelle das Panel."
                 )
             )
 
-        # =========================================================
-        # NAVIGATION + CANCEL
-        # =========================================================
+            create = discord.ui.Button(
+                label="Panel erstellen",
+                emoji="🎯",
+                style=discord.ButtonStyle.success
+            )
+
+            async def create_cb(interaction):
+                if not await self.validate():
+                    return await interaction.response.send_message(
+                        "⚠ Pflichtfelder fehlen.",
+                        ephemeral=True
+                    )
+
+                await self._create_panel(interaction)
+
+            create.callback = create_cb
+            children.append(discord.ui.ActionRow(create))
+
+        # ---------------- NAVIGATION ----------------
         nav = []
 
         if self.page > 0:
@@ -517,14 +509,14 @@ class SetupWizardView(ui.LayoutView):
             nav.append(nxt)
 
         cancel = discord.ui.Button(
-            label="Setup abbrechen",
+            label="Abbrechen",
             emoji="❌",
             style=discord.ButtonStyle.danger
         )
 
         async def cancel_cb(interaction):
             await interaction.response.edit_message(
-                content="❌ **Setup abgebrochen**",
+                content="❌ Setup abgebrochen.",
                 view=None
             )
 
@@ -533,9 +525,7 @@ class SetupWizardView(ui.LayoutView):
 
         children.append(discord.ui.ActionRow(*nav))
 
-        # =========================================================
-        # ROOT CONTAINER
-        # =========================================================
+        # ---------------- ROOT CONTAINER ----------------
         self.add_item(
             discord.ui.Container(
                 *children,
@@ -544,13 +534,12 @@ class SetupWizardView(ui.LayoutView):
         )
 
     # =========================================================
-    # SWITCH (ASYNC SAFE)
+    # SWITCH
     # =========================================================
     async def _switch(self, interaction, page: int):
         self.page = page
 
-        # 🔥 Config async laden NUR hier
-        if self.page == 3 and hasattr(self.bot, "pool"):
+        if self.page >= 2 and hasattr(self.bot, "pool"):
             self.cached_config = await get_guild_config(
                 self.bot.pool,
                 interaction.guild.id
