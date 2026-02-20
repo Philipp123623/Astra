@@ -569,11 +569,6 @@ class SetupWizardView(ui.LayoutView):
         # TOP BAR – Help Button rechts
         # =====================================================
 
-        top_row = discord.ui.ActionRow()
-
-        # Unsichtbarer Spacer (Zero Width Space)
-        spacer = discord.ui.TextDisplay("\u200b")
-
         help_btn = discord.ui.Button(
             emoji="❓",
             style=discord.ButtonStyle.secondary
@@ -587,11 +582,7 @@ class SetupWizardView(ui.LayoutView):
 
         help_btn.callback = help_cb
 
-        top_row.add_item(spacer)
-        top_row.add_item(help_btn)
-
-        container.add_item(top_row)
-
+        container.add_item(discord.ui.ActionRow(help_btn))
         container.add_item(discord.ui.Separator())
 
         def fmt(x):
