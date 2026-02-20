@@ -21,6 +21,9 @@ class AutomodSetupView(discord.ui.LayoutView):
         self.invoker = invoker
         self.page = 0
 
+        # Falls bereits konfiguriert
+        self.already_configured: bool = False
+
         # Warn-System
         self.warn_rules: list[tuple[int, str, int | None]] = []
 
@@ -32,7 +35,49 @@ class AutomodSetupView(discord.ui.LayoutView):
         self.blacklist_enabled: bool = False
         self.blacklist_words: list[str] = []
 
+    # =========================================================
+    # START (WICHTIG!)
+    # =========================================================
+
+    async def start(self, interaction: discord.Interaction):
+        await self._check_existing(interaction.guild.id)
         self._build()
+        await interaction.response.send_message(view=self, ephemeral=True)
+
+    # =========================================================
+    # CHECK OB BEREITS KONFIGURIERT
+    # =========================================================
+
+    async def _check_existing(self, guild_id: int):
+
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+
+                # Warn-System prüfen
+                await cursor.execute(
+                    "SELECT guildID FROM automod WHERE guildID=%s LIMIT 1",
+                    (guild_id,)
+                )
+                warn_exists = await cursor.fetchone()
+
+                # Caps prüfen
+                await cursor.execute(
+                    "SELECT guildID FROM capslock WHERE guildID=%s LIMIT 1",
+                    (guild_id,)
+                )
+                caps_exists = await cursor.fetchone()
+
+                # Blacklist prüfen
+                await cursor.execute(
+                    "SELECT serverID FROM blacklist_settings WHERE serverID=%s LIMIT 1",
+                    (guild_id,)
+                )
+                blacklist_exists = await cursor.fetchone()
+
+                if warn_exists or caps_exists or blacklist_exists:
+                    self.already_configured = True
+                else:
+                    self.already_configured = False
 
     # =========================================================
     # PROGRESS BAR
@@ -54,6 +99,26 @@ class AutomodSetupView(discord.ui.LayoutView):
         container = discord.ui.Container(
             accent_color=discord.Colour.orange().value
         )
+
+        # =====================================================
+        # WENN BEREITS KONFIGURIERT
+        # =====================================================
+
+        if self.already_configured:
+
+            container = discord.ui.Container(
+                accent_color=discord.Colour.red().value
+            )
+
+            container.add_item(discord.ui.TextDisplay(
+                "## ⚠️ Automod bereits eingerichtet\n\n"
+                "Für diesen Server existiert bereits eine Konfiguration.\n\n"
+                "Bitte nutze stattdessen den **/automod config** Command,\n"
+                "um Einstellungen zu bearbeiten."
+            ))
+
+            self.add_item(container)
+            return
 
         # =====================================================
         # HEADER SECTION
