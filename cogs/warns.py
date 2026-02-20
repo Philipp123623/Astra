@@ -525,15 +525,12 @@ class AutomodConfigView(discord.ui.LayoutView):
         # HEADER SECTION
         # =====================================================
 
-        header = discord.ui.Section(
-            discord.ui.TextDisplay(
-                "# ⚙️ Automod Konfiguration\n\n"
+        container.add_item(discord.ui.TextDisplay(
+            "# ⚙️ Automod Konfiguration\n\n"
                 "<:Astra_light_on:1141303864134467675> "
                 "Hier kannst du bestehende Moderations-Regeln anpassen."
-            )
-        )
+        ))
 
-        container.add_item(header)
         container.add_item(discord.ui.Separator())
 
         # =====================================================
