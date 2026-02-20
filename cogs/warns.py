@@ -10,117 +10,180 @@ import asyncio
 # ================= AUTOMOD SETUP VIEW ====================
 # =========================================================
 
-class AutomodSetupView(ui.LayoutView):
+class AutomodSetupView(discord.ui.LayoutView):
 
     TOTAL_STEPS = 4
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)
+
         self.bot = bot
         self.invoker = invoker
         self.page = 0
 
-        self.warn_threshold = None
-        self.warn_action = None
-        self.timeout_duration = 30
+        # Warn System (warns, action, timeout_seconds)
+        self.warn_rules: list[tuple[int, str, int | None]] = []
 
-        self.caps_enabled = False
-        self.caps_percent = 50
+        # Caps
+        self.caps_enabled: bool = False
+        self.caps_percent: int = 50
 
-        self.blacklist_words = []
+        # Blacklist
+        self.blacklist_words: list[str] = []
 
         self._build()
 
-    def _progress(self):
+    # =========================================================
+    # PROGRESS BAR
+    # =========================================================
+
+    def _progress_bar(self):
+        if self.page == 0:
+            return "░" * 14
         filled = int(self.page / self.TOTAL_STEPS * 14)
         return "█" * filled + "░" * (14 - filled)
+
+    # =========================================================
+    # BUILD
+    # =========================================================
 
     def _build(self):
         self.clear_items()
 
-        container = ui.Container(
+        container = discord.ui.Container(
             accent_color=discord.Colour.orange().value
         )
 
-        container.add_item(ui.TextDisplay(
+        # ================= HEADER =================
+
+        container.add_item(discord.ui.TextDisplay(
             "# 🤖 Automod Setup\n"
-            f"Schritt {self.page}/{self.TOTAL_STEPS}\n"
-            f"`{self._progress()}`"
+            f"**Schritt {self.page}/{self.TOTAL_STEPS}**\n"
+            f"`{self._progress_bar()}`"
         ))
 
-        container.add_item(ui.Separator())
+        container.add_item(discord.ui.Separator())
 
-        # ================= PAGE 0 =================
+        # =====================================================
+        # PAGE 0 – WELCOME
+        # =====================================================
 
         if self.page == 0:
-            container.add_item(ui.TextDisplay(
-                "Willkommen im Automod Setup.\n\n"
-                "Hier richtest du Warn-System, Caps-Filter\n"
-                "und Blacklist zentral ein."
+
+            container.add_item(discord.ui.TextDisplay(
+                "## Willkommen\n"
+                "• Warn-System konfigurieren\n"
+                "• Caps-Filter einstellen\n"
+                "• Blacklist verwalten\n\n"
+                "Alles zentral in einem Setup."
             ))
 
-        # ================= PAGE 1 – WARN =================
+            start = discord.ui.Button(
+                label="Setup starten",
+                style=discord.ButtonStyle.success
+            )
+
+            async def start_cb(interaction):
+                await self._switch(interaction, 1)
+
+            start.callback = start_cb
+            container.add_item(discord.ui.ActionRow(start))
+
+        # =====================================================
+        # PAGE 1 – WARN SYSTEM
+        # =====================================================
 
         elif self.page == 1:
 
-            container.add_item(ui.TextDisplay(
-                f"Warn Grenze: {self.warn_threshold or 'Nicht gesetzt'}\n"
-                f"Aktion: {self.warn_action or 'Nicht gesetzt'}"
+            if self.warn_rules:
+                rules_text = "\n".join(
+                    f"{warns} → {action}"
+                    + (f" ({timeout}s)" if timeout else "")
+                    for warns, action, timeout in self.warn_rules
+                )
+            else:
+                rules_text = "Keine Regeln gesetzt."
+
+            container.add_item(discord.ui.TextDisplay(
+                f"## Warn-Regeln\n{rules_text}"
             ))
 
-            warn_select = ui.Select(
-                placeholder="Warn Grenze",
-                options=[discord.SelectOption(label=str(i), value=str(i)) for i in range(1, 11)]
+            add_btn = discord.ui.Button(
+                label="Regel hinzufügen",
+                style=discord.ButtonStyle.success
             )
 
-            async def warn_cb(interaction):
-                self.warn_threshold = int(warn_select.values[0])
-                self._build()
-                await interaction.response.edit_message(view=self)
+            async def add_cb(interaction):
 
-            warn_select.callback = warn_cb
-            container.add_item(ui.ActionRow(warn_select))
+                class WarnModal(discord.ui.Modal, title="Neue Warn-Regel"):
 
-            action_select = ui.Select(
-                placeholder="Aktion",
-                options=[
-                    discord.SelectOption(label="Kick", value="Kick"),
-                    discord.SelectOption(label="Ban", value="Ban"),
-                    discord.SelectOption(label="Timeout", value="Timeout"),
-                ]
-            )
+                    warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
+                    action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
+                    timeout = discord.ui.TextInput(
+                        label="Timeout Sekunden (nur bei Timeout)",
+                        required=False
+                    )
 
-            async def action_cb(interaction):
-                self.warn_action = action_select.values[0]
-                self._build()
-                await interaction.response.edit_message(view=self)
+                    def __init__(self, parent):
+                        super().__init__()
+                        self.parent = parent
 
-            action_select.callback = action_cb
-            container.add_item(ui.ActionRow(action_select))
+                    async def on_submit(self, inter):
 
-        # ================= PAGE 2 – CAPS =================
+                        warns_val = int(self.warns.value)
+                        action_val = self.action.value.strip()
+                        timeout_val = int(self.timeout.value) if self.timeout.value else None
+
+                        self.parent.warn_rules.append(
+                            (warns_val, action_val, timeout_val)
+                        )
+
+                        self.parent._build()
+                        await inter.response.edit_message(view=self.parent)
+
+                await interaction.response.send_modal(WarnModal(self))
+
+            add_btn.callback = add_cb
+            container.add_item(discord.ui.ActionRow(add_btn))
+
+        # =====================================================
+        # PAGE 2 – CAPS FILTER
+        # =====================================================
 
         elif self.page == 2:
 
-            status = "Aktiv" if self.caps_enabled else "Deaktiviert"
+            status_text = "Ein" if self.caps_enabled else "Aus"
 
-            container.add_item(ui.TextDisplay(
-                f"Caps Filter: {status}\nLimit: {self.caps_percent}%"
-            ))
-
-            toggle = ui.Button(label="Toggle", style=discord.ButtonStyle.secondary)
+            toggle_btn = discord.ui.Button(
+                label=status_text,
+                style=discord.ButtonStyle.success if self.caps_enabled else discord.ButtonStyle.danger
+            )
 
             async def toggle_cb(interaction):
                 self.caps_enabled = not self.caps_enabled
                 self._build()
                 await interaction.response.edit_message(view=self)
 
-            toggle.callback = toggle_cb
-            container.add_item(ui.ActionRow(toggle))
+            toggle_btn.callback = toggle_cb
 
-            percent_select = ui.Select(
-                placeholder="Prozent",
-                options=[discord.SelectOption(label=f"{i}%", value=str(i)) for i in range(10, 101, 10)]
+            section = discord.ui.Section(
+                discord.ui.TextDisplay(
+                    f"## Caps-Filter\n"
+                    f"Status: {status_text}\n"
+                    f"Limit: {self.caps_percent}%"
+                ),
+                accessory=toggle_btn
+            )
+
+            container.add_item(section)
+            container.add_item(discord.ui.Separator())
+
+            percent_select = discord.ui.Select(
+                placeholder="Prozent wählen",
+                options=[
+                    discord.SelectOption(label=f"{i}%", value=str(i))
+                    for i in range(10, 101, 10)
+                ]
             )
 
             async def percent_cb(interaction):
@@ -129,42 +192,72 @@ class AutomodSetupView(ui.LayoutView):
                 await interaction.response.edit_message(view=self)
 
             percent_select.callback = percent_cb
-            container.add_item(ui.ActionRow(percent_select))
+            container.add_item(discord.ui.ActionRow(percent_select))
 
-        # ================= PAGE 3 – BLACKLIST =================
+        # =====================================================
+        # PAGE 3 – BLACKLIST
+        # =====================================================
 
         elif self.page == 3:
 
-            words = ", ".join(self.blacklist_words) or "Keine"
+            words = ", ".join(self.blacklist_words) if self.blacklist_words else "Keine"
 
-            container.add_item(ui.TextDisplay(
-                f"Aktuelle Wörter:\n`{words}`"
+            container.add_item(discord.ui.TextDisplay(
+                f"## Blacklist\n{words}\n\n"
+                "Mehrere Wörter mit , trennen."
             ))
 
-            add_btn = ui.Button(label="Wort hinzufügen")
+            add_btn = discord.ui.Button(
+                label="Wörter hinzufügen",
+                style=discord.ButtonStyle.primary
+            )
 
             async def add_cb(interaction):
 
-                class WordModal(ui.Modal, title="Blacklist Wort"):
-                    word = ui.TextInput(label="Wort")
+                class WordModal(discord.ui.Modal, title="Blacklist Wörter"):
+
+                    words = discord.ui.TextInput(
+                        label="Wörter (mit , trennen)"
+                    )
+
+                    def __init__(self, parent):
+                        super().__init__()
+                        self.parent = parent
 
                     async def on_submit(self, inter):
-                        self.view.blacklist_words.append(self.word.value.lower())
-                        self.view._build()
-                        await inter.response.edit_message(view=self.view)
 
-                await interaction.response.send_modal(WordModal())
+                        entries = [
+                            w.strip().lower()
+                            for w in self.words.value.split(",")
+                            if w.strip()
+                        ]
+
+                        self.parent.blacklist_words.extend(entries)
+                        self.parent._build()
+                        await inter.response.edit_message(view=self.parent)
+
+                await interaction.response.send_modal(WordModal(self))
 
             add_btn.callback = add_cb
-            container.add_item(ui.ActionRow(add_btn))
+            container.add_item(discord.ui.ActionRow(add_btn))
 
-        # ================= PAGE 4 – SAVE =================
+        # =====================================================
+        # PAGE 4 – SAVE
+        # =====================================================
 
         elif self.page == 4:
 
-            container.add_item(ui.TextDisplay("Bestätige die Einrichtung."))
+            container.add_item(discord.ui.TextDisplay(
+                "## Übersicht\n\n"
+                f"Warn-Regeln: {len(self.warn_rules)}\n"
+                f"Caps: {self.caps_enabled} ({self.caps_percent}%)\n"
+                f"Blacklist: {len(self.blacklist_words)} Wörter"
+            ))
 
-            save = ui.Button(label="Speichern", style=discord.ButtonStyle.success)
+            save = discord.ui.Button(
+                label="Speichern",
+                style=discord.ButtonStyle.success
+            )
 
             async def save_cb(interaction):
 
@@ -177,82 +270,134 @@ class AutomodSetupView(ui.LayoutView):
                 async with self.bot.pool.acquire() as conn:
                     async with conn.cursor() as cursor:
 
-                        await cursor.execute("DELETE FROM automod WHERE guildID=%s", (interaction.guild.id,))
-                        await cursor.execute("DELETE FROM capslock WHERE guildID=%s", (interaction.guild.id,))
-                        await cursor.execute("DELETE FROM blacklist WHERE serverID=%s", (interaction.guild.id,))
+                        await cursor.execute(
+                            "DELETE FROM automod WHERE guildID=%s",
+                            (interaction.guild.id,)
+                        )
 
-                        if self.warn_threshold and self.warn_action:
+                        await cursor.execute(
+                            "DELETE FROM capslock WHERE guildID=%s",
+                            (interaction.guild.id,)
+                        )
+
+                        await cursor.execute(
+                            "DELETE FROM blacklist WHERE serverID=%s",
+                            (interaction.guild.id,)
+                        )
+
+                        # Warn-Regeln speichern
+                        for warns, action, timeout in self.warn_rules:
                             await cursor.execute(
-                                "INSERT INTO automod (guildID, warns, action) VALUES (%s,%s,%s)",
-                                (interaction.guild.id, self.warn_threshold, self.warn_action)
+                                "INSERT INTO automod (guildID, warns, action, timeout_seconds) VALUES (%s,%s,%s,%s)",
+                                (interaction.guild.id, warns, action, timeout)
                             )
 
+                        # Caps speichern
                         if self.caps_enabled:
                             await cursor.execute(
                                 "INSERT INTO capslock (guildID, percent) VALUES (%s,%s)",
                                 (interaction.guild.id, self.caps_percent)
                             )
 
+                        # Blacklist speichern
                         for word in self.blacklist_words:
                             await cursor.execute(
-                                "INSERT INTO blacklist(word, serverID) VALUES (%s,%s)",
-                                (word, interaction.guild.id)
+                                "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                (interaction.guild.id, word)
                             )
 
-                await interaction.response.edit_message(content="✅ Automod eingerichtet.", view=None)
+                await interaction.response.edit_message(
+                    content="Automod erfolgreich eingerichtet.",
+                    view=None
+                )
 
             save.callback = save_cb
-            container.add_item(ui.ActionRow(save))
+            container.add_item(discord.ui.ActionRow(save))
 
-        # ================= NAVIGATION =================
+        # =====================================================
+        # NAVIGATION
+        # =====================================================
 
         nav = []
 
         if self.page > 0:
-            back = ui.Button(label="Zurück")
+            back = discord.ui.Button(
+                label="Zurück",
+                style=discord.ButtonStyle.secondary
+            )
+
             async def back_cb(interaction):
-                self.page -= 1
-                self._build()
-                await interaction.response.edit_message(view=self)
+                await self._switch(interaction, self.page - 1)
+
             back.callback = back_cb
             nav.append(back)
 
         if self.page < self.TOTAL_STEPS:
-            nxt = ui.Button(label="Weiter")
+            nxt = discord.ui.Button(
+                label="Weiter",
+                style=discord.ButtonStyle.primary
+            )
+
             async def next_cb(interaction):
-                self.page += 1
-                self._build()
-                await interaction.response.edit_message(view=self)
+                await self._switch(interaction, self.page + 1)
+
             nxt.callback = next_cb
             nav.append(nxt)
 
-        container.add_item(ui.ActionRow(*nav))
+        cancel = discord.ui.Button(
+            label="Abbrechen",
+            style=discord.ButtonStyle.danger
+        )
+
+        async def cancel_cb(interaction):
+            await interaction.response.defer()
+            await interaction.delete_original_response()
+
+        cancel.callback = cancel_cb
+        nav.append(cancel)
+
+        container.add_item(discord.ui.ActionRow(*nav))
         self.add_item(container)
 
+    async def _switch(self, interaction, page: int):
+        self.page = page
+        self._build()
+        await interaction.response.edit_message(view=self)
 
-class AutomodConfigView(ui.LayoutView):
+
+class AutomodConfigView(discord.ui.LayoutView):
 
     def __init__(self, bot: commands.Bot, invoker: discord.User, guild: discord.Guild):
         super().__init__(timeout=300)
+
         self.bot = bot
         self.invoker = invoker
         self.guild = guild
 
-        self.warn_rules = []
-        self.caps = None
-        self.words = []
+        # warns, action, timeout_seconds
+        self.warn_rules: list[tuple[int, str, int | None]] = []
+        self.caps_percent: int | None = None
+        self.words: list[str] = []
+
+    # =========================================================
+    # START
+    # =========================================================
 
     async def start(self, interaction: discord.Interaction):
         await self._load_data()
         self._build()
         await interaction.response.send_message(view=self, ephemeral=True)
 
+    # =========================================================
+    # LOAD DATA
+    # =========================================================
+
     async def _load_data(self):
         async with self.bot.pool.acquire() as conn:
             async with conn.cursor() as cursor:
 
                 await cursor.execute(
-                    "SELECT warns, action FROM automod WHERE guildID=%s",
+                    "SELECT warns, action, timeout_seconds FROM automod WHERE guildID=%s",
                     (self.guild.id,)
                 )
                 self.warn_rules = await cursor.fetchall()
@@ -261,110 +406,163 @@ class AutomodConfigView(ui.LayoutView):
                     "SELECT percent FROM capslock WHERE guildID=%s",
                     (self.guild.id,)
                 )
-                self.caps = await cursor.fetchone()
+                caps = await cursor.fetchone()
+                self.caps_percent = caps[0] if caps else None
 
                 await cursor.execute(
                     "SELECT word FROM blacklist WHERE serverID=%s",
                     (self.guild.id,)
                 )
-                self.words = await cursor.fetchall()
+                words = await cursor.fetchall()
+                self.words = [w[0] for w in words]
+
+    # =========================================================
+    # PERMISSION CHECK
+    # =========================================================
 
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id != self.invoker.id:
             await interaction.response.send_message(
-                "Nur der Command-Ersteller darf dieses Panel bedienen.",
+                "<:Astra_x:1141303954555289600> Nur der Command-Ersteller darf dieses Panel bedienen.",
                 ephemeral=True
             )
             return False
         return True
 
+    # =========================================================
+    # BUILD
+    # =========================================================
+
     def _build(self):
         self.clear_items()
 
-        container = ui.Container(
+        container = discord.ui.Container(
             accent_color=discord.Colour.blurple().value
         )
 
-        container.add_item(ui.TextDisplay(
+        # =====================================================
+        # HEADER
+        # =====================================================
+
+        container.add_item(discord.ui.TextDisplay(
             "# ⚙️ Automod Konfiguration"
         ))
+        container.add_item(discord.ui.Separator())
 
-        container.add_item(ui.Separator())
-
-        # ================= WARN RULES =================
+        # =====================================================
+        # WARN REGELN
+        # =====================================================
 
         warn_text = (
-            "Keine Regeln gesetzt."
-            if not self.warn_rules
-            else "\n".join([f"{w} → {a}" for w, a in self.warn_rules])
+            "\n".join(
+                f"<:Astra_punkt:1141303896745201696> {w} → {a}"
+                + (f" ({t}s)" if t else "")
+                for w, a, t in self.warn_rules
+            )
+            if self.warn_rules else
+            "<:Astra_x:1141303954555289600> Keine Regeln gesetzt."
         )
 
-        container.add_item(ui.TextDisplay(
+        container.add_item(discord.ui.TextDisplay(
             f"## Warn-Regeln\n{warn_text}"
         ))
 
-        add_rule = ui.Button(label="Regel hinzufügen", style=discord.ButtonStyle.success)
-        remove_rule = ui.Button(label="Regel entfernen", style=discord.ButtonStyle.danger)
+        add_rule = discord.ui.Button(
+            label="Regel hinzufügen",
+            emoji="<:Astra_accept:1141303821176422460>",
+            style=discord.ButtonStyle.success
+        )
+
+        remove_rule = discord.ui.Button(
+            label="Regel entfernen",
+            emoji="<:Astra_x:1141303954555289600>",
+            style=discord.ButtonStyle.danger
+        )
+
+        # -------- ADD RULE --------
 
         async def add_rule_cb(interaction):
 
-            class RuleModal(ui.Modal, title="Neue Warn-Regel"):
-                warns = ui.TextInput(label="Warn Grenze (1-10)")
-                action = ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
+            class RuleModal(discord.ui.Modal, title="Neue Warn-Regel"):
+
+                warns = discord.ui.TextInput(label="Warn Grenze (1-10)")
+                action = discord.ui.TextInput(label="Aktion (Kick/Ban/Timeout)")
+                timeout = discord.ui.TextInput(
+                    label="Timeout Sekunden (nur bei Timeout)",
+                    required=False
+                )
+
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
 
                 async def on_submit(self, inter):
-                    async with self.view.bot.pool.acquire() as conn:
+
+                    timeout_val = int(self.timeout.value) if self.timeout.value else None
+
+                    async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
-                                "INSERT INTO automod (guildID, warns, action) VALUES (%s,%s,%s)",
-                                (self.view.guild.id, self.warns.value, self.action.value)
+                                "INSERT INTO automod (guildID, warns, action, timeout_seconds) VALUES (%s,%s,%s,%s)",
+                                (self.parent.guild.id, self.warns.value, self.action.value, timeout_val)
                             )
-                    await self.view._refresh(inter)
 
-            await interaction.response.send_modal(RuleModal())
+                    await self.parent._refresh(inter)
+
+            await interaction.response.send_modal(RuleModal(self))
+
+        # -------- REMOVE RULE --------
 
         async def remove_rule_cb(interaction):
 
-            class RemoveModal(ui.Modal, title="Warn-Regel entfernen"):
-                warns = ui.TextInput(label="Warn Grenze")
+            class RemoveModal(discord.ui.Modal, title="Warn-Regel entfernen"):
+
+                warns = discord.ui.TextInput(label="Warn Grenze")
+
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
 
                 async def on_submit(self, inter):
-                    async with self.view.bot.pool.acquire() as conn:
+                    async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
                                 "DELETE FROM automod WHERE guildID=%s AND warns=%s",
-                                (self.view.guild.id, self.warns.value)
+                                (self.parent.guild.id, self.warns.value)
                             )
-                    await self.view._refresh(inter)
 
-            await interaction.response.send_modal(RemoveModal())
+                    await self.parent._refresh(inter)
+
+            await interaction.response.send_modal(RemoveModal(self))
 
         add_rule.callback = add_rule_cb
         remove_rule.callback = remove_rule_cb
 
-        container.add_item(ui.ActionRow(add_rule, remove_rule))
+        container.add_item(discord.ui.ActionRow(add_rule, remove_rule))
+        container.add_item(discord.ui.Separator())
 
-        container.add_item(ui.Separator())
+        # =====================================================
+        # CAPS FILTER (SECTION TOGGLE)
+        # =====================================================
 
-        # ================= CAPS =================
-
-        caps_status = (
-            f"Aktiv ({self.caps[0]}%)"
-            if self.caps
-            else "Deaktiviert"
+        caps_enabled = self.caps_percent is not None
+        status_text = "Ein" if caps_enabled else "Aus"
+        status_emoji = (
+            "<:Astra_accept:1141303821176422460>"
+            if caps_enabled else
+            "<:Astra_x:1141303954555289600>"
         )
 
-        container.add_item(ui.TextDisplay(
-            f"## Caps Filter\n{caps_status}"
-        ))
+        toggle_btn = discord.ui.Button(
+            label=status_text,
+            style=discord.ButtonStyle.success if caps_enabled else discord.ButtonStyle.danger
+        )
 
-        toggle_caps = ui.Button(label="Ein/Aus")
-        set_percent = ui.Button(label="Prozent ändern")
+        async def toggle_caps(interaction):
 
-        async def toggle_cb(interaction):
             async with self.bot.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    if self.caps:
+                    if caps_enabled:
                         await cursor.execute(
                             "DELETE FROM capslock WHERE guildID=%s",
                             (self.guild.id,)
@@ -377,82 +575,141 @@ class AutomodConfigView(ui.LayoutView):
 
             await self._refresh(interaction)
 
+        toggle_btn.callback = toggle_caps
+
+        section = discord.ui.Section(
+            discord.ui.TextDisplay(
+                f"## Caps-Filter\n"
+                f"{status_emoji} Status: **{status_text}**\n"
+                f"Limit: {self.caps_percent or 50}%"
+            ),
+            accessory=toggle_btn
+        )
+
+        container.add_item(section)
+
+        set_percent = discord.ui.Button(
+            label="Prozent ändern",
+            style=discord.ButtonStyle.primary
+        )
+
         async def percent_cb(interaction):
 
-            class PercentModal(ui.Modal, title="Caps Prozent ändern"):
-                percent = ui.TextInput(label="Neuer Prozentwert")
+            class PercentModal(discord.ui.Modal, title="Caps Prozent ändern"):
+
+                percent = discord.ui.TextInput(label="Neuer Prozentwert")
+
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
 
                 async def on_submit(self, inter):
-                    async with self.view.bot.pool.acquire() as conn:
+                    async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
                                 "UPDATE capslock SET percent=%s WHERE guildID=%s",
-                                (self.percent.value, self.view.guild.id)
+                                (self.percent.value, self.parent.guild.id)
                             )
-                    await self.view._refresh(inter)
 
-            await interaction.response.send_modal(PercentModal())
+                    await self.parent._refresh(inter)
 
-        toggle_caps.callback = toggle_cb
+            await interaction.response.send_modal(PercentModal(self))
+
         set_percent.callback = percent_cb
 
-        container.add_item(ui.ActionRow(toggle_caps, set_percent))
+        container.add_item(discord.ui.ActionRow(set_percent))
+        container.add_item(discord.ui.Separator())
 
-        container.add_item(ui.Separator())
-
-        # ================= BLACKLIST =================
+        # =====================================================
+        # BLACKLIST
+        # =====================================================
 
         words_text = (
-            ", ".join([w[0] for w in self.words])
-            if self.words
-            else "Keine Wörter gesetzt."
+            ", ".join(self.words)
+            if self.words else
+            "<:Astra_x:1141303954555289600> Keine Wörter gesetzt."
         )
 
-        container.add_item(ui.TextDisplay(
+        container.add_item(discord.ui.TextDisplay(
             f"## Blacklist\n{words_text}"
         ))
 
-        add_word = ui.Button(label="Wort hinzufügen")
-        remove_word = ui.Button(label="Wort entfernen")
+        add_word = discord.ui.Button(
+            label="Wörter hinzufügen",
+            emoji="<:Astra_accept:1141303821176422460>",
+            style=discord.ButtonStyle.success
+        )
+
+        remove_word = discord.ui.Button(
+            label="Wort entfernen",
+            emoji="<:Astra_x:1141303954555289600>",
+            style=discord.ButtonStyle.danger
+        )
 
         async def add_word_cb(interaction):
 
-            class AddWord(ui.Modal, title="Blacklist Wort hinzufügen"):
-                word = ui.TextInput(label="Wort")
+            class AddWord(discord.ui.Modal, title="Blacklist Wörter hinzufügen"):
+
+                words = discord.ui.TextInput(
+                    label="Wörter (mit , trennen)"
+                )
+
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
 
                 async def on_submit(self, inter):
-                    async with self.view.bot.pool.acquire() as conn:
-                        async with conn.cursor() as cursor:
-                            await cursor.execute(
-                                "INSERT INTO blacklist(word, serverID) VALUES (%s,%s)",
-                                (self.word.value.lower(), self.view.guild.id)
-                            )
-                    await self.view._refresh(inter)
 
-            await interaction.response.send_modal(AddWord())
+                    entries = [
+                        w.strip().lower()
+                        for w in self.words.value.split(",")
+                        if w.strip()
+                    ]
+
+                    async with self.parent.bot.pool.acquire() as conn:
+                        async with conn.cursor() as cursor:
+                            for word in entries:
+                                await cursor.execute(
+                                    "INSERT INTO blacklist (serverID, word) VALUES (%s,%s)",
+                                    (self.parent.guild.id, word)
+                                )
+
+                    await self.parent._refresh(inter)
+
+            await interaction.response.send_modal(AddWord(self))
 
         async def remove_word_cb(interaction):
 
-            class RemoveWord(ui.Modal, title="Blacklist Wort entfernen"):
-                word = ui.TextInput(label="Wort")
+            class RemoveWord(discord.ui.Modal, title="Blacklist Wort entfernen"):
+
+                word = discord.ui.TextInput(label="Wort")
+
+                def __init__(self, parent):
+                    super().__init__()
+                    self.parent = parent
 
                 async def on_submit(self, inter):
-                    async with self.view.bot.pool.acquire() as conn:
+                    async with self.parent.bot.pool.acquire() as conn:
                         async with conn.cursor() as cursor:
                             await cursor.execute(
                                 "DELETE FROM blacklist WHERE serverID=%s AND word=%s",
-                                (self.view.guild.id, self.word.value.lower())
+                                (self.parent.guild.id, self.word.value.lower())
                             )
-                    await self.view._refresh(inter)
 
-            await interaction.response.send_modal(RemoveWord())
+                    await self.parent._refresh(inter)
+
+            await interaction.response.send_modal(RemoveWord(self))
 
         add_word.callback = add_word_cb
         remove_word.callback = remove_word_cb
 
-        container.add_item(ui.ActionRow(add_word, remove_word))
+        container.add_item(discord.ui.ActionRow(add_word, remove_word))
 
         self.add_item(container)
+
+    # =========================================================
+    # REFRESH
+    # =========================================================
 
     async def _refresh(self, interaction: discord.Interaction):
         await self._load_data()
