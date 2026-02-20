@@ -453,20 +453,26 @@ class SetupWizardView(ui.LayoutView):
                     val = select.values[0]
 
                     try:
-                        new_val = parse_duration_to_native(key, val, None)
+                        parsed = parse_duration_to_native(key, val, None)
                     except Exception:
                         return await interaction.response.send_message(
                             "Ungültiges Format.",
                             ephemeral=True
                         )
 
+                    # Wenn Parser None oder 0 liefert → prüfen
+                    if parsed is None:
+                        parsed = 0
+
                     await set_guild_config(
                         self.bot.pool,
                         interaction.guild.id,
-                        **{key: new_val}
+                        **{key: parsed}
                     )
 
-                    self.cached_config[key] = new_val
+                    # WICHTIG: Nicht blind new_val speichern
+                    self.cached_config[key] = parsed
+
                     self._build()
                     await interaction.response.edit_message(view=self)
 
