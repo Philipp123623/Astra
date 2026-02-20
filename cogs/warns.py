@@ -466,12 +466,7 @@ class AutomodConfigView(discord.ui.LayoutView):
     async def start(self, interaction: discord.Interaction):
         await self._load_data()
         self._build()
-
-        await interaction.response.send_message(
-            content="‎",  # unsichtbares Zeichen als Sicherheit
-            view=self,
-            ephemeral=True
-        )
+        await interaction.response.send_message(view=self, ephemeral=True)
 
     # =========================================================
     # LOAD DATA
