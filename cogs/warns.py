@@ -6,7 +6,7 @@ from typing import Literal
 import asyncio
 
 # =========================================================
-# ================= AUTOMOD SETUP VIEW ====================
+# ================= AUTOMOD SETUP VIEW(Components V2) ====================
 # =========================================================
 
 class AutomodSetupView(discord.ui.LayoutView):
