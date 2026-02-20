@@ -253,6 +253,9 @@ class SetupWizardView(ui.LayoutView):
         self.panel_title = None
         self.panel_desc = None
 
+        # 🔥 Cache für Config (Fix für await Problem)
+        self.cached_config = {}
+
         self._build()
 
     # =========================================================
@@ -381,12 +384,10 @@ class SetupWizardView(ui.LayoutView):
                 class PanelModal(discord.ui.Modal, title="Panel Texte"):
                     title_input = discord.ui.TextInput(
                         label="Panel Titel",
-                        placeholder="z.B. Support, Bewerbungen, Hilfe",
                         required=True
                     )
                     desc_input = discord.ui.TextInput(
                         label="Panel Beschreibung",
-                        placeholder="Beschreibe hier kurz den Zweck des Tickets...",
                         style=discord.TextStyle.paragraph,
                         required=True
                     )
@@ -409,8 +410,7 @@ class SetupWizardView(ui.LayoutView):
             children.append(
                 discord.ui.TextDisplay(
                     "## ⚙ System Optionen\n"
-                    "Optional: Automatische Funktionen konfigurieren.\n"
-                    "`30m` • `2h` • `1d` • `0` = deaktiviert"
+                    "Optional: Automatische Funktionen konfigurieren."
                 )
             )
 
@@ -444,55 +444,7 @@ class SetupWizardView(ui.LayoutView):
                 key = select.values[0]
 
                 class ConfigModal(discord.ui.Modal, title="Wert setzen"):
-                    value = discord.ui.TextInput(
-                        label="Zeitwert",
-                        placeholder="z.B. 30m, 2h, 1d oder 0"
-                    )
-
-                    async def on_submit(modal_self, inter2):
-                        try:
-                            new_val = parse_duration_to_native(key, str(modal_self.value.value), None)
-                        except Exception:
-                            return await inter2.response.send_message("Ungültiges Format.", ephemeral=True)
-
-                        await set_guild_config(self.bot.pool, inter2.guild.id, **{key: new_val})
-                        await inter2.response.send_message("Gespeichert.", ephemeral=True)
-
-                await interaction.response.send_modal(ConfigModal())
-
-            select.callback = select_cb
-            children.append(discord.ui.ActionRow(select))
-
-        # =========================================================
-        # PAGE 3 – FINAL CONFIG PANEL
-        # =========================================================
-        elif self.page == 3:
-
-            cfg = await get_guild_config(self.bot.pool, interaction.guild.id) if hasattr(self.bot, "pool") else {}
-
-            def show(key, fallback="0"):
-                val = cfg.get(key, fallback)
-                return f"`{val}`"
-
-            children.append(
-                discord.ui.TextDisplay(
-                    "## ⚙ Erweiterte Einstellungen\n"
-                    "Hier kannst du alle automatischen Funktionen direkt anpassen.\n\n"
-                    f"**Auto-Close:** {show('autoclose_hours')}\n"
-                    f"**Reminder:** {show('remind_minutes')}\n"
-                    f"**Reopen:** {show('reopen_hours')}\n"
-                    f"**Ping-Throttle:** {show('ping_throttle_minutes')}"
-                )
-            )
-
-            async def make_modal(interaction, key, title):
-
-                class ConfigModal(discord.ui.Modal, title=title):
-                    value = discord.ui.TextInput(
-                        label="Zeitwert",
-                        placeholder="z.B. 30m, 2h, 1d oder 0",
-                        required=True
-                    )
+                    value = discord.ui.TextInput(label="Zeitwert")
 
                     async def on_submit(modal_self, inter2):
                         try:
@@ -513,73 +465,33 @@ class SetupWizardView(ui.LayoutView):
                             **{key: new_val}
                         )
 
-                        await inter2.response.edit_message(view=self)
+                        await inter2.response.send_message("Gespeichert.", ephemeral=True)
 
                 await interaction.response.send_modal(ConfigModal())
 
-            # ---- Buttons ----
+            select.callback = select_cb
+            children.append(discord.ui.ActionRow(select))
 
-            btn_auto = discord.ui.Button(
-                label="Auto-Close bearbeiten",
-                style=discord.ButtonStyle.secondary
+        # =========================================================
+        # PAGE 3 – FINAL CONFIG PANEL (FIXED)
+        # =========================================================
+        elif self.page == 3:
+
+            cfg = self.cached_config or {}
+
+            def show(key):
+                val = cfg.get(key, 0)
+                return "`Deaktiviert`" if not val else f"`{val}`"
+
+            children.append(
+                discord.ui.TextDisplay(
+                    "## ⚙ Erweiterte Einstellungen\n\n"
+                    f"**Auto-Close:** {show('autoclose_hours')}\n"
+                    f"**Reminder:** {show('remind_minutes')}\n"
+                    f"**Reopen:** {show('reopen_hours')}\n"
+                    f"**Ping-Throttle:** {show('ping_throttle_minutes')}"
+                )
             )
-
-            async def auto_cb(interaction):
-                await make_modal(interaction, "autoclose_hours", "Auto-Close setzen")
-
-            btn_auto.callback = auto_cb
-
-            btn_rem = discord.ui.Button(
-                label="Reminder bearbeiten",
-                style=discord.ButtonStyle.secondary
-            )
-
-            async def rem_cb(interaction):
-                await make_modal(interaction, "remind_minutes", "Reminder setzen")
-
-            btn_rem.callback = rem_cb
-
-            btn_reopen = discord.ui.Button(
-                label="Reopen bearbeiten",
-                style=discord.ButtonStyle.secondary
-            )
-
-            async def reopen_cb(interaction):
-                await make_modal(interaction, "reopen_hours", "Reopen setzen")
-
-            btn_reopen.callback = reopen_cb
-
-            btn_ping = discord.ui.Button(
-                label="Ping-Throttle bearbeiten",
-                style=discord.ButtonStyle.secondary
-            )
-
-            async def ping_cb(interaction):
-                await make_modal(interaction, "ping_throttle_minutes", "Ping-Throttle setzen")
-
-            btn_ping.callback = ping_cb
-
-            children.append(discord.ui.ActionRow(btn_auto, btn_rem))
-            children.append(discord.ui.ActionRow(btn_reopen, btn_ping))
-
-            children.append(discord.ui.Separator())
-
-            create = discord.ui.Button(
-                label="🎯 Panel erstellen",
-                style=discord.ButtonStyle.success
-            )
-
-            async def create_cb(interaction):
-                if not await self.validate():
-                    return await interaction.response.send_message(
-                        "⚠ Bitte alle Pflichtfelder setzen.",
-                        ephemeral=True
-                    )
-                await self._create_panel(interaction)
-
-            create.callback = create_cb
-
-            children.append(discord.ui.ActionRow(create))
 
         # =========================================================
         # NAVIGATION + CANCEL
@@ -622,7 +534,7 @@ class SetupWizardView(ui.LayoutView):
         children.append(discord.ui.ActionRow(*nav))
 
         # =========================================================
-        # ROOT CONTAINER MIT ACCENT
+        # ROOT CONTAINER
         # =========================================================
         self.add_item(
             discord.ui.Container(
@@ -631,8 +543,19 @@ class SetupWizardView(ui.LayoutView):
             )
         )
 
+    # =========================================================
+    # SWITCH (ASYNC SAFE)
+    # =========================================================
     async def _switch(self, interaction, page: int):
         self.page = page
+
+        # 🔥 Config async laden NUR hier
+        if self.page == 3 and hasattr(self.bot, "pool"):
+            self.cached_config = await get_guild_config(
+                self.bot.pool,
+                interaction.guild.id
+            )
+
         self._build()
         await interaction.response.edit_message(view=self)
 
