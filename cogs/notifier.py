@@ -149,6 +149,247 @@ def _fit_description_for_embed(embed_title: str, description: str, fields: Dict[
         return (description[:remaining]).rstrip()
     return (description[: remaining - 3]).rstrip() + "..."
 
+# =========================================================
+#                WEBHOOK CONFIG PANEL – ASTRA
+# =========================================================
+
+class WebhookNameModal(discord.ui.Modal, title="Webhook Namen ändern"):
+
+    def __init__(self, view: "WebhookConfigView"):
+        super().__init__(timeout=180)
+        self.view = view
+
+        self.name_input = discord.ui.TextInput(
+            label="Neuer Webhook Name",
+            max_length=80,
+            required=True,
+            default=view.webhook.name
+        )
+
+        self.add_item(self.name_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.view.change_name(interaction, self.name_input.value)
+
+
+class WebhookAvatarModal(discord.ui.Modal, title="Webhook Avatar ändern"):
+
+    def __init__(self, view: "WebhookConfigView"):
+        super().__init__(timeout=180)
+        self.view = view
+
+        self.avatar_input = discord.ui.TextInput(
+            label="Avatar URL",
+            placeholder="https://...",
+            required=True
+        )
+
+        self.add_item(self.avatar_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.view.change_avatar(interaction, self.avatar_input.value)
+
+
+# =========================================================
+#                     CONFIG VIEW
+# =========================================================
+
+class WebhookConfigView(discord.ui.LayoutView):
+
+    def __init__(self, bot: commands.Bot, invoker: discord.Member, webhook: discord.Webhook):
+        super().__init__(timeout=600)
+
+        self.bot = bot
+        self.invoker = invoker
+        self.webhook = webhook
+
+        self._build()
+
+    # =====================================================
+    # SAFETY CHECK
+    # =====================================================
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.invoker.id:
+            await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Nur der Command-Ersteller darf dieses Panel bedienen.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    # =====================================================
+    # UI BUILD
+    # =====================================================
+
+    def _build(self):
+        self.clear_items()
+
+        container = discord.ui.Container(
+            accent_color=discord.Colour.blurple().value
+        )
+
+        # HEADER
+        container.add_item(discord.ui.Section(
+            discord.ui.TextDisplay(
+                "# <:Astra_url:1141303923752325210> Webhook Konfiguration\n"
+                "Passe den Notifier Webhook sicher und kontrolliert an."
+            )
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        # STATUS BLOCK
+        bot_member = self.webhook.guild.me
+        perms = self.webhook.channel.permissions_for(bot_member)
+
+        status_icon = "<:Astra_accept:1141303821176422460>" if perms.manage_webhooks else "<:Astra_x:1141303954555289600>"
+
+        container.add_item(discord.ui.TextDisplay(
+            "## Aktueller Status\n\n"
+            f"<:Astra_punkt:1141303896745201696> **Name:** `{self.webhook.name}`\n"
+            f"<:Astra_punkt:1141303896745201696> **Kanal:** {self.webhook.channel.mention}\n"
+            f"<:Astra_punkt:1141303896745201696> **Webhook-ID:** `{self.webhook.id}`\n\n"
+            f"{status_icon} **Manage Webhooks Permission:** `{perms.manage_webhooks}`"
+        ))
+
+        container.add_item(discord.ui.Separator())
+
+        # ACTION ROW 1
+        name_btn = discord.ui.Button(
+            label="Name ändern",
+            emoji="<:Astra_settings:1141303923752325210>",
+            style=discord.ButtonStyle.primary
+        )
+
+        avatar_btn = discord.ui.Button(
+            label="Avatar ändern",
+            emoji="<:Astra_star:1141303923752325210>",
+            style=discord.ButtonStyle.secondary
+        )
+
+        async def name_cb(interaction):
+            await interaction.response.send_modal(WebhookNameModal(self))
+
+        async def avatar_cb(interaction):
+            await interaction.response.send_modal(WebhookAvatarModal(self))
+
+        name_btn.callback = name_cb
+        avatar_btn.callback = avatar_cb
+
+        container.add_item(discord.ui.ActionRow(name_btn, avatar_btn))
+
+        container.add_item(discord.ui.Separator())
+
+        # CHANNEL SWITCH
+        container.add_item(discord.ui.TextDisplay(
+            "## <:Astra_support:1141303923752325210> Zielkanal wechseln\n"
+            "Der aktuelle Webhook wird gelöscht und im neuen Kanal neu erstellt."
+        ))
+
+        channel_select = discord.ui.ChannelSelect(
+            placeholder="📢 Neuen Zielkanal wählen",
+            channel_types=[discord.ChannelType.text]
+        )
+
+        async def channel_cb(interaction):
+            new_channel = channel_select.values[0]
+            await self.move_webhook(interaction, new_channel)
+
+        channel_select.callback = channel_cb
+
+        container.add_item(discord.ui.ActionRow(channel_select))
+
+        container.add_item(discord.ui.Separator())
+
+        close_btn = discord.ui.Button(
+            label="Schließen",
+            emoji="<:Astra_x:1141303954555289600>",
+            style=discord.ButtonStyle.danger
+        )
+
+        async def close_cb(interaction):
+            await interaction.response.defer()
+            await interaction.delete_original_response()
+
+        close_btn.callback = close_cb
+        container.add_item(discord.ui.ActionRow(close_btn))
+
+        self.add_item(container)
+
+    # =====================================================
+    # CHANGE NAME
+    # =====================================================
+
+    async def change_name(self, interaction: discord.Interaction, new_name: str):
+        await self.webhook.edit(
+            name=new_name,
+            reason="Astra Webhook Name geändert"
+        )
+
+        self._build()
+        await interaction.response.edit_message(view=self)
+
+    # =====================================================
+    # CHANGE AVATAR
+    # =====================================================
+
+    async def change_avatar(self, interaction: discord.Interaction, url: str):
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as r:
+                if r.status != 200:
+                    return await interaction.response.send_message(
+                        "<:Astra_x:1141303954555289600> Avatar konnte nicht geladen werden.",
+                        ephemeral=True
+                    )
+                avatar_bytes = await r.read()
+
+        await self.webhook.edit(
+            avatar=avatar_bytes,
+            reason="Astra Webhook Avatar geändert"
+        )
+
+        self._build()
+        await interaction.response.edit_message(view=self)
+
+    # =====================================================
+    # MOVE WEBHOOK
+    # =====================================================
+
+    async def move_webhook(self, interaction: discord.Interaction, new_channel: discord.TextChannel):
+
+        bot_member = interaction.guild.me
+
+        if not new_channel.permissions_for(bot_member).manage_webhooks:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Ich habe dort keine `Manage Webhooks` Permission.",
+                ephemeral=True
+            )
+
+        old_name = self.webhook.name
+
+        # Alten löschen
+        await self.webhook.delete(reason="Astra Zielkanal geändert")
+
+        # Neuen erstellen
+        new_webhook = await new_channel.create_webhook(
+            name=old_name,
+            reason="Astra Webhook neu erstellt"
+        )
+
+        # 🔥 Hier solltest du in deiner DB die neue ID speichern!
+        async with self.bot.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "UPDATE notifier_settings SET webhook_id=%s, channel_id=%s WHERE guild_id=%s",
+                    (new_webhook.id, new_channel.id, interaction.guild.id)
+                )
+
+        self.webhook = new_webhook
+
+        self._build()
+        await interaction.response.edit_message(view=self)
 
 class Notifier(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -661,6 +902,39 @@ class Benachrichtigung(app_commands.Group):
         embed.set_footer(text="Astra Notifier • Statusübersicht")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="webhook", description="Astra Webhook konfigurieren")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.guild_only()
+    async def webhook(self, interaction: discord.Interaction):
+
+        channel = interaction.channel
+
+        if not isinstance(channel, discord.TextChannel):
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Nur in Textkanälen nutzbar.",
+                ephemeral=True
+            )
+
+        webhooks = await channel.webhooks()
+
+        target = next(
+            (wh for wh in webhooks if wh.user and wh.user.id == interaction.client.user.id),
+            None
+        )
+
+        if not target:
+            return await interaction.response.send_message(
+                "<:Astra_x:1141303954555289600> Kein Astra Webhook in diesem Kanal gefunden.",
+                ephemeral=True
+            )
+
+        view = WebhookConfigView(interaction.client, interaction.user, target)
+
+        await interaction.response.send_message(
+            view=view,
+            ephemeral=True
+        )
 
 
     @app_commands.command(name="youtube", description="YouTube-Kanal hinzufügen oder entfernen")

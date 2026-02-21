@@ -14,7 +14,7 @@ class AutomodSetupView(discord.ui.LayoutView):
     TOTAL_STEPS = 4
 
     def __init__(self, bot: commands.Bot, invoker: discord.User):
-        super().__init__(timeout=900)
+        super().__init__(timeout=None)
 
         self.bot = bot
         self.invoker = invoker
@@ -188,7 +188,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             start = discord.ui.Button(
                 label="Setup starten",
                 emoji="<:Astra_boost:1141303827107164270>",
-                style=discord.ButtonStyle.success
+                style=discord.ButtonStyle.success,
+                custom_id="automod_setup_start_button"
             )
 
             async def start_cb(interaction):
@@ -223,7 +224,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             add_btn = discord.ui.Button(
                 label="Regel hinzufügen",
                 emoji="<:Astra_accept:1141303821176422460>",
-                style=discord.ButtonStyle.success
+                style=discord.ButtonStyle.success,
+                custom_id="automod_setup_add_warn_button"
             )
 
             async def add_cb(interaction):
@@ -297,7 +299,8 @@ class AutomodSetupView(discord.ui.LayoutView):
 
             toggle_btn = discord.ui.Button(
                 label=toggle_label,
-                style=toggle_style
+                style=toggle_style,
+                custom_id="automod_setup_toggle_button_1"
             )
 
             async def toggle_cb(interaction):
@@ -327,7 +330,8 @@ class AutomodSetupView(discord.ui.LayoutView):
                 options=[
                     discord.SelectOption(label=f"{i}%", value=str(i))
                     for i in range(10, 101, 10)
-                ]
+                ],
+                custom_id="automod_setup_percent_select"
             )
 
             async def percent_cb(interaction):
@@ -362,7 +366,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             add_btn = discord.ui.Button(
                 label="Wörter hinzufügen",
                 emoji="<:Astra_accept:1141303821176422460>",
-                style=discord.ButtonStyle.primary
+                style=discord.ButtonStyle.primary,
+                custom_id="automod_setup_add_blacklist_button"
             )
 
             async def add_cb(interaction):
@@ -415,7 +420,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             save = discord.ui.Button(
                 label="Automod speichern",
                 emoji="<:Astra_accept:1141303821176422460>",
-                style=discord.ButtonStyle.success
+                style=discord.ButtonStyle.success,
+                custom_id="automod_setup_save_button"
             )
 
             async def save_cb(interaction):
@@ -505,7 +511,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             back = discord.ui.Button(
                 label="Zurück",
                 emoji="<:Astra_arrow_backwards:1392540551546671348>",
-                style=discord.ButtonStyle.secondary
+                style=discord.ButtonStyle.secondary,
+                custom_id="automod_setup_back_button"
             )
 
             async def back_cb(interaction):
@@ -518,7 +525,8 @@ class AutomodSetupView(discord.ui.LayoutView):
             nxt = discord.ui.Button(
                 label="Weiter",
                 emoji="<:Astra_arrow:1141303823600717885>",
-                style=discord.ButtonStyle.primary
+                style=discord.ButtonStyle.primary,
+                custom_id="automod_setup_next_button"
             )
 
             async def next_cb(interaction):
@@ -530,7 +538,8 @@ class AutomodSetupView(discord.ui.LayoutView):
         cancel = discord.ui.Button(
             label="Abbrechen",
             emoji="<:Astra_x:1141303954555289600>",
-            style=discord.ButtonStyle.danger
+            style=discord.ButtonStyle.danger,
+            custom_id="automod_setup_cancel_button"
         )
 
         async def cancel_cb(interaction):
@@ -552,7 +561,7 @@ class AutomodSetupView(discord.ui.LayoutView):
 class AutomodConfigView(discord.ui.LayoutView):
 
     def __init__(self, bot: commands.Bot, invoker: discord.User, guild: discord.Guild):
-        super().__init__(timeout=600)
+        super().__init__(timeout=None)
 
         self.bot = bot
         self.invoker = invoker
@@ -736,13 +745,15 @@ class AutomodConfigView(discord.ui.LayoutView):
         add_rule = discord.ui.Button(
             label="Regel hinzufügen",
             emoji="<:Astra_accept:1141303821176422460>",
-            style=discord.ButtonStyle.success
+            style=discord.ButtonStyle.success,
+            custom_id="automod_config_add_rule_button"
         )
 
         remove_rule = discord.ui.Button(
             label="Regel entfernen",
             emoji="<:Astra_x:1141303954555289600>",
-            style=discord.ButtonStyle.danger
+            style=discord.ButtonStyle.danger,
+            custom_id="automod_config_remove_rule_button"
         )
 
         async def add_rule_cb(interaction):
@@ -846,7 +857,8 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         toggle_btn = discord.ui.Button(
             label=toggle_label,
-            style=toggle_style
+            style=toggle_style,
+            custom_id="automod_config_toggle_button_1"
         )
 
         # ---------- TOGGLE STATUS ----------
@@ -914,7 +926,8 @@ class AutomodConfigView(discord.ui.LayoutView):
                 placeholder="Prozent wählen...",
                 min_values=1,
                 max_values=1,
-                options=options
+                options=options,
+                custom_id="automod_config_percent_select"
             )
 
             async def percent_select_cb(interaction):
@@ -973,7 +986,8 @@ class AutomodConfigView(discord.ui.LayoutView):
 
         toggle_blacklist = discord.ui.Button(
             label=toggle_label,
-            style=toggle_style
+            style=toggle_style,
+            custom_id="automod_config_toggle_button_2"
         )
 
         async def toggle_blacklist_cb(interaction):
@@ -1015,14 +1029,16 @@ class AutomodConfigView(discord.ui.LayoutView):
             label="Wörter hinzufügen",
             emoji="<:Astra_accept:1141303821176422460>",
             style=discord.ButtonStyle.success,
-            disabled=not blacklist_enabled
+            disabled=not blacklist_enabled,
+            custom_id="automod_config_add_word_button"
         )
 
         remove_word = discord.ui.Button(
             label="Wort entfernen",
             emoji="<:Astra_x:1141303954555289600>",
             style=discord.ButtonStyle.danger,
-            disabled=not blacklist_enabled
+            disabled=not blacklist_enabled,
+            custom_id="automod_config_remove_word_button"
         )
 
         # ---------- ADD WORD ----------
@@ -1141,7 +1157,7 @@ class Automod(app_commands.Group):
                         embed = discord.Embed(
                             title="⚙️ Automod Setup gestartet",
                             description=f"{interaction.user} (`{interaction.user.id}`) hat das Setup gestartet.",
-                            colour=discord.Colour.orange(),
+                            colour=discord.Colour.red(),
                             timestamp=discord.utils.utcnow()
                         )
                         await channel.send(embed=embed)
